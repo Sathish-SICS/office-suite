@@ -1,0 +1,3366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Office Automation Suite — Inspection Module</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/file-saver/2.0.5/FileSaver.min.js"></script>
+<style>
+:root{
+  --bg:#0f172a; --panel:#1e293b; --panel-2:#334155;
+  --ink:#f1f5f9; --muted:#94a3b8;
+  --accent:#3b82f6; --accent-2:#60a5fa;
+  --good:#10b981; --warn:#f59e0b; --bad:#ef4444;
+  --border:#475569;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:'Segoe UI',Tahoma,sans-serif;
+  background:linear-gradient(135deg,#0f172a 0%,#1e3a8a 100%);
+  color:var(--ink);min-height:100vh;padding:20px;
+}
+.container{max-width:1400px;margin:0 auto}
+header{
+  background:rgba(15,23,42,.7);backdrop-filter:blur(10px);
+  border:1px solid var(--border);border-radius:12px;
+  padding:20px 28px;margin-bottom:20px;
+  display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;
+}
+header h1{font-size:22px;font-weight:600;letter-spacing:-.5px}
+header .badge{font-size:12px;background:var(--accent);padding:4px 10px;border-radius:20px;color:white}
+
+.tabs{display:flex;gap:4px;margin-bottom:20px;flex-wrap:wrap}
+.tab{
+  background:rgba(30,41,59,.6);border:1px solid var(--border);
+  padding:10px 20px;border-radius:8px;cursor:pointer;font-size:14px;
+  color:var(--muted);transition:all .2s
+}
+.tab:hover{color:var(--ink);background:var(--panel-2)}
+.tab.active{background:var(--accent);border-color:var(--accent);color:white}
+
+.panel{
+  background:rgba(30,41,59,.7);backdrop-filter:blur(10px);
+  border:1px solid var(--border);border-radius:12px;
+  padding:24px;margin-bottom:20px;
+}
+.panel h2{font-size:18px;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.panel h2 .dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+
+.upload-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+.upload-box{
+  border:2px dashed var(--border);border-radius:10px;
+  padding:18px;text-align:center;background:rgba(15,23,42,.4);
+  transition:all .2s;cursor:pointer;
+}
+.upload-box:hover{border-color:var(--accent);background:rgba(59,130,246,.1)}
+.upload-box.has-file{border-color:var(--good);border-style:solid;background:rgba(16,185,129,.08)}
+.upload-box label{display:block;cursor:pointer}
+.upload-box .title{font-size:13px;color:var(--muted);margin-bottom:6px}
+.upload-box .filename{font-size:14px;font-weight:600;color:var(--ink);word-break:break-all}
+.upload-box .hint{font-size:11px;color:var(--muted);margin-top:6px}
+.upload-box input{display:none}
+
+.btn{
+  background:var(--accent);color:white;border:none;
+  padding:11px 22px;border-radius:8px;cursor:pointer;
+  font-size:14px;font-weight:600;transition:all .2s;
+  display:inline-flex;align-items:center;gap:8px;
+}
+.btn:hover{background:var(--accent-2);transform:translateY(-1px)}
+.btn:disabled{background:var(--panel-2);cursor:not-allowed;transform:none}
+.btn.secondary{background:var(--panel-2)}
+.btn.secondary:hover{background:var(--border)}
+.btn.success{background:var(--good)}
+.btn.success:hover{background:#059669}
+
+.action-bar{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+
+.dashboard-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media(max-width:900px){.dashboard-grid{grid-template-columns:1fr}}
+
+.report-card{
+  background:white;color:#1e293b;border-radius:10px;
+  padding:0;overflow:hidden;border:1px solid #cbd5e1;
+}
+.report-card .head{
+  background:linear-gradient(135deg,#1e3a8a,#3b82f6);
+  color:white;padding:14px 18px;font-weight:600;
+}
+.report-card .head .month{font-size:13px;opacity:.85;font-weight:400}
+.report-card table{width:100%;border-collapse:collapse;font-size:13px}
+.report-card th{
+  background:#1e3a8a;color:white;padding:10px 8px;
+  text-align:center;font-weight:600;font-size:12px;
+  border:1px solid #1e40af;
+}
+.report-card td{padding:7px 8px;text-align:center;border:1px solid #e2e8f0}
+.report-card tr:nth-child(even) td{background:#f8fafc}
+.report-card .name{text-align:left;padding-left:14px;font-weight:500}
+.report-card .red{color:#dc2626;font-weight:700}
+.report-card .green{color:#059669;font-weight:700}
+.report-card .amber{color:#d97706;font-weight:700}
+.report-card .footer{
+  background:#f1f5f9;padding:10px 18px;font-size:12px;
+  color:#475569;display:flex;justify-content:space-between;
+}
+
+.detail-table{
+  background:white;color:#1e293b;border-radius:10px;overflow:hidden;
+  border:1px solid #cbd5e1;margin-top:20px;
+}
+.detail-table .head{
+  background:linear-gradient(135deg,#7c3aed,#a78bfa);
+  color:white;padding:14px 18px;font-weight:600;
+}
+.detail-table table{width:100%;border-collapse:collapse;font-size:13px}
+.detail-table th{
+  background:#5b21b6;color:white;padding:8px;
+  text-align:center;font-size:12px;border:1px solid #6d28d9;
+}
+.detail-table td{padding:6px 8px;border:1px solid #e2e8f0;font-size:12px}
+.detail-table tr:nth-child(even) td{background:#faf5ff}
+
+.empty-state{text-align:center;padding:40px;color:var(--muted)}
+.empty-state .icon{font-size:48px;margin-bottom:12px}
+
+.toast{
+  position:fixed;bottom:20px;right:20px;
+  background:var(--good);color:white;padding:12px 20px;
+  border-radius:8px;box-shadow:0 10px 25px rgba(0,0,0,.3);
+  transform:translateY(100px);opacity:0;transition:all .3s;
+  z-index:1000;font-size:14px;
+}
+.toast.show{transform:translateY(0);opacity:1}
+.toast.error{background:var(--bad)}
+
+.tab-content{display:none}
+.tab-content.active{display:block}
+
+.summary-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px}
+.stat{
+  background:rgba(15,23,42,.6);border:1px solid var(--border);
+  border-radius:10px;padding:14px 18px;
+}
+.stat .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.stat .value{font-size:24px;font-weight:700;margin-top:4px}
+.stat.good .value{color:var(--good)}
+.stat.warn .value{color:var(--warn)}
+.stat.bad .value{color:var(--bad)}
+
+.month-input{
+  background:rgba(15,23,42,.6);border:1px solid var(--border);
+  color:var(--ink);padding:8px 12px;border-radius:6px;
+  font-size:13px;
+}
+.card-actions{
+  display:flex;gap:6px;padding:8px 14px;background:#f8fafc;
+  border-top:1px solid #e2e8f0;
+}
+.icon-btn{
+  background:#e2e8f0;color:#475569;border:none;
+  padding:6px 12px;border-radius:6px;font-size:11px;
+  cursor:pointer;font-weight:600;display:inline-flex;align-items:center;gap:4px;
+}
+.icon-btn:hover{background:#cbd5e1}
+
+/* ============ SQUAD MODULE STYLES ============ */
+.staff-row{
+  display:grid;grid-template-columns:30px 2fr 2fr 1.5fr 1.2fr 80px 30px;
+  gap:8px;align-items:center;padding:8px;
+  background:rgba(15,23,42,.5);border:1px solid var(--border);
+  border-radius:6px;margin-bottom:6px;
+}
+.staff-row.unavailable{opacity:.45;background:rgba(239,68,68,.08)}
+.staff-row input,.staff-row select{
+  background:rgba(15,23,42,.6);border:1px solid var(--border);
+  color:var(--ink);padding:6px 10px;border-radius:5px;font-size:13px;
+}
+.staff-row .num{font-weight:600;color:var(--muted);text-align:center}
+.staff-row .toggle{
+  cursor:pointer;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:600;
+  text-align:center;border:none;
+}
+.staff-row .toggle.on{background:var(--good);color:white}
+.staff-row .toggle.off{background:var(--bad);color:white}
+.staff-row .delete{
+  background:transparent;border:none;color:var(--bad);
+  cursor:pointer;font-size:18px;
+}
+.staff-row .delete:hover{color:#fca5a5}
+
+.block-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:6px;
+}
+.block-chip{
+  background:rgba(15,23,42,.5);border:1px solid var(--border);
+  padding:8px 10px;border-radius:6px;font-size:13px;cursor:pointer;
+  display:flex;align-items:center;gap:8px;transition:all .15s;
+}
+.block-chip:hover{background:var(--panel-2)}
+.block-chip.selected{background:rgba(59,130,246,.2);border-color:var(--accent)}
+.block-chip input{cursor:pointer}
+.block-chip .count{margin-left:auto;font-size:11px;color:var(--muted)}
+
+.priority-item{
+  display:flex;align-items:center;gap:10px;
+  padding:8px 12px;background:rgba(15,23,42,.4);
+  border:1px solid var(--border);border-radius:6px;
+  margin-bottom:4px;font-size:13px;
+}
+.priority-item .ft{
+  background:var(--good);color:white;padding:2px 8px;
+  border-radius:3px;font-size:11px;font-weight:600;
+}
+.priority-item .pt{
+  background:var(--warn);color:white;padding:2px 8px;
+  border-radius:3px;font-size:11px;font-weight:600;
+}
+.priority-item .add-btn{
+  margin-left:auto;background:var(--accent);color:white;
+  border:none;padding:4px 10px;border-radius:4px;
+  cursor:pointer;font-size:12px;
+}
+.priority-tag{
+  display:inline-flex;align-items:center;gap:6px;
+  background:rgba(245,158,11,.2);border:1px solid var(--warn);
+  padding:5px 10px;border-radius:20px;font-size:12px;
+  margin:3px;
+}
+.priority-tag .x{cursor:pointer;color:var(--warn);font-weight:700}
+
+/* Squad output table */
+.squad-table-wrap{
+  background:white;color:#1e293b;border-radius:10px;
+  border:1px solid #cbd5e1;overflow:hidden;
+}
+.squad-table-wrap .head{
+  background:linear-gradient(135deg,#065f46,#10b981);
+  color:white;padding:14px 18px;font-weight:600;
+}
+.squad-table{width:100%;border-collapse:collapse;font-size:13px}
+.squad-table th{
+  background:#065f46;color:white;padding:10px 8px;
+  text-align:center;font-weight:600;border:1px solid #047857;
+}
+.squad-table td{padding:8px 10px;border:1px solid #cbd5e1;vertical-align:middle}
+.squad-table td.center{text-align:center}
+.squad-table tr.priority-row td{background:#fef3c7}
+.squad-table tr.officer-start td{border-top:2px solid #065f46}
+.squad-table .ft-badge{
+  background:#10b981;color:white;font-size:10px;
+  padding:1px 6px;border-radius:3px;margin-left:4px;
+}
+.squad-table .pt-badge{
+  background:#f59e0b;color:white;font-size:10px;
+  padding:1px 6px;border-radius:3px;margin-left:4px;
+}
+.squad-table .officer-cell{
+  background:#ecfdf5;font-weight:600;text-align:center;
+}
+.squad-table select.shop-swap{
+  background:white;border:1px solid #cbd5e1;
+  padding:4px 6px;border-radius:4px;font-size:12px;width:100%;
+}
+
+.leftover-table{
+  background:white;color:#1e293b;border-radius:10px;
+  border:1px solid #cbd5e1;overflow:hidden;margin-top:20px;
+}
+.leftover-table .head{
+  background:linear-gradient(135deg,#7c2d12,#ea580c);
+  color:white;padding:12px 18px;font-weight:600;
+  display:flex;justify-content:space-between;align-items:center;
+}
+.leftover-table table{width:100%;border-collapse:collapse;font-size:12px}
+.leftover-table th{
+  background:#7c2d12;color:white;padding:8px;border:1px solid #9a3412;
+}
+.leftover-table td{padding:6px 8px;border:1px solid #e2e8f0}
+
+/* ============ GSheet sync ============ */
+.gsheet-box{
+  background:linear-gradient(135deg,rgba(16,185,129,.1),rgba(59,130,246,.1));
+  border:1px solid rgba(16,185,129,.3);border-radius:8px;
+  padding:14px;margin-bottom:16px;
+}
+.gsheet-head{
+  display:flex;justify-content:space-between;align-items:center;
+  margin-bottom:10px;font-size:13px;font-weight:600;color:var(--ink);
+}
+.gsheet-help{
+  background:transparent;border:1px solid var(--border);
+  color:var(--muted);padding:4px 10px;border-radius:5px;
+  cursor:pointer;font-size:11px;
+}
+.gsheet-help:hover{background:var(--panel-2);color:var(--ink)}
+.gsheet-body{
+  display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+}
+.gsheet-body input{
+  background:rgba(15,23,42,.6);border:1px solid var(--border);
+  color:var(--ink);padding:9px 12px;border-radius:6px;font-size:13px;
+  min-width:300px;
+}
+.gsheet-status{
+  margin-top:10px;font-size:12px;color:var(--muted);
+  min-height:16px;
+}
+.gsheet-status.success{color:#34d399}
+.gsheet-status.error{color:#fca5a5}
+
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.7);
+  z-index:2000;display:flex;align-items:center;justify-content:center;
+  padding:20px;
+}
+.modal-card{
+  background:white;color:#1e293b;border-radius:12px;
+  padding:28px;max-width:680px;width:100%;
+  max-height:90vh;overflow-y:auto;position:relative;
+}
+.modal-card h2{font-size:20px;color:#0f172a}
+.modal-card h3{font-size:14px;margin:18px 0 8px;color:#1e3a8a}
+.modal-close{
+  position:absolute;top:12px;right:14px;
+  background:transparent;border:none;font-size:28px;
+  color:#94a3b8;cursor:pointer;line-height:1;
+}
+.modal-close:hover{color:#1e293b}
+.modal-table{margin:8px 0;overflow-x:auto}
+.modal-table table{width:100%;border-collapse:collapse;font-size:12px}
+.modal-table th{background:#1e3a8a;color:white;padding:6px 10px;border:1px solid #1e40af}
+.modal-table td{padding:5px 10px;border:1px solid #cbd5e1}
+.modal-notes{padding-left:20px;font-size:13px;line-height:1.7;color:#334155}
+.modal-notes code{background:#f1f5f9;padding:1px 6px;border-radius:3px;font-size:12px;color:#1e3a8a}
+.modal-warning{
+  margin-top:14px;padding:10px 14px;background:#fef3c7;
+  border-left:3px solid #f59e0b;border-radius:4px;font-size:12px;color:#78350f;
+}
+
+/* ========= PDL MODULE ========= */
+.squad-mode-pane{margin-top:6px}
+.pdl-card{
+  background:white;color:#1e293b;border-radius:10px;
+  border:1px solid #cbd5e1;overflow:hidden;margin-bottom:20px;
+}
+.pdl-card .head{
+  background:linear-gradient(135deg,#1e3a8a,#3b82f6);
+  color:white;padding:14px 18px;font-weight:600;
+  display:flex;justify-content:space-between;align-items:center;
+}
+.pdl-table{width:100%;border-collapse:collapse;font-size:13px}
+.pdl-table th{
+  background:#1e3a8a;color:white;padding:8px 6px;
+  text-align:center;font-size:11px;border:1px solid #1e40af;font-weight:600;
+}
+.pdl-table th.subhead{background:#3b82f6;font-size:10px}
+.pdl-table td{padding:8px;text-align:center;border:1px solid #e2e8f0}
+.pdl-table td.label{text-align:left;font-weight:600;background:#f8fafc;padding-left:14px}
+.pdl-table .num{font-family:'Segoe UI',monospace;font-weight:600}
+.pdl-table .copy-cell{cursor:pointer;transition:background .15s}
+.pdl-table .copy-cell:hover{background:#dbeafe}
+.pdl-table .row-total{background:#dbeafe;font-weight:700}
+.pdl-note{padding:10px 18px;background:#f1f5f9;font-size:11px;color:#64748b;border-top:1px solid #e2e8f0}
+
+/* ========= REMINDER MODULE ========= */
+.tracker-card{
+  background:rgba(15,23,42,.5);border:1px solid var(--border);
+  border-radius:8px;padding:14px;margin-bottom:10px;
+}
+.tracker-card .head{
+  display:flex;align-items:center;gap:10px;margin-bottom:8px;
+}
+.tracker-card .name{
+  font-weight:600;font-size:14px;color:var(--ink);
+}
+.tracker-card .url{
+  font-size:11px;color:var(--muted);font-family:monospace;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  max-width:100%;margin-bottom:8px;
+}
+.tracker-card .stats-row{
+  display:flex;gap:10px;font-size:12px;flex-wrap:wrap;margin-bottom:8px;
+}
+.tracker-card .stat-pill{
+  padding:3px 10px;border-radius:12px;font-weight:600;
+}
+.tracker-card .stat-pill.r{background:rgba(239,68,68,.15);color:#fca5a5}
+.tracker-card .stat-pill.y{background:rgba(245,158,11,.15);color:#fcd34d}
+.tracker-card .stat-pill.g{background:rgba(16,185,129,.15);color:#6ee7b7}
+.tracker-card .actions{
+  display:flex;gap:6px;flex-wrap:wrap;
+}
+.tracker-card .last-sync{
+  font-size:11px;color:var(--muted);margin-left:auto;
+}
+.empty-trackers{
+  padding:30px;text-align:center;color:var(--muted);font-size:13px;
+  border:2px dashed var(--border);border-radius:8px;
+}
+
+.reminder-out{
+  background:white;color:#1e293b;border-radius:10px;
+  border:1px solid #cbd5e1;overflow:hidden;
+}
+.reminder-out .head{
+  background:linear-gradient(135deg,#059669,#10b981);
+  color:white;padding:14px 18px;font-weight:600;
+  display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;
+}
+.reminder-controls{
+  padding:14px 18px;background:#f8fafc;border-bottom:1px solid #e2e8f0;
+}
+.reminder-controls h4{font-size:12px;color:#475569;margin:8px 0 4px;text-transform:uppercase;letter-spacing:.5px}
+.reminder-controls h4:first-child{margin-top:0}
+.reminder-controls .options-row{display:flex;gap:18px;flex-wrap:wrap;font-size:13px}
+.reminder-controls label{display:flex;align-items:center;gap:5px;cursor:pointer;color:#1e293b}
+.reminder-controls input[type="text"], .reminder-controls textarea{
+  width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:5px;
+  font-size:13px;color:#1e293b;background:white;font-family:inherit;box-sizing:border-box;
+}
+.reminder-controls textarea{font-family:'Consolas',monospace;font-size:12px;resize:vertical}
+.placeholders-help{
+  background:#fef3c7;border-left:3px solid #f59e0b;padding:8px 12px;
+  font-size:11px;line-height:1.6;border-radius:0 4px 4px 0;color:#78350f;margin-top:6px;
+}
+.placeholders-help code{background:rgba(0,0,0,.06);padding:1px 5px;border-radius:3px}
+.reminder-output-box{
+  background:#0f172a;color:#e2e8f0;padding:16px;
+  white-space:pre-wrap;font-family:'Consolas',monospace;font-size:13px;
+  max-height:340px;overflow-y:auto;line-height:1.5;
+}
+.btn-tiny{
+  background:transparent;color:#475569;border:1px solid #cbd5e1;
+  padding:5px 10px;border-radius:4px;cursor:pointer;font-size:11px;
+}
+.btn-tiny:hover{background:#e2e8f0}
+.btn-tiny.danger{color:#b91c1c;border-color:#fca5a5}
+.btn-tiny.danger:hover{background:#fee2e2}
+</style>
+</head>
+<body>
+
+<!-- ====== PIN LOCK SCREEN ====== -->
+<div id="pin-screen" style="
+  position:fixed;inset:0;z-index:9999;
+  background:linear-gradient(135deg,#0f172a 0%,#1e3a8a 100%);
+  display:flex;align-items:center;justify-content:center;
+">
+  <div style="
+    background:rgba(30,41,59,.85);border:1px solid #475569;
+    border-radius:16px;padding:40px 36px;text-align:center;
+    width:320px;backdrop-filter:blur(10px);
+  ">
+    <div style="font-size:40px;margin-bottom:8px">🏢</div>
+    <div style="font-size:20px;font-weight:700;color:#f1f5f9;margin-bottom:4px">Office Suite</div>
+    <div style="font-size:13px;color:#94a3b8;margin-bottom:28px">DR PDS, Thiruvannamalai</div>
+
+    <div style="display:flex;gap:10px;justify-content:center;margin-bottom:20px" id="pin-dots">
+      <div class="pin-dot"></div><div class="pin-dot"></div>
+      <div class="pin-dot"></div><div class="pin-dot"></div>
+      <div class="pin-dot"></div><div class="pin-dot"></div>
+    </div>
+
+    <div id="pin-error" style="color:#fca5a5;font-size:12px;height:16px;margin-bottom:10px"></div>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+      <button class="pin-btn" data-n="1">1</button>
+      <button class="pin-btn" data-n="2">2</button>
+      <button class="pin-btn" data-n="3">3</button>
+      <button class="pin-btn" data-n="4">4</button>
+      <button class="pin-btn" data-n="5">5</button>
+      <button class="pin-btn" data-n="6">6</button>
+      <button class="pin-btn" data-n="7">7</button>
+      <button class="pin-btn" data-n="8">8</button>
+      <button class="pin-btn" data-n="9">9</button>
+      <button class="pin-btn" data-n="clear" style="font-size:12px">CLR</button>
+      <button class="pin-btn" data-n="0">0</button>
+      <button class="pin-btn" data-n="back" style="font-size:16px">⌫</button>
+    </div>
+  </div>
+</div>
+
+<style>
+.pin-dot{
+  width:14px;height:14px;border-radius:50%;
+  background:rgba(255,255,255,.15);border:2px solid #475569;
+  transition:all .15s;
+}
+.pin-dot.filled{background:#3b82f6;border-color:#3b82f6}
+.pin-dot.error{background:#ef4444;border-color:#ef4444}
+.pin-btn{
+  background:rgba(255,255,255,.08);border:1px solid #475569;
+  color:#f1f5f9;font-size:20px;font-weight:600;
+  padding:14px;border-radius:10px;cursor:pointer;
+  transition:all .1s;
+}
+.pin-btn:hover{background:rgba(59,130,246,.3);border-color:#3b82f6}
+.pin-btn:active{transform:scale(.93)}
+</style>
+
+<script>
+// ── Change this line to update the PIN ──
+const CORRECT_PIN = '948620';
+// ────────────────────────────────────────
+
+const PIN_SESSION_KEY = 'office_suite_auth_v1';
+let pinEntry = '';
+
+function checkPinSession(){
+  // Remember auth for 8 hours
+  const saved = sessionStorage.getItem(PIN_SESSION_KEY);
+  if(saved && (Date.now() - parseInt(saved)) < 8*60*60*1000){
+    document.getElementById('pin-screen').style.display = 'none';
+  }
+}
+checkPinSession();
+
+function updateDots(){
+  document.querySelectorAll('.pin-dot').forEach((d,i)=>{
+    d.classList.toggle('filled', i < pinEntry.length);
+    d.classList.remove('error');
+  });
+}
+
+function shakeError(){
+  document.querySelectorAll('.pin-dot').forEach(d=>{
+    d.classList.remove('filled');
+    d.classList.add('error');
+  });
+  document.getElementById('pin-error').textContent = '✗ Wrong PIN. Try again.';
+  pinEntry = '';
+  setTimeout(()=>{
+    document.querySelectorAll('.pin-dot').forEach(d=>d.classList.remove('error'));
+    document.getElementById('pin-error').textContent = '';
+  }, 1200);
+}
+
+document.querySelectorAll('.pin-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    const n = btn.dataset.n;
+    if(n === 'clear'){ pinEntry = ''; updateDots(); return; }
+    if(n === 'back'){ pinEntry = pinEntry.slice(0,-1); updateDots(); return; }
+    if(pinEntry.length >= CORRECT_PIN.length) return;
+    pinEntry += n;
+    updateDots();
+    if(pinEntry.length === CORRECT_PIN.length){
+      if(pinEntry === CORRECT_PIN){
+        sessionStorage.setItem(PIN_SESSION_KEY, Date.now());
+        document.getElementById('pin-screen').style.display = 'none';
+      } else {
+        setTimeout(shakeError, 150);
+      }
+    }
+  });
+});
+
+// Keyboard support
+document.addEventListener('keydown', e=>{
+  if(document.getElementById('pin-screen').style.display === 'none') return;
+  if(e.key >= '0' && e.key <= '9'){
+    if(pinEntry.length < CORRECT_PIN.length){
+      pinEntry += e.key; updateDots();
+      if(pinEntry.length === CORRECT_PIN.length){
+        if(pinEntry === CORRECT_PIN){
+          sessionStorage.setItem(PIN_SESSION_KEY, Date.now());
+          document.getElementById('pin-screen').style.display = 'none';
+        } else { setTimeout(shakeError, 150); }
+      }
+    }
+  } else if(e.key === 'Backspace'){ pinEntry = pinEntry.slice(0,-1); updateDots(); }
+  else if(e.key === 'Escape'){ pinEntry = ''; updateDots(); }
+});
+</script>
+<div class="container">
+
+<header>
+  <div>
+    <h1>📋 Office Automation Suite <span class="badge">v0.1</span></h1>
+    <div style="font-size:12px;color:var(--muted);margin-top:4px">DR PDS, Thiruvannamalai • Module: Inspection Reports</div>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center">
+    <label style="font-size:12px;color:var(--muted)">Report Month:</label>
+    <input type="month" id="reportMonth" class="month-input" value="2026-04">
+  </div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" data-tab="inspection">📊 Inspection Report</div>
+  <div class="tab" data-tab="squad">🚓 Squad Duty Order</div>
+  <div class="tab" data-tab="pdl">📋 Head Office PDL</div>
+  <div class="tab" data-tab="reminder">📲 WhatsApp Reminder</div>
+  <div class="tab" data-tab="future" style="opacity:.5">➕ Future Modules</div>
+</div>
+
+<div class="tab-content active" id="tab-inspection">
+
+<div class="panel">
+  <h2><span class="dot"></span> Step 1: Upload Source Files</h2>
+  <div class="upload-grid">
+    <div class="upload-box" id="box-mis">
+      <label for="file-mis">
+        <div class="title">📥 MIS Inspection Report</div>
+        <div class="filename" id="name-mis">Click to upload</div>
+        <div class="hint">From MIS Server (.xlsx)</div>
+      </label>
+      <input type="file" id="file-mis" accept=".xlsx,.xls">
+    </div>
+    <div class="upload-box has-file" id="box-phone">
+      <label for="file-phone">
+        <div class="title">📞 Phone → Post Mapping</div>
+        <div class="filename" id="name-phone">✓ Built-in (24 entries)</div>
+        <div class="hint">Click to override with new file</div>
+      </label>
+      <input type="file" id="file-phone" accept=".xlsx,.xls">
+    </div>
+    <div class="upload-box has-file" id="box-shop">
+      <label for="file-shop">
+        <div class="title">🏪 Shop Code → Block</div>
+        <div class="filename" id="name-shop">✓ Built-in (1628 entries)</div>
+        <div class="hint">Click to override with new file</div>
+      </label>
+      <input type="file" id="file-shop" accept=".xlsx,.xls">
+    </div>
+  </div>
+  <div class="action-bar">
+    <button class="btn" id="btn-process">⚡ Generate Reports</button>
+    <button class="btn secondary" id="btn-reset">🔄 Reset</button>
+  </div>
+</div>
+
+<div id="results-area"></div>
+
+</div>
+
+<!-- ================================================================ -->
+<!-- SQUAD DUTY ORDER MODULE -->
+<!-- ================================================================ -->
+<div class="tab-content" id="tab-squad">
+
+<div class="panel">
+  <h2><span class="dot"></span> Step 1: Master Shop Data</h2>
+  <div class="upload-box" id="box-master" style="max-width:500px">
+    <label for="file-master">
+      <div class="title">🏪 Master FPS Shop List</div>
+      <div class="filename" id="name-master">Drag & drop or click to upload</div>
+      <div class="hint">Excel with columns: block, society, shop_code, shop_name, FT/PT</div>
+    </label>
+    <input type="file" id="file-master" accept=".xlsx,.xls">
+  </div>
+  <div id="master-status" style="margin-top:10px;font-size:13px;color:var(--muted)"></div>
+</div>
+
+<div class="panel" id="squad-panel-staff" style="display:none">
+  <h2><span class="dot"></span> Step 2: Available Staff (this month)</h2>
+  <p style="font-size:13px;color:var(--muted);margin-bottom:12px">
+    Add staff who will conduct squad inspections. Toggle availability for those on leave/exemption.
+  </p>
+
+  <!-- Google Sheet Sync Box -->
+  <div class="gsheet-box" id="gsheet-box">
+    <div class="gsheet-head">
+      <span>🔗 Google Sheet Sync</span>
+      <button class="gsheet-help" id="btn-gsheet-help">📖 Setup help</button>
+    </div>
+    <div class="gsheet-body">
+      <input type="text" id="gsheet-url" placeholder="Paste your published CSV link here..."
+        style="flex:1">
+      <button class="btn secondary" id="btn-gsheet-save">💾 Save</button>
+      <button class="btn success" id="btn-gsheet-sync">🔄 Sync Now</button>
+    </div>
+    <div id="gsheet-status" class="gsheet-status"></div>
+  </div>
+
+  <div id="staff-list"></div>
+  <div class="action-bar">
+    <button class="btn secondary" id="btn-add-staff">➕ Add Staff</button>
+    <button class="btn secondary" id="btn-load-sample">📥 Load sample (10 staff)</button>
+    <button class="btn secondary" id="btn-clear-staff">🗑️ Clear all</button>
+  </div>
+</div>
+
+<!-- GSheet Help Modal -->
+<div class="modal-overlay" id="gsheet-modal" style="display:none">
+  <div class="modal-card">
+    <button class="modal-close" id="modal-close">×</button>
+    <h2 style="margin-bottom:14px">📖 Setting up Google Sheet sync</h2>
+    <h3>Step 1: Create your sheet with these columns</h3>
+    <div class="modal-table">
+      <table>
+        <thead><tr><th>Name</th><th>Designation</th><th>Office</th><th>Circle</th><th>Available</th></tr></thead>
+        <tbody>
+          <tr><td>இ.சரவணன்</td><td>கூ.சாப/கள அலுவலர்</td><td>TVM Circle</td><td>TVM</td><td>Yes</td></tr>
+          <tr><td>க.நளினி</td><td>கூ.சாப/பொவிதி</td><td>Cheyyar Circle</td><td>Cheyyar</td><td>Yes</td></tr>
+          <tr><td>சி.சுரேஷ்</td><td>முதுநிலை ஆய்வாளர்</td><td>PDS Office</td><td>PDS</td><td>No</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul class="modal-notes">
+      <li><b>Circle</b> must be exactly: <code>TVM</code>, <code>Cheyyar</code>, or <code>PDS</code></li>
+      <li><b>Available</b> must be: <code>Yes</code> or <code>No</code> (so you can mark leave/exemption right in the sheet)</li>
+      <li>Other column names are flexible — the app auto-detects them</li>
+    </ul>
+    <h3>Step 2: Publish the sheet</h3>
+    <ol class="modal-notes">
+      <li>In your Google Sheet, click <b>File → Share → Publish to web</b></li>
+      <li>In the dropdown, select <b>"Comma-separated values (.csv)"</b></li>
+      <li>Click <b>Publish</b> → confirm</li>
+      <li>Copy the URL it gives you (looks like <code>https://docs.google.com/spreadsheets/d/e/.../pub?output=csv</code>)</li>
+    </ol>
+    <h3>Step 3: In the app</h3>
+    <ol class="modal-notes">
+      <li>Paste the URL into the input box</li>
+      <li>Click <b>💾 Save</b> (the URL is remembered in your browser forever)</li>
+      <li>Click <b>🔄 Sync Now</b> to fetch the staff list</li>
+      <li>Every month: just update your sheet → click Sync</li>
+    </ol>
+    <div class="modal-warning">
+      ⚠️ Anyone with the published link can read your sheet. Don't put confidential info in it.
+    </div>
+  </div>
+</div>
+
+<div class="panel" id="squad-panel-blocks" style="display:none">
+  <h2><span class="dot"></span> Step 3: Select Blocks for Squad Inspection</h2>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+    <div>
+      <h3 style="font-size:14px;color:var(--accent-2);margin-bottom:10px">🟦 Thiruvannamalai Circle (12 blocks)</h3>
+      <div id="tvm-blocks" class="block-grid"></div>
+    </div>
+    <div>
+      <h3 style="font-size:14px;color:#22d3ee;margin-bottom:10px">🟨 Cheyyar Circle (9 blocks)</h3>
+      <div id="cheyyar-blocks" class="block-grid"></div>
+    </div>
+  </div>
+  <div id="block-summary" style="margin-top:14px;font-size:13px;color:var(--muted)"></div>
+</div>
+
+<div class="panel" id="squad-panel-priority" style="display:none">
+  <h2><span class="dot"></span> Step 4: Priority Shops (optional)</h2>
+  <p style="font-size:13px;color:var(--muted);margin-bottom:12px">
+    Mark shops that <b>must</b> be inspected (irregularity reports etc.). Leave empty if no priority list.
+  </p>
+  <input type="text" id="priority-search" placeholder="🔍 Search shops in selected blocks..."
+    style="width:100%;background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:10px 14px;border-radius:8px;font-size:14px">
+  <div id="priority-results" style="max-height:240px;overflow-y:auto;margin-top:10px"></div>
+  <div id="priority-selected" style="margin-top:12px"></div>
+</div>
+
+<div class="panel" id="squad-panel-generate" style="display:none">
+  <h2><span class="dot"></span> Step 5: Generate Squad Table</h2>
+  <div class="action-bar">
+    <button class="btn success" id="btn-generate-squad">⚡ Auto-Assign &amp; Generate</button>
+  </div>
+</div>
+
+<div id="squad-results-area"></div>
+
+</div>
+
+<!-- ================================================================ -->
+<!-- HEAD OFFICE PDL MODULE -->
+<!-- ================================================================ -->
+<div class="tab-content" id="tab-pdl">
+
+<div class="panel">
+  <h2><span class="dot"></span> Step 1: Upload MIS Report</h2>
+  <p style="font-size:13px;color:var(--muted);margin-bottom:12px">
+    Drop the monthly MIS Inspection Report. The app will compute CSR/DR/JR counts using only your <b>24-phone mapping</b>.
+  </p>
+  <div class="upload-box" id="box-pdl-mis" style="max-width:500px">
+    <label for="file-pdl-mis">
+      <div class="title">📥 MIS Inspection Report</div>
+      <div class="filename" id="name-pdl-mis">Drag & drop or click to upload</div>
+      <div class="hint">From MIS Server (.xlsx)</div>
+    </label>
+    <input type="file" id="file-pdl-mis" accept=".xlsx,.xls">
+  </div>
+  <div id="pdl-mis-status" style="margin-top:10px;font-size:13px;color:var(--muted)"></div>
+</div>
+
+<div class="panel" id="pdl-panel-squad" style="display:none">
+  <h2><span class="dot"></span> Step 2: Squad Inspections (this month)</h2>
+  <p style="font-size:13px;color:var(--muted);margin-bottom:12px">
+    Squad inspections are mixed inside the MIS data and need to be subtracted from regular CSR counts.
+  </p>
+  <div style="background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:12px">
+    <label style="font-size:13px;font-weight:600;display:block;margin-bottom:8px">How to identify squad inspections this month:</label>
+    <div style="display:flex;gap:14px;flex-wrap:wrap">
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+        <input type="radio" name="squad-mode" value="none" checked> No squad this month
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+        <input type="radio" name="squad-mode" value="codes"> Paste shop codes
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+        <input type="radio" name="squad-mode" value="date"> By inspection date
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+        <input type="radio" name="squad-mode" value="manual"> Manual count only
+      </label>
+    </div>
+  </div>
+
+  <div id="squad-mode-codes" class="squad-mode-pane" style="display:none">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:10px">
+      <div>
+        <label style="font-size:12px;color:var(--muted);font-weight:600">📅 Squad Date (mandatory)</label>
+        <input type="date" id="squad-date-codes"
+          style="width:100%;background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:9px 12px;border-radius:6px;font-size:13px;margin-top:4px">
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--muted)">Tolerance window (postponements)</label>
+        <select id="squad-tolerance"
+          style="width:100%;background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:9px 12px;border-radius:6px;font-size:13px;margin-top:4px">
+          <option value="0">Exact date only</option>
+          <option value="1">± 1 day</option>
+          <option value="2" selected>± 2 days (recommended)</option>
+          <option value="3">± 3 days</option>
+          <option value="7">± 7 days</option>
+        </select>
+      </div>
+    </div>
+    <label style="font-size:12px;color:var(--muted)">Paste shop codes that were squad-inspected (one per line, or comma-separated):</label>
+    <textarea id="squad-codes-input" rows="5" placeholder="05EP021PN&#10;05EP022P1&#10;..."
+      style="width:100%;background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:10px;border-radius:6px;font-size:13px;font-family:monospace;margin-top:6px"></textarea>
+    <div style="font-size:11px;color:var(--muted);margin-top:4px" id="squad-codes-count"></div>
+    <div style="font-size:11px;color:var(--warn);margin-top:6px;line-height:1.5">
+      ℹ️ A row counts as Flying Squad ONLY if shop code matches <b>AND</b> inspection date is within tolerance of squad date <b>AND</b> inspector phone belongs to a department staff (44 phones).
+    </div>
+  </div>
+
+  <div id="squad-mode-date" class="squad-mode-pane" style="display:none">
+    <label style="font-size:12px;color:var(--muted)">Squad inspection date(s) — only block-staff inspections on these dates will be counted as squad:</label>
+    <input type="text" id="squad-dates-input" placeholder="e.g. 2026-03-15, 2026-03-22"
+      style="width:100%;background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:10px;border-radius:6px;font-size:13px;margin-top:6px">
+  </div>
+
+  <div id="squad-mode-manual" class="squad-mode-pane" style="display:none">
+    <label style="font-size:12px;color:var(--muted)">Total squad shop count (this number will be subtracted from CSR Inspected; cannot split irregularities):</label>
+    <input type="number" id="squad-manual-count" min="0" placeholder="e.g. 99"
+      style="width:200px;background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:10px;border-radius:6px;font-size:13px;margin-top:6px">
+  </div>
+</div>
+
+<div class="panel" id="pdl-panel-targets" style="display:none">
+  <h2><span class="dot"></span> Step 3: Targets</h2>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+    <div>
+      <label style="font-size:12px;color:var(--muted)">CSR Target (block staff × 45)</label>
+      <input type="number" id="target-csr" value="945"
+        style="width:100%;background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:9px;border-radius:6px;font-size:13px;margin-top:4px">
+    </div>
+    <div>
+      <label style="font-size:12px;color:var(--muted)">DR Target</label>
+      <input type="number" id="target-dr" value="50"
+        style="width:100%;background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:9px;border-radius:6px;font-size:13px;margin-top:4px">
+    </div>
+    <div>
+      <label style="font-size:12px;color:var(--muted)">JR Target</label>
+      <input type="number" id="target-jr" value="10"
+        style="width:100%;background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:9px;border-radius:6px;font-size:13px;margin-top:4px">
+    </div>
+  </div>
+</div>
+
+<div class="panel" id="pdl-panel-generate" style="display:none">
+  <div class="action-bar">
+    <button class="btn success" id="btn-pdl-compute">⚡ Compute &amp; Show Results</button>
+  </div>
+</div>
+
+<div id="pdl-results-area"></div>
+
+</div>
+
+<!-- ================================================================ -->
+<!-- WHATSAPP REMINDER MODULE -->
+<!-- ================================================================ -->
+<div class="tab-content" id="tab-reminder">
+
+<div class="panel">
+  <h2><span class="dot"></span> Saved Trackers</h2>
+  <p style="font-size:13px;color:var(--muted);margin-bottom:12px">
+    Paste each Tracker's published-CSV link once — saved in your browser forever. Click 🔄 Sync to fetch latest status, then 📲 Generate to build the reminder.
+  </p>
+  <div id="trackers-list"></div>
+  <div class="action-bar">
+    <button class="btn" id="btn-add-tracker">➕ Add Tracker</button>
+    <button class="btn secondary" id="btn-tracker-help">📖 How to publish a Tracker</button>
+  </div>
+</div>
+
+<div class="panel">
+  <h2><span class="dot"></span> Phone Mapping (for @-tags, optional)</h2>
+  <p style="font-size:13px;color:var(--muted);margin-bottom:8px">
+    Format: one per line, <code style="background:rgba(0,0,0,.3);padding:1px 6px;border-radius:3px">BlockName | 919876543210</code>. Paste once, used across all trackers.
+  </p>
+  <textarea id="phone-mapping" rows="6" placeholder="Tiruvannamalai HQ | 919876543210
+Polur | 919876543211
+Cheyyar | 919876543212"
+    style="width:100%;background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:10px;border-radius:6px;font-size:13px;font-family:monospace"></textarea>
+  <div class="action-bar">
+    <button class="btn secondary" id="btn-save-phones">💾 Save mapping</button>
+    <span id="phone-saved-tag" style="font-size:12px;color:#34d399;opacity:0;transition:opacity .3s">✓ saved</span>
+  </div>
+</div>
+
+<div id="reminder-result-area"></div>
+
+</div>
+
+<!-- Add/Edit Tracker Modal -->
+<div class="modal-overlay" id="tracker-modal" style="display:none">
+  <div class="modal-card" style="max-width:540px">
+    <button class="modal-close" id="tracker-modal-close">×</button>
+    <h2 id="tracker-modal-title">Add Tracker</h2>
+    <div style="margin-top:12px">
+      <label style="font-size:13px;color:#475569;font-weight:600">Tracker Name</label>
+      <input type="text" id="tracker-name-input" placeholder="e.g. PDL-1 Offtake"
+        style="width:100%;padding:9px 12px;border:1px solid #cbd5e1;border-radius:5px;font-size:13px;margin-top:4px">
+    </div>
+    <div style="margin-top:12px">
+      <label style="font-size:13px;color:#475569;font-weight:600">Published CSV URL</label>
+      <input type="text" id="tracker-url-input" placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?gid=...&single=true&output=csv"
+        style="width:100%;padding:9px 12px;border:1px solid #cbd5e1;border-radius:5px;font-size:13px;margin-top:4px">
+      <div style="font-size:11px;color:#94a3b8;margin-top:4px">⚠️ Use the URL of the <b>Tracker tab specifically</b> (not the whole spreadsheet)</div>
+    </div>
+    <div style="margin-top:18px;text-align:right;display:flex;gap:8px;justify-content:flex-end">
+      <button class="icon-btn" id="tracker-modal-cancel">Cancel</button>
+      <button class="btn" id="tracker-modal-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Tracker Help Modal -->
+<div class="modal-overlay" id="tracker-help-modal" style="display:none">
+  <div class="modal-card">
+    <button class="modal-close" id="tracker-help-close">×</button>
+    <h2>📖 How to publish a Tracker sheet</h2>
+    <h3>Why a per-tab link?</h3>
+    <p style="font-size:13px;color:#334155;line-height:1.6">
+      You don't want block staff data exposed — just the Tracker. Google Sheets lets you publish only the Tracker tab.
+    </p>
+    <h3>Steps</h3>
+    <ol class="modal-notes">
+      <li>Open the Google Sheet that has the <b>Tracker</b> tab</li>
+      <li>Click <b>File → Share → Publish to web</b></li>
+      <li>In the dialog, change "Entire Document" to the <b>Tracker</b> tab specifically</li>
+      <li>Set format to <b>"Comma-separated values (.csv)"</b></li>
+      <li>Click <b>Publish</b> → confirm</li>
+      <li>Copy the URL (looks like <code>https://docs.google.com/spreadsheets/d/e/.../pub?gid=...&single=true&output=csv</code>)</li>
+      <li>Click <b>Add Tracker</b> in the webapp → paste the URL → save</li>
+    </ol>
+    <div class="modal-warning">
+      ⚠️ Anyone with the published link can read the Tracker tab. Don't put confidential info in it.
+    </div>
+  </div>
+</div>
+
+<div class="tab-content" id="tab-future">
+  <div class="panel">
+    <h2><span class="dot"></span> Coming Next</h2>
+    <p style="color:var(--muted);line-height:1.7">
+      • Google Sheets live sync (Part B of Squad)<br>
+      • Periodicals tracker<br>
+      • Google Sheets monitoring<br>
+      • Email composer with attachments<br>
+      • PDL (17-sheet) consolidator<br>
+    </p>
+  </div>
+</div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+// BUILT-IN DATA — Phone-to-Post and Shop-to-Block mappings
+// (Embedded so user does not need to upload them every time)
+// ============================================================
+const BUILT_IN_PHONE_MAP = [
+  {phone:7338749500, designation:"இணைப்பதிவாளர்"},
+  {phone:7338749503, designation:"துணைப்பதிவாளர், செய்யார் சரகம்"},
+  {phone:7338749504, designation:"துணைப்பதிவாளர் (பொவிதி)"},
+  {phone:7338749524, designation:"திருவண்ணாமலை HQ"},
+  {phone:7338749525, designation:"திருவண்ணாமலை 1"},
+  {phone:7338749526, designation:"கீழ்பென்னாத்தூர்"},
+  {phone:7338749527, designation:"செங்கம்"},
+  {phone:7338749528, designation:"தண்டராம்பட்டு"},
+  {phone:7338749529, designation:"கலசப்பாக்கம்"},
+  {phone:7338749530, designation:"போளூர்"},
+  {phone:7338749531, designation:"ஜமுனாமரத்தூர் (Ic)"},
+  {phone:7338749532, designation:"சேத்துபட்டு"},
+  {phone:7338749533, designation:"ஆரணி (கிழக்கு)"},
+  {phone:7338749534, designation:"செய்யார்"},
+  {phone:7338749535, designation:"வெம்பாக்கம் 1"},
+  {phone:7338749536, designation:"வந்தவாசி"},
+  {phone:7338749537, designation:"பெரணமல்லூர்"},
+  {phone:7338749538, designation:"தெள்ளார்"},
+  {phone:7338749539, designation:"துரிஞ்சாபுரம்"},
+  {phone:7338749540, designation:"புதுப்பாளையம்"},
+  {phone:7338749541, designation:"ஆரணி (மேற்கு)"},
+  {phone:7458968899, designation:"திருவண்ணாமலை 2"},
+  {phone:8457896987, designation:"வெம்பாக்கம் 2"},
+  {phone:8541478968, designation:"அனக்காவூர்"}
+];
+
+// State
+const state = {
+  misData: null, misName: null,
+  phoneMap: BUILT_IN_PHONE_MAP, phoneName: null,
+  shopMap: null, shopName: null,
+  results: null
+};
+
+// Inspector role classification helper
+function classifyRole(designation){
+  const d = (designation||'').trim();
+  if(d.includes('இணைப்பதிவாளர்')) return 'Joint Registrar';
+  if(d.includes('துணைப்பதிவாளர்')) return 'Deputy Registrar';
+  return 'Block Staff';
+}
+
+// Toast
+function toast(msg, isErr){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isErr?' error':'');
+  setTimeout(()=>t.className='toast'+(isErr?' error':''),3000);
+}
+
+// Tabs
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click',()=>{
+    if(tab.dataset.tab==='future') return;
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-'+tab.dataset.tab).classList.add('active');
+  });
+});
+
+// File upload handlers
+function readExcel(file){
+  return new Promise((resolve,reject)=>{
+    const r = new FileReader();
+    r.onload = e=>{
+      try{
+        const wb = XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+        resolve(wb);
+      }catch(err){reject(err)}
+    };
+    r.onerror = ()=>reject(new Error('Read failed'));
+    r.readAsArrayBuffer(file);
+  });
+}
+
+document.getElementById('file-mis').addEventListener('change', async e=>{
+  const f = e.target.files[0]; if(!f) return;
+  try{
+    state.misWb = await readExcel(f);
+    state.misName = f.name;
+    document.getElementById('name-mis').textContent = '✓ '+f.name;
+    document.getElementById('box-mis').classList.add('has-file');
+    toast('MIS file loaded');
+  }catch(err){toast('Failed to read MIS file',true)}
+});
+
+document.getElementById('file-phone').addEventListener('change', async e=>{
+  const f = e.target.files[0]; if(!f) return;
+  try{
+    const wb = await readExcel(f);
+    const sh = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sh);
+    state.phoneMap = rows.map(r=>({
+      phone:Number(r['Phone No.']||r.Phone||r.phone),
+      designation:r.Designation||r.designation
+    })).filter(r=>r.phone);
+    document.getElementById('name-phone').textContent = '✓ '+f.name+' ('+state.phoneMap.length+' entries)';
+    toast('Phone mapping loaded');
+  }catch(err){toast('Failed to read phone file',true)}
+});
+
+document.getElementById('file-shop').addEventListener('change', async e=>{
+  const f = e.target.files[0]; if(!f) return;
+  try{
+    const wb = await readExcel(f);
+    const sh = wb.Sheets[wb.SheetNames[0]];
+    state.shopMap = XLSX.utils.sheet_to_json(sh);
+    state.shopName = f.name;
+    document.getElementById('name-shop').textContent = '✓ '+f.name+' ('+state.shopMap.length+' entries)';
+    toast('Shop mapping loaded');
+  }catch(err){toast('Failed to read shop file',true)}
+});
+
+// Reset
+document.getElementById('btn-reset').addEventListener('click',()=>{
+  location.reload();
+});
+
+// ============================================================
+// MAIN PROCESSING
+// ============================================================
+document.getElementById('btn-process').addEventListener('click',async ()=>{
+  if(!state.misWb){toast('Upload MIS report first',true);return}
+  if(!state.shopMap){
+    // try to load embedded shop map - if not present, ask
+    toast('Please upload shop-code-to-block file',true);
+    return;
+  }
+  try{
+    processReports();
+    toast('Reports generated');
+  }catch(err){
+    console.error(err);
+    toast('Error: '+err.message,true);
+  }
+});
+
+function processReports(){
+  // 1. Read MIS — header at row index 8 (row 9 in Excel)
+  const sh = state.misWb.Sheets[state.misWb.SheetNames[0]];
+  const allRows = XLSX.utils.sheet_to_json(sh,{header:1,defval:null});
+  // Find header row
+  let headerRow = -1;
+  for(let i=0;i<Math.min(20,allRows.length);i++){
+    if(allRows[i] && allRows[i].includes('FPS Code')){headerRow=i;break}
+  }
+  if(headerRow<0) throw new Error('Could not find header row in MIS');
+
+  const headers = allRows[headerRow];
+  const dataRows = allRows.slice(headerRow+1).filter(r=>r && r[0]!=null);
+
+  const idx = name=>headers.indexOf(name);
+  const colFps = idx('FPS Code');
+  const colFpsName = idx('FPS Name');
+  const colDate = idx('Date of Inspection');
+  const colInspBy = idx('Inspected By');
+  const colPhone = idx('Inspector Mobile Number');
+
+  // 2. Build phone -> {designation, role} lookup
+  const phoneLookup = {};
+  state.phoneMap.forEach(p=>{
+    const role = classifyRole(p.designation);
+    phoneLookup[String(p.phone)] = {designation:p.designation.trim(),role};
+  });
+
+  // 3. Build shop -> block lookup
+  const shopLookup = {};
+  state.shopMap.forEach(s=>{
+    const code = (s.Shop_Code||s.shop_code||s['Shop Code']||'').toString().trim();
+    if(code) shopLookup[code] = (s.Block||s.block||'').toString().trim();
+  });
+
+  // 4. Process each MIS row
+  const blockStaffInspections = {}; // designation -> count
+  const drInspections = []; // detailed list for Deputy Registrar
+  const jrInspections = []; // detailed list for Joint Registrar
+
+  // initialize block staff counts using known designations
+  state.phoneMap.forEach(p=>{
+    if(classifyRole(p.designation)==='Block Staff'){
+      blockStaffInspections[p.designation.trim()] = 0;
+    }
+  });
+
+  let unmatchedPhones = 0;
+  dataRows.forEach((r,i)=>{
+    const phone = r[colPhone];
+    if(!phone) return;
+    const phoneStr = String(Math.round(Number(phone)));
+    const lookup = phoneLookup[phoneStr];
+    if(!lookup){unmatchedPhones++;return}
+
+    const shopCode = (r[colFps]||'').toString().trim();
+    const block = shopLookup[shopCode] || '';
+    const fpsName = r[colFpsName]||'';
+    const date = r[colDate];
+
+    if(lookup.role==='Block Staff'){
+      blockStaffInspections[lookup.designation] =
+        (blockStaffInspections[lookup.designation]||0)+1;
+    } else if(lookup.role==='Deputy Registrar'){
+      drInspections.push({
+        sl: drInspections.length+1,
+        fpsCode: shopCode,
+        block: block,
+        fpsName: fpsName,
+        date: date,
+        designation: lookup.designation
+      });
+    } else if(lookup.role==='Joint Registrar'){
+      jrInspections.push({
+        sl: jrInspections.length+1,
+        fpsCode: shopCode,
+        block: block,
+        fpsName: fpsName,
+        date: date,
+        designation: lookup.designation
+      });
+    }
+  });
+
+  // 5. Sort block staff least->highest, then by name
+  const blockStaffList = Object.entries(blockStaffInspections)
+    .map(([name,count])=>({name:name.trim(),count,target:45,pending:Math.max(0,45-count)}))
+    .sort((a,b)=>a.count-b.count || a.name.localeCompare(b.name));
+
+  state.results = {
+    blockStaffList,
+    drInspections,
+    jrInspections,
+    totalRows: dataRows.length,
+    unmatchedPhones,
+    targetDR: 50,
+    targetJR: 10
+  };
+
+  renderResults();
+}
+
+// ============================================================
+// RENDERING
+// ============================================================
+function fmtDate(d){
+  if(!d) return '';
+  if(d instanceof Date) return d.toLocaleDateString('en-GB');
+  // Excel serial number?
+  if(typeof d==='number'){
+    const excelEpoch = new Date(Date.UTC(1899,11,30));
+    const dt = new Date(excelEpoch.getTime()+d*86400000);
+    return dt.toLocaleDateString('en-GB');
+  }
+  // String — try parse
+  try{
+    const dt = new Date(d);
+    if(!isNaN(dt)) return dt.toLocaleDateString('en-GB');
+  }catch(e){}
+  return String(d).split(' ')[0];
+}
+
+function getMonthLabel(){
+  const v = document.getElementById('reportMonth').value;
+  if(!v) return '';
+  const [y,m] = v.split('-');
+  const months = ['ஜனவரி','பிப்ரவரி','மார்ச்','ஏப்ரல்','மே','ஜூன்',
+                  'ஜூலை','ஆகஸ்ட்','செப்டம்பர்','அக்டோபர்','நவம்பர்','டிசம்பர்'];
+  return `${months[parseInt(m)-1]} ${y}`;
+}
+
+function renderResults(){
+  const r = state.results;
+  if(!r) return;
+  const month = getMonthLabel();
+
+  // Summary stats
+  const drDone = r.drInspections.length;
+  const jrDone = r.jrInspections.length;
+  const bsTotal = r.blockStaffList.reduce((s,b)=>s+b.count,0);
+  const bsCompleted = r.blockStaffList.filter(b=>b.count>=45).length;
+
+  let html = `
+  <div class="panel">
+    <h2><span class="dot"></span> Step 2: Summary Dashboard
+      <span style="margin-left:auto;font-size:12px;color:var(--muted);font-weight:400">${month}</span>
+    </h2>
+    <div class="summary-stats">
+      <div class="stat">
+        <div class="label">Total Inspections (MIS)</div>
+        <div class="value">${r.totalRows}</div>
+      </div>
+      <div class="stat ${drDone>=r.targetDR?'good':drDone>=r.targetDR*0.7?'warn':'bad'}">
+        <div class="label">Deputy Registrar</div>
+        <div class="value">${drDone} / ${r.targetDR}</div>
+      </div>
+      <div class="stat ${jrDone>=r.targetJR?'good':jrDone>=r.targetJR*0.7?'warn':'bad'}">
+        <div class="label">Joint Registrar</div>
+        <div class="value">${jrDone} / ${r.targetJR}</div>
+      </div>
+      <div class="stat ${bsCompleted===r.blockStaffList.length?'good':'warn'}">
+        <div class="label">Block Staff (≥45)</div>
+        <div class="value">${bsCompleted} / ${r.blockStaffList.length}</div>
+      </div>
+      <div class="stat">
+        <div class="label">Unmatched Rows</div>
+        <div class="value" style="color:var(--muted)">${r.unmatchedPhones}</div>
+      </div>
+    </div>
+    <div class="action-bar">
+      <button class="btn success" id="btn-download-excel">📥 Download Excel (3 sheets)</button>
+    </div>
+  </div>
+  `;
+
+  // Block Staff Card
+  html += `
+  <div class="panel">
+    <h2><span class="dot"></span> Block Staff — Inspection Report</h2>
+    <div class="dashboard-grid">
+      <div>
+        <div class="report-card" id="card-blockstaff">
+          <div class="head">
+            ${month} — மாதாந்திர ஆய்வு முன்னேற்ற அறிக்கை
+            <div class="month">ஒன்றியம் அலுவலர்கள் (Block Staff) • இலக்கு / Target: 45</div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>வட்டாரம்</th>
+                <th>இலக்கு</th>
+                <th>ஆய்வு செய்யப்பட்ட<br>கடைகளின் எண்ணிக்கை</th>
+                <th>நிலுவை</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${r.blockStaffList.map((b,i)=>{
+                const cls = b.count===0?'red':b.count>=45?'green':b.count>=30?'amber':'red';
+                return `<tr>
+                  <td>${i+1}</td>
+                  <td class="name">${b.name}</td>
+                  <td>${b.target}</td>
+                  <td class="${cls}">${b.count}</td>
+                  <td class="${b.pending===0?'green':'red'}">${b.pending}</td>
+                </tr>`;
+              }).join('')}
+              <tr style="font-weight:700;background:#dbeafe">
+                <td colspan="3" style="text-align:right;padding-right:14px">Grand Total</td>
+                <td>${bsTotal}</td>
+                <td>${r.blockStaffList.reduce((s,b)=>s+b.pending,0)}</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="footer">
+            <span>Done: ${bsCompleted}</span>
+            <span>Pending: ${r.blockStaffList.length-bsCompleted}</span>
+          </div>
+        </div>
+        <div class="card-actions">
+          <button class="icon-btn" onclick="copyCard('card-blockstaff')">📋 Copy as image</button>
+          <button class="icon-btn" onclick="downloadCard('card-blockstaff','BlockStaff_${month.replace(' ','_')}')">💾 Save PNG</button>
+        </div>
+      </div>
+
+      <div>
+        <div class="report-card" id="card-officers">
+          <div class="head">
+            ${month} — Officer Inspections Summary
+            <div class="month">துணைப்பதிவாளர் & இணைப்பதிவாளர்</div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>பதவி</th>
+                <th>இலக்கு</th>
+                <th>ஆய்வு செய்தது</th>
+                <th>நிலுவை</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>1</td>
+                <td class="name">துணைப்பதிவாளர் (Deputy Registrar)</td>
+                <td>${r.targetDR}</td>
+                <td class="${drDone>=r.targetDR?'green':drDone>=r.targetDR*0.7?'amber':'red'}">${drDone}</td>
+                <td class="${drDone>=r.targetDR?'green':'red'}">${Math.max(0,r.targetDR-drDone)}</td>
+              </tr>
+              <tr>
+                <td>2</td>
+                <td class="name">இணைப்பதிவாளர் (Joint Registrar)</td>
+                <td>${r.targetJR}</td>
+                <td class="${jrDone>=r.targetJR?'green':jrDone>=r.targetJR*0.7?'amber':'red'}">${jrDone}</td>
+                <td class="${jrDone>=r.targetJR?'green':'red'}">${Math.max(0,r.targetJR-jrDone)}</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="footer">
+            <span>Officers Total: ${drDone+jrDone}</span>
+            <span>Combined Pending: ${Math.max(0,r.targetDR-drDone)+Math.max(0,r.targetJR-jrDone)}</span>
+          </div>
+        </div>
+        <div class="card-actions">
+          <button class="icon-btn" onclick="copyCard('card-officers')">📋 Copy as image</button>
+          <button class="icon-btn" onclick="downloadCard('card-officers','Officers_${month.replace(' ','_')}')">💾 Save PNG</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  `;
+
+  // Deputy Registrar detail
+  html += renderDetail('Deputy Registrar', r.drInspections, 'card-dr', '#7c3aed', '#a78bfa');
+  html += renderDetail('Joint Registrar', r.jrInspections, 'card-jr', '#0891b2', '#22d3ee');
+
+  document.getElementById('results-area').innerHTML = html;
+  document.getElementById('btn-download-excel').addEventListener('click', downloadExcel);
+}
+
+function renderDetail(title, list, cardId, bg1, bg2){
+  if(list.length===0) return `
+    <div class="panel">
+      <h2><span class="dot"></span> ${title} — Detailed Inspections</h2>
+      <div class="empty-state"><div class="icon">📭</div>No inspections found for ${title}</div>
+    </div>
+  `;
+  return `
+  <div class="panel">
+    <h2><span class="dot"></span> ${title} — Detailed Inspections (${list.length})</h2>
+    <div class="detail-table" id="${cardId}">
+      <div class="head" style="background:linear-gradient(135deg,${bg1},${bg2})">
+        ${list[0].designation} அவர்களின் ${getMonthLabel()} மாதத்திற்கான ஆய்வு அறிக்கை விவரம்
+      </div>
+      <table>
+        <thead>
+          <tr><th>#</th><th>FPS Code</th><th>Block</th><th>FPS Name</th><th>Date of Inspection</th><th>Remarks</th></tr>
+        </thead>
+        <tbody>
+          ${list.map(d=>`
+            <tr>
+              <td style="text-align:center">${d.sl}</td>
+              <td>${d.fpsCode}</td>
+              <td>${d.block}</td>
+              <td>${d.fpsName}</td>
+              <td>${fmtDate(d.date)}</td>
+              <td></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-actions" style="border-radius:0 0 10px 10px;border:1px solid #cbd5e1;border-top:0">
+      <button class="icon-btn" onclick="copyCard('${cardId}')">📋 Copy as image</button>
+      <button class="icon-btn" onclick="downloadCard('${cardId}','${title.replace(' ','_')}_${getMonthLabel().replace(' ','_')}')">💾 Save PNG</button>
+    </div>
+  </div>
+  `;
+}
+
+// ============================================================
+// SCREENSHOT (clipboard + download)
+// ============================================================
+async function copyCard(id){
+  const el = document.getElementById(id);
+  if(!el){toast('Card not found',true);return}
+  try{
+    const canvas = await html2canvas(el,{backgroundColor:'#ffffff',scale:2});
+    canvas.toBlob(async blob=>{
+      try{
+        await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
+        toast('✓ Image copied to clipboard');
+      }catch(e){
+        // Fallback — download
+        saveAs(blob,id+'.png');
+        toast('Clipboard blocked — downloaded instead');
+      }
+    });
+  }catch(err){toast('Screenshot failed: '+err.message,true)}
+}
+
+async function downloadCard(id,filename){
+  const el = document.getElementById(id);
+  if(!el) return;
+  try{
+    const canvas = await html2canvas(el,{backgroundColor:'#ffffff',scale:2});
+    canvas.toBlob(blob=>saveAs(blob,filename+'.png'));
+    toast('✓ PNG downloaded');
+  }catch(err){toast('Download failed',true)}
+}
+
+// ============================================================
+// EXCEL EXPORT (3 sheets)
+// ============================================================
+function downloadExcel(){
+  const r = state.results;
+  if(!r) return;
+  const month = getMonthLabel();
+
+  const wb = XLSX.utils.book_new();
+
+  // ----- Sheet 1: Block Officer (matches existing template) -----
+  const bsRows = [
+    [],
+    ['Sl. No.','ஒன்றியம் அலுவலர்கள்','ஆய்வு செய்யப்பட்ட கடைகளின் எண்ணிக்கை','இலக்கு','நிலுவை']
+  ];
+  r.blockStaffList.forEach((b,i)=>{
+    bsRows.push([i+1, b.name, b.count, b.target, b.pending]);
+  });
+  const grandTotal = r.blockStaffList.reduce((s,b)=>s+b.count,0);
+  const grandPending = r.blockStaffList.reduce((s,b)=>s+b.pending,0);
+  bsRows.push(['','Grand Total',grandTotal,r.blockStaffList.length*45,grandPending]);
+  const ws1 = XLSX.utils.aoa_to_sheet(bsRows);
+  ws1['!cols'] = [{wch:8},{wch:24},{wch:36},{wch:10},{wch:10}];
+  XLSX.utils.book_append_sheet(wb,ws1,'Block Officer');
+
+  // ----- Sheet 2: Deputy Registrar -----
+  const drDesig = r.drInspections[0]?.designation || 'துணைப்பதிவாளர் (பொவிதி)';
+  const drRows = [
+    [`${drDesig}  அவர்களின் ${month} மாதத்திற்கான ஆய்வு அறிக்கை விவரம்`],
+    ['#','FPS Code','Block','FPS Name','Date of Inspection','Remarks']
+  ];
+  r.drInspections.forEach(d=>{
+    drRows.push([d.sl, d.fpsCode, d.block, d.fpsName, fmtDate(d.date), '']);
+  });
+  const ws2 = XLSX.utils.aoa_to_sheet(drRows);
+  ws2['!cols'] = [{wch:5},{wch:14},{wch:20},{wch:28},{wch:18},{wch:14}];
+  if(!ws2['!merges']) ws2['!merges'] = [];
+  ws2['!merges'].push({s:{r:0,c:0},e:{r:0,c:5}});
+  XLSX.utils.book_append_sheet(wb,ws2,'Deputy Registrar');
+
+  // ----- Sheet 3: Joint Registrar -----
+  const jrDesig = r.jrInspections[0]?.designation || 'இணைப்பதிவாளர்';
+  const jrRows = [
+    [`${jrDesig}  அவர்களின் ${month} மாதத்திற்கான ஆய்வு அறிக்கை விவரம்`],
+    ['#','FPS Code','Block','FPS Name','Date of Inspection','Remarks']
+  ];
+  r.jrInspections.forEach(d=>{
+    jrRows.push([d.sl, d.fpsCode, d.block, d.fpsName, fmtDate(d.date), '']);
+  });
+  const ws3 = XLSX.utils.aoa_to_sheet(jrRows);
+  ws3['!cols'] = [{wch:5},{wch:14},{wch:20},{wch:28},{wch:18},{wch:14}];
+  if(!ws3['!merges']) ws3['!merges'] = [];
+  ws3['!merges'].push({s:{r:0,c:0},e:{r:0,c:5}});
+  XLSX.utils.book_append_sheet(wb,ws3,'Joint Registrar');
+
+  const fname = `Inspection_Report_${month.replace(' ','_')}.xlsx`;
+  XLSX.writeFile(wb, fname);
+  toast('✓ Excel downloaded');
+}
+
+// Auto-load embedded shop map fallback (small CSV could be added if needed)
+// For now we require shop file upload on first use — the 9MB shop file is too large to embed
+
+// ============================================================================
+// =================  SQUAD DUTY ORDER MODULE  ================================
+// ============================================================================
+
+// Block -> Circle mapping (12 + 9 split confirmed by user)
+const TVM_CIRCLE_BLOCKS = [
+  'திருவண்ணாமலை HQ','திருவண்ணாமலை 1','திருவண்ணாமலை 2',
+  'துரிஞ்சாபுரம்','கீழ்ப்பென்னாத்துர்','செங்கம்','புதுப்பாளையம்',
+  'தண்டராம்பட்டு','கலசபாக்கம்','போளுர்','ஜமுனாமரத்துர்','சேத்துப்பட்டு'
+];
+const CHEYYAR_CIRCLE_BLOCKS = [
+  'ஆரணி  கிழக்கு','ஆரணி மேற்கு','செய்யார்','அனக்காவூர்',
+  'வெம்பாக்கம்  1','வெம்பாக்கம்  2','வந்தவாசி','பெரணமல்லூர் ','தெள்ளார்'
+];
+
+// Sample staff for the "Load sample" button
+const SAMPLE_STAFF = [
+  {name:'சொ.தமிழரசி', desig:'கூ.சாப/பொவிதி', office:'TVM Circle', circle:'TVM', available:true},
+  {name:'இ.சரவணன்', desig:'கூ.சாப/கள அலுவலர்', office:'TVM Circle', circle:'TVM', available:true},
+  {name:'இரா.காளி', desig:'கூ.சாப/மே.இ', office:'TVM Circle', circle:'TVM', available:true},
+  {name:'அசித்ரா', desig:'கூ.சாப/மே.இ', office:'TVM Circle', circle:'TVM', available:true},
+  {name:'சி.மாரிமுத்து', desig:'கூ.சாப/கள அலுவலர்', office:'TVM Circle', circle:'TVM', available:true},
+  {name:'ஏ.தியபாரதி', desig:'முதுநிலை ஆய்வாளர்', office:'PDS Office', circle:'PDS', available:true},
+  {name:'சி.சுரேஷ்குமார்', desig:'கூ.சாப/மே.இ', office:'PDS Office', circle:'PDS', available:true},
+  {name:'க.நளினி', desig:'கூ.சாப/பொவிதி', office:'Cheyyar Circle', circle:'Cheyyar', available:true},
+  {name:'சி.ஜமுனா', desig:'கூ.சாப/கள அலுவலர்', office:'Cheyyar Circle', circle:'Cheyyar', available:true},
+  {name:'சீ.மீனாட்சி சுந்தரம்', desig:'கூ.சாப/கள அலுவலர்', office:'Cheyyar Circle', circle:'Cheyyar', available:true}
+];
+
+const sq = {
+  master:[],          // all shops from uploaded master Excel
+  staff:[],           // current staff list
+  selectedBlocks:new Set(),
+  priorityShops:new Set(),  // shop_codes
+  result:null
+};
+
+// ----- Master file upload -----
+function setupMasterUpload(){
+  const box = document.getElementById('box-master');
+  const inp = document.getElementById('file-master');
+  ['dragover','dragenter'].forEach(ev=>box.addEventListener(ev,e=>{
+    e.preventDefault();box.style.borderColor='var(--accent)';
+  }));
+  ['dragleave','drop'].forEach(ev=>box.addEventListener(ev,e=>{
+    e.preventDefault();box.style.borderColor='';
+  }));
+  box.addEventListener('drop',e=>{
+    e.preventDefault();
+    if(e.dataTransfer.files[0]) loadMaster(e.dataTransfer.files[0]);
+  });
+  inp.addEventListener('change',e=>{
+    if(e.target.files[0]) loadMaster(e.target.files[0]);
+  });
+}
+
+async function loadMaster(file){
+  try{
+    const wb = await readExcel(file);
+    const sh = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sh);
+    if(rows.length===0) throw new Error('Empty file');
+
+    // Detect column names from first row
+    const cols = Object.keys(rows[0]);
+    const colBlock = cols.find(c=>c.includes('ஒன்றியத்தின்')) || cols.find(c=>c.toLowerCase().includes('block'));
+    const colSociety = cols.find(c=>c.includes('கூட்டுறவு') && c.includes('நிறுவன')) || cols.find(c=>c.toLowerCase().includes('society'));
+    const colShopCode = cols.find(c=>c.trim().startsWith('கடை குறியீடு') && !c.includes('.')) || cols.find(c=>c.toLowerCase().includes('shop_code')||c.toLowerCase().includes('shop code'));
+    const colShopName = cols.find(c=>c.includes('நியாய') && c.includes('கடையின்')) || cols.find(c=>c.toLowerCase().includes('shop_name'));
+    const colType = cols.find(c=>c.includes('முழுநேரம்')) || cols.find(c=>c.toLowerCase().includes('ft')||c.toLowerCase().includes('type'));
+
+    if(!colBlock || !colShopCode){
+      throw new Error('Could not detect Block / Shop Code column. Found: '+cols.join(', '));
+    }
+
+    sq.master = rows.map(r=>({
+      block: String(r[colBlock]||'').trim(),
+      society: String(r[colSociety]||'').trim(),
+      shop_code: String(r[colShopCode]||'').trim(),
+      shop_name: String(r[colShopName]||'').trim(),
+      type: String(r[colType]||'').trim(),
+      isFT: String(r[colType]||'').includes('முழுநேரம்') || /full.?time|FT/i.test(r[colType]||'')
+    })).filter(r=>r.shop_code);
+
+    document.getElementById('name-master').textContent = '✓ '+file.name;
+    document.getElementById('box-master').classList.add('has-file');
+
+    const ftCount = sq.master.filter(s=>s.isFT).length;
+    document.getElementById('master-status').innerHTML =
+      `✓ Loaded <b>${sq.master.length}</b> shops • FT: ${ftCount} • PT: ${sq.master.length-ftCount}`;
+
+    // Reveal next steps
+    document.getElementById('squad-panel-staff').style.display='block';
+    document.getElementById('squad-panel-blocks').style.display='block';
+    document.getElementById('squad-panel-priority').style.display='block';
+    document.getElementById('squad-panel-generate').style.display='block';
+
+    renderBlockSelection();
+    renderStaffList();
+    toast('Master data loaded');
+  }catch(err){
+    console.error(err);
+    toast('Failed: '+err.message,true);
+  }
+}
+
+// ----- Staff list management -----
+function renderStaffList(){
+  const wrap = document.getElementById('staff-list');
+  if(sq.staff.length===0){
+    wrap.innerHTML = `<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">
+      No staff added yet. Click <b>Load sample</b> to test, or <b>Add Staff</b> to start.
+    </div>`;
+    return;
+  }
+  wrap.innerHTML = `
+    <div class="staff-row" style="background:rgba(59,130,246,.15);font-weight:600;font-size:12px;color:var(--muted)">
+      <div class="num">#</div>
+      <div>Name</div>
+      <div>Designation</div>
+      <div>Office</div>
+      <div>Circle</div>
+      <div style="text-align:center">Available</div>
+      <div></div>
+    </div>
+    ${sq.staff.map((s,i)=>`
+      <div class="staff-row ${s.available?'':'unavailable'}" data-idx="${i}">
+        <div class="num">${i+1}</div>
+        <input type="text" value="${s.name||''}" data-field="name" placeholder="Name">
+        <input type="text" value="${s.desig||''}" data-field="desig" placeholder="Designation">
+        <input type="text" value="${s.office||''}" data-field="office" placeholder="Office">
+        <select data-field="circle">
+          <option value="TVM" ${s.circle==='TVM'?'selected':''}>TVM</option>
+          <option value="Cheyyar" ${s.circle==='Cheyyar'?'selected':''}>Cheyyar</option>
+          <option value="PDS" ${s.circle==='PDS'?'selected':''}>PDS (any)</option>
+        </select>
+        <button class="toggle ${s.available?'on':'off'}" data-toggle>${s.available?'✓ Yes':'✗ No'}</button>
+        <button class="delete" data-delete>×</button>
+      </div>
+    `).join('')}
+  `;
+  // Bind events
+  wrap.querySelectorAll('.staff-row[data-idx]').forEach(row=>{
+    const idx = +row.dataset.idx;
+    row.querySelectorAll('[data-field]').forEach(inp=>{
+      inp.addEventListener('change',e=>{
+        sq.staff[idx][e.target.dataset.field] = e.target.value;
+      });
+    });
+    const t = row.querySelector('[data-toggle]');
+    t && t.addEventListener('click',()=>{
+      sq.staff[idx].available = !sq.staff[idx].available;
+      renderStaffList();
+    });
+    const d = row.querySelector('[data-delete]');
+    d && d.addEventListener('click',()=>{
+      sq.staff.splice(idx,1);renderStaffList();
+    });
+  });
+}
+
+document.getElementById('btn-add-staff').addEventListener('click',()=>{
+  sq.staff.push({name:'',desig:'',office:'',circle:'TVM',available:true});
+  renderStaffList();
+});
+document.getElementById('btn-load-sample').addEventListener('click',()=>{
+  sq.staff = JSON.parse(JSON.stringify(SAMPLE_STAFF));
+  renderStaffList();
+  toast('10 sample staff loaded');
+});
+document.getElementById('btn-clear-staff').addEventListener('click',()=>{
+  if(confirm('Clear all staff?')){sq.staff=[];renderStaffList()}
+});
+
+// ----- Block selection -----
+function renderBlockSelection(){
+  const counts = {};
+  sq.master.forEach(s=>{counts[s.block] = (counts[s.block]||0)+1});
+
+  const renderChips = (blocks, container)=>{
+    document.getElementById(container).innerHTML = blocks.map(b=>{
+      const c = counts[b]||0;
+      const sel = sq.selectedBlocks.has(b)?'selected':'';
+      return `<label class="block-chip ${sel}" data-block="${b}">
+        <input type="checkbox" ${sel?'checked':''}>
+        <span>${b}</span>
+        <span class="count">${c}</span>
+      </label>`;
+    }).join('');
+  };
+  renderChips(TVM_CIRCLE_BLOCKS,'tvm-blocks');
+  renderChips(CHEYYAR_CIRCLE_BLOCKS,'cheyyar-blocks');
+
+  document.querySelectorAll('.block-chip').forEach(chip=>{
+    chip.addEventListener('click',e=>{
+      e.preventDefault();
+      const b = chip.dataset.block;
+      if(sq.selectedBlocks.has(b)) sq.selectedBlocks.delete(b);
+      else sq.selectedBlocks.add(b);
+      renderBlockSelection();
+      updateBlockSummary();
+      renderPrioritySearch();
+    });
+  });
+  updateBlockSummary();
+}
+
+function updateBlockSummary(){
+  const totalShops = sq.master.filter(s=>sq.selectedBlocks.has(s.block)).length;
+  const ft = sq.master.filter(s=>sq.selectedBlocks.has(s.block) && s.isFT).length;
+  const list = [...sq.selectedBlocks];
+  document.getElementById('block-summary').innerHTML = list.length===0
+    ? '<i>No blocks selected yet</i>'
+    : `Selected <b>${list.length}</b> blocks • Total shops: <b>${totalShops}</b> (FT: ${ft}, PT: ${totalShops-ft})`;
+}
+
+// ----- Priority shops -----
+function renderPrioritySearch(){
+  const q = document.getElementById('priority-search').value.toLowerCase().trim();
+  const wrap = document.getElementById('priority-results');
+  if(sq.selectedBlocks.size===0){
+    wrap.innerHTML='<i style="color:var(--muted);font-size:12px">Select blocks first</i>';
+    return;
+  }
+  const candidates = sq.master.filter(s=>
+    sq.selectedBlocks.has(s.block) &&
+    !sq.priorityShops.has(s.shop_code) &&
+    (q==='' || s.shop_name.toLowerCase().includes(q) ||
+     s.shop_code.toLowerCase().includes(q) || s.society.toLowerCase().includes(q))
+  ).slice(0,15);
+  wrap.innerHTML = candidates.map(s=>`
+    <div class="priority-item">
+      <span style="color:var(--muted);font-size:11px">${s.shop_code}</span>
+      <span>${s.shop_name}</span>
+      <span class="${s.isFT?'ft':'pt'}">${s.isFT?'FT':'PT'}</span>
+      <span style="font-size:11px;color:var(--muted)">${s.block}</span>
+      <button class="add-btn" data-add="${s.shop_code}">+ Priority</button>
+    </div>
+  `).join('') || '<i style="color:var(--muted);font-size:12px">No matches</i>';
+  wrap.querySelectorAll('[data-add]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      sq.priorityShops.add(b.dataset.add);
+      renderPrioritySearch();
+      renderPrioritySelected();
+    });
+  });
+}
+
+function renderPrioritySelected(){
+  const wrap = document.getElementById('priority-selected');
+  if(sq.priorityShops.size===0){
+    wrap.innerHTML = '';
+    return;
+  }
+  wrap.innerHTML = '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">Priority shops (' + sq.priorityShops.size + '):</div>' +
+    [...sq.priorityShops].map(code=>{
+      const s = sq.master.find(x=>x.shop_code===code);
+      if(!s) return '';
+      return `<span class="priority-tag">${s.shop_name} <span class="x" data-rm="${code}">×</span></span>`;
+    }).join('');
+  wrap.querySelectorAll('[data-rm]').forEach(x=>{
+    x.addEventListener('click',()=>{
+      sq.priorityShops.delete(x.dataset.rm);
+      renderPrioritySearch();renderPrioritySelected();
+    });
+  });
+}
+
+document.getElementById('priority-search').addEventListener('input',renderPrioritySearch);
+
+// ----- AUTO-ASSIGN ALGORITHM -----
+function autoAssign(){
+  const availStaff = sq.staff.filter(s=>s.available && s.name.trim());
+  if(availStaff.length===0){toast('No available staff',true);return null}
+  if(sq.selectedBlocks.size===0){toast('Select at least 1 block',true);return null}
+
+  // 1. Build candidate shop pool from selected blocks
+  const allShops = sq.master.filter(s=>sq.selectedBlocks.has(s.block));
+  if(allShops.length===0){toast('No shops in selected blocks',true);return null}
+
+  // 2. Assign each staff a "preferred block" by their circle
+  // TVM circle staff get TVM blocks, Cheyyar staff get Cheyyar blocks, PDS gets any
+  const tvmSel = [...sq.selectedBlocks].filter(b=>TVM_CIRCLE_BLOCKS.includes(b));
+  const chSel = [...sq.selectedBlocks].filter(b=>CHEYYAR_CIRCLE_BLOCKS.includes(b));
+
+  // 3. Group shops by (block, society) — sort: priority first, then FT first
+  function groupByBlockSociety(shopList){
+    const groups = {};
+    shopList.forEach(s=>{
+      const key = s.block+'|'+s.society;
+      if(!groups[key]) groups[key]={block:s.block,society:s.society,shops:[]};
+      groups[key].shops.push(s);
+    });
+    // Sort shops inside each society: priority>FT>PT
+    Object.values(groups).forEach(g=>{
+      g.shops.sort((a,b)=>{
+        const pa = sq.priorityShops.has(a.shop_code)?0:1;
+        const pb = sq.priorityShops.has(b.shop_code)?0:1;
+        if(pa!==pb) return pa-pb;
+        if(a.isFT!==b.isFT) return a.isFT?-1:1;
+        return 0;
+      });
+      // priority count for the society
+      g.priorityCount = g.shops.filter(s=>sq.priorityShops.has(s.shop_code)).length;
+      g.ftCount = g.shops.filter(s=>s.isFT).length;
+    });
+    return groups;
+  }
+
+  // Working pool — track used shop_codes
+  const used = new Set();
+
+  // Per-circle pools
+  const tvmShops = allShops.filter(s=>TVM_CIRCLE_BLOCKS.includes(s.block));
+  const chShops = allShops.filter(s=>CHEYYAR_CIRCLE_BLOCKS.includes(s.block));
+  const tvmGroups = groupByBlockSociety(tvmShops);
+  const chGroups = groupByBlockSociety(chShops);
+
+  // Sort societies: those with priority shops first, then by FT count desc
+  function sortSocieties(groups){
+    return Object.values(groups).sort((a,b)=>{
+      if(a.priorityCount!==b.priorityCount) return b.priorityCount-a.priorityCount;
+      return b.ftCount-a.ftCount;
+    });
+  }
+
+  function poolForStaff(s){
+    if(s.circle==='TVM') return {groups: sortSocieties(tvmGroups)};
+    if(s.circle==='Cheyyar') return {groups: sortSocieties(chGroups)};
+    // PDS — pick whichever circle has more remaining; default TVM
+    const tvmRemain = Object.values(tvmGroups).reduce((a,g)=>a+g.shops.filter(x=>!used.has(x.shop_code)).length,0);
+    const chRemain = Object.values(chGroups).reduce((a,g)=>a+g.shops.filter(x=>!used.has(x.shop_code)).length,0);
+    return {groups: sortSocieties(tvmRemain>=chRemain?tvmGroups:chGroups)};
+  }
+
+  // 4. Loop staff, assign 3 shops per staff
+  const assignments = []; // [{staff, shops:[...]}]
+  for(const staff of availStaff){
+    const pool = poolForStaff(staff);
+    const picked = [];
+
+    // Pass 1: same society — find a society with ≥1 unused shop, prefer 3 unused
+    for(const g of pool.groups){
+      if(picked.length>=3) break;
+      const avail = g.shops.filter(x=>!used.has(x.shop_code));
+      if(avail.length===0) continue;
+      // Take up to 3 from this society (priority+FT first due to sort)
+      for(const sh of avail){
+        if(picked.length>=3) break;
+        picked.push(sh);
+        used.add(sh.shop_code);
+      }
+    }
+    // If less than 3 picked, just keep what we got (rare end-of-pool case)
+    assignments.push({staff,shops:picked});
+  }
+
+  // 5. Compute leftover shops per block
+  const leftover = allShops.filter(s=>!used.has(s.shop_code));
+  const leftoverByBlock = {};
+  leftover.forEach(s=>{
+    if(!leftoverByBlock[s.block]) leftoverByBlock[s.block]=[];
+    leftoverByBlock[s.block].push(s);
+  });
+  // Sort each block's leftovers: priority>FT>PT
+  Object.values(leftoverByBlock).forEach(arr=>{
+    arr.sort((a,b)=>{
+      const pa = sq.priorityShops.has(a.shop_code)?0:1;
+      const pb = sq.priorityShops.has(b.shop_code)?0:1;
+      if(pa!==pb) return pa-pb;
+      if(a.isFT!==b.isFT) return a.isFT?-1:1;
+      return a.shop_code.localeCompare(b.shop_code);
+    });
+  });
+
+  return {assignments, leftover, leftoverByBlock};
+}
+
+document.getElementById('btn-generate-squad').addEventListener('click',()=>{
+  const r = autoAssign();
+  if(!r) return;
+  sq.result = r;
+  renderSquadResults();
+  toast('Squad table generated');
+});
+
+// ----- Render Squad Results -----
+function renderSquadResults(){
+  const r = sq.result;
+  if(!r) return;
+  let totalAssigned = r.assignments.reduce((s,a)=>s+a.shops.length,0);
+  let html = `
+    <div class="panel">
+      <h2><span class="dot"></span> Step 6: Squad Duty Table
+        <span style="margin-left:auto;font-size:12px;color:var(--muted);font-weight:400">
+          ${r.assignments.length} staff • ${totalAssigned} shops assigned • ${r.leftover.length} leftover
+        </span>
+      </h2>
+      <div class="action-bar" style="margin-bottom:16px">
+        <button class="btn success" onclick="copySquadTableForWord()">📋 Copy Table (paste into Word)</button>
+        <button class="btn secondary" onclick="downloadSquadExcel()">📥 Download Excel</button>
+        <button class="btn secondary" onclick="copyCard('squad-card')">📸 Copy as image</button>
+      </div>
+
+      <div class="squad-table-wrap" id="squad-card">
+        <div class="head">
+          மண்டல இணைப்பதிவாளர் அவர்களின் செயல்முறை ஆணை — Squad Inspection Duty
+        </div>
+        <table class="squad-table" id="squad-output-table">
+          <thead>
+            <tr>
+              <th style="width:50px">வ.எண்</th>
+              <th>சங்கத்தின் பெயர்</th>
+              <th style="width:130px">கடை குறியீட்டு எண்</th>
+              <th>நியாயவிலை கடையின் பெயர்</th>
+              <th style="width:240px">ஆய்வு அலுவலர் (திரு/திருமதி/செல்வி)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${renderSquadRows(r.assignments)}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  // Leftover shops
+  if(r.leftover.length>0){
+    html += `
+      <div class="panel">
+        <h2><span class="dot"></span> Leftover Shops (not assigned)
+          <span style="margin-left:auto;font-size:12px;color:var(--muted);font-weight:400">${r.leftover.length} shops</span>
+        </h2>
+        <div class="leftover-table">
+          <div class="head">
+            <span>Unassigned shops in selected blocks</span>
+            <span style="font-size:12px;font-weight:400">Sorted: Priority → FT → PT</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th><th>Block</th><th>Society</th><th>Shop Code</th>
+                <th>Shop Name</th><th>Type</th><th>Priority?</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${r.leftover.map((s,i)=>`
+                <tr>
+                  <td style="text-align:center">${i+1}</td>
+                  <td>${s.block}</td>
+                  <td>${s.society}</td>
+                  <td>${s.shop_code}</td>
+                  <td>${s.shop_name}</td>
+                  <td style="text-align:center"><span class="${s.isFT?'ft':'pt'}" style="background:${s.isFT?'#10b981':'#f59e0b'};color:white;padding:1px 6px;border-radius:3px;font-size:11px">${s.isFT?'FT':'PT'}</span></td>
+                  <td style="text-align:center">${sq.priorityShops.has(s.shop_code)?'⭐':''}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
+  document.getElementById('squad-results-area').innerHTML = html;
+}
+
+function renderSquadRows(assignments){
+  let rows = '';
+  let serial = 0;
+  assignments.forEach((a,ai)=>{
+    if(a.shops.length===0){
+      rows += `<tr class="officer-start">
+        <td class="center">—</td>
+        <td colspan="3" style="color:#dc2626;font-style:italic">No shops available for this staff</td>
+        <td class="officer-cell">${a.staff.name}<br><small style="font-weight:400;color:#475569">${a.staff.desig||''}</small></td>
+      </tr>`;
+      return;
+    }
+    a.shops.forEach((sh,si)=>{
+      serial++;
+      const isPriority = sq.priorityShops.has(sh.shop_code);
+      rows += `<tr class="${si===0?'officer-start':''} ${isPriority?'priority-row':''}">
+        <td class="center">${serial}</td>
+        <td>${sh.society}</td>
+        <td class="center">${sh.shop_code}</td>
+        <td>${sh.shop_name} <span class="${sh.isFT?'ft-badge':'pt-badge'}">${sh.isFT?'FT':'PT'}</span>${isPriority?' ⭐':''}</td>
+        ${si===0 ? `<td rowspan="${a.shops.length}" class="officer-cell">${a.staff.name}<br><small style="font-weight:400;color:#475569">${a.staff.desig||''}</small><br><small style="color:#64748b">${a.staff.office||''}</small></td>` : ''}
+      </tr>`;
+    });
+  });
+  return rows;
+}
+
+// ----- Copy Squad Table for Word (HTML format → Word preserves table) -----
+async function copySquadTableForWord(){
+  const table = document.getElementById('squad-output-table');
+  if(!table) return;
+  const html = `<table border="1" cellspacing="0" cellpadding="6" style="border-collapse:collapse;font-family:Arial;font-size:12pt">
+    ${table.innerHTML.replace(/<small[^>]*>/g,'<br><span style="font-size:10pt;color:#555">').replace(/<\/small>/g,'</span>').replace(/class="[^"]*"/g,'').replace(/<span[^>]*ft-badge[^>]*>/g,'<span style="background:#10b981;color:white;padding:1px 4px;font-size:9pt">').replace(/<span[^>]*pt-badge[^>]*>/g,'<span style="background:#f59e0b;color:white;padding:1px 4px;font-size:9pt">')}
+  </table>`;
+
+  // Plain text fallback
+  let text = '';
+  document.querySelectorAll('#squad-output-table tr').forEach(tr=>{
+    const cells = [...tr.querySelectorAll('th,td')].map(c=>c.innerText.replace(/\s+/g,' ').trim());
+    text += cells.join('\t')+'\n';
+  });
+
+  try{
+    await navigator.clipboard.write([new ClipboardItem({
+      'text/html': new Blob([html],{type:'text/html'}),
+      'text/plain': new Blob([text],{type:'text/plain'})
+    })]);
+    toast('✓ Table copied — paste into Word');
+  }catch(e){
+    // Fallback — copy plain text
+    try{
+      await navigator.clipboard.writeText(text);
+      toast('Plain text copied (HTML clipboard blocked)');
+    }catch(e2){toast('Copy failed: '+e2.message,true)}
+  }
+}
+
+// ----- Download Squad Excel -----
+function downloadSquadExcel(){
+  const r = sq.result;
+  if(!r) return;
+  const wb = XLSX.utils.book_new();
+
+  // Sheet 1: Squad Table (flattened)
+  const sqRows = [['வ.எண்','சங்கத்தின் பெயர்','கடை குறியீட்டு எண்','நியாயவிலை கடையின் பெயர்','FT/PT','Priority','ஆய்வு அலுவலர்','பதவி','அலுவலகம்']];
+  let sn = 0;
+  const merges = [];
+  let curRow = 1;
+  r.assignments.forEach(a=>{
+    if(a.shops.length===0) return;
+    a.shops.forEach((sh,i)=>{
+      sn++;
+      sqRows.push([
+        sn, sh.society, sh.shop_code, sh.shop_name,
+        sh.isFT?'FT':'PT', sq.priorityShops.has(sh.shop_code)?'⭐':'',
+        i===0 ? a.staff.name : '',
+        i===0 ? (a.staff.desig||'') : '',
+        i===0 ? (a.staff.office||'') : ''
+      ]);
+    });
+    if(a.shops.length>1){
+      merges.push({s:{r:curRow,c:6},e:{r:curRow+a.shops.length-1,c:6}});
+      merges.push({s:{r:curRow,c:7},e:{r:curRow+a.shops.length-1,c:7}});
+      merges.push({s:{r:curRow,c:8},e:{r:curRow+a.shops.length-1,c:8}});
+    }
+    curRow += a.shops.length;
+  });
+  const ws1 = XLSX.utils.aoa_to_sheet(sqRows);
+  ws1['!cols'] = [{wch:6},{wch:30},{wch:14},{wch:30},{wch:6},{wch:8},{wch:22},{wch:22},{wch:18}];
+  ws1['!merges'] = merges;
+  XLSX.utils.book_append_sheet(wb,ws1,'Squad Duty');
+
+  // Sheet 2: Leftover
+  const lvRows = [['#','Block','Society','Shop Code','Shop Name','FT/PT','Priority']];
+  r.leftover.forEach((s,i)=>{
+    lvRows.push([i+1,s.block,s.society,s.shop_code,s.shop_name,s.isFT?'FT':'PT',sq.priorityShops.has(s.shop_code)?'⭐':'']);
+  });
+  const ws2 = XLSX.utils.aoa_to_sheet(lvRows);
+  ws2['!cols'] = [{wch:6},{wch:18},{wch:30},{wch:14},{wch:30},{wch:6},{wch:8}];
+  XLSX.utils.book_append_sheet(wb,ws2,'Leftover Shops');
+
+  XLSX.writeFile(wb, `Squad_Duty_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast('✓ Excel downloaded');
+}
+
+// Initialize squad module
+setupMasterUpload();
+renderStaffList();
+
+// ============================================================================
+// =================  GOOGLE SHEET SYNC (PART B)  =============================
+// ============================================================================
+const GSHEET_URL_KEY = 'squad_gsheet_url_v1';
+
+// Load saved URL on startup
+const savedUrl = localStorage.getItem(GSHEET_URL_KEY);
+if(savedUrl){
+  const inp = document.getElementById('gsheet-url');
+  if(inp) inp.value = savedUrl;
+}
+
+// Save URL
+document.getElementById('btn-gsheet-save').addEventListener('click',()=>{
+  const url = document.getElementById('gsheet-url').value.trim();
+  if(!url){toast('Enter a URL first',true);return}
+  if(!url.includes('docs.google.com') && !url.includes('output=csv')){
+    if(!confirm('This URL doesn\'t look like a Google Sheets published CSV link. Save anyway?')) return;
+  }
+  localStorage.setItem(GSHEET_URL_KEY, url);
+  setStatus('✓ URL saved. Click Sync Now to fetch staff.','success');
+  toast('URL saved');
+});
+
+// Modal help
+document.getElementById('btn-gsheet-help').addEventListener('click',()=>{
+  document.getElementById('gsheet-modal').style.display='flex';
+});
+document.getElementById('modal-close').addEventListener('click',()=>{
+  document.getElementById('gsheet-modal').style.display='none';
+});
+document.getElementById('gsheet-modal').addEventListener('click',e=>{
+  if(e.target.id==='gsheet-modal') e.target.style.display='none';
+});
+
+function setStatus(msg, kind){
+  const el = document.getElementById('gsheet-status');
+  el.textContent = msg;
+  el.className = 'gsheet-status' + (kind?' '+kind:'');
+}
+
+// Sync
+document.getElementById('btn-gsheet-sync').addEventListener('click', syncFromGSheet);
+
+async function syncFromGSheet(){
+  const url = document.getElementById('gsheet-url').value.trim();
+  if(!url){setStatus('Enter and save a URL first.','error');return}
+
+  setStatus('🔄 Fetching from Google Sheets...');
+  try{
+    // Add cache buster so refresh always works
+    const fetchUrl = url + (url.includes('?')?'&':'?') + '_=' + Date.now();
+    const resp = await fetch(fetchUrl);
+    if(!resp.ok) throw new Error('HTTP '+resp.status+' — check that your sheet is published as CSV');
+    const csv = await resp.text();
+    if(!csv || csv.length<5) throw new Error('Empty response from sheet');
+
+    const rows = parseCSV(csv);
+    if(rows.length<2) throw new Error('Sheet has no data rows');
+
+    const headers = rows[0].map(h=>h.trim().toLowerCase());
+
+    // Detect columns flexibly
+    const colName = findCol(headers,['name','staff name','staff','பெயர்']);
+    const colDesig = findCol(headers,['designation','post','desig','பதவி']);
+    const colOffice = findCol(headers,['office','workplace','அலுவலகம்']);
+    const colCircle = findCol(headers,['circle','wing','வட்டம்']);
+    const colAvail = findCol(headers,['available','availability','status','present']);
+
+    if(colName<0) throw new Error('Could not find Name column. Found: '+rows[0].join(', '));
+
+    const newStaff = [];
+    for(let i=1;i<rows.length;i++){
+      const r = rows[i];
+      if(!r || !r[colName] || !r[colName].trim()) continue;
+      const circle = (r[colCircle]||'').trim().toUpperCase();
+      let normCircle = 'TVM';
+      if(circle.startsWith('CH') || circle.includes('CHEYY')) normCircle='Cheyyar';
+      else if(circle.startsWith('PDS') || circle==='ANY') normCircle='PDS';
+      else if(circle.startsWith('TVM') || circle.includes('THIRU') || circle.includes('TIRU')) normCircle='TVM';
+      else if(circle) normCircle = circle.charAt(0)+circle.slice(1).toLowerCase();
+
+      const availRaw = (r[colAvail]||'').trim().toLowerCase();
+      const available = !(availRaw==='no' || availRaw==='n' || availRaw==='false' ||
+                          availRaw==='unavailable' || availRaw==='leave' ||
+                          availRaw==='exempt' || availRaw==='exempted' || availRaw==='0');
+
+      newStaff.push({
+        name: r[colName].trim(),
+        desig: (r[colDesig]||'').trim(),
+        office: (r[colOffice]||'').trim(),
+        circle: ['TVM','Cheyyar','PDS'].includes(normCircle)?normCircle:'TVM',
+        available
+      });
+    }
+
+    if(newStaff.length===0) throw new Error('No valid staff rows found');
+
+    sq.staff = newStaff;
+    renderStaffList();
+
+    const availCount = newStaff.filter(s=>s.available).length;
+    setStatus(`✓ Synced ${newStaff.length} staff (${availCount} available, ${newStaff.length-availCount} unavailable) at ${new Date().toLocaleTimeString()}`,'success');
+    toast(`✓ ${newStaff.length} staff loaded from Google Sheet`);
+  }catch(err){
+    console.error(err);
+    setStatus('✗ '+err.message,'error');
+    toast('Sync failed: '+err.message,true);
+  }
+}
+
+function findCol(headers, candidates){
+  for(const cand of candidates){
+    const idx = headers.findIndex(h=>h===cand || h.includes(cand));
+    if(idx>=0) return idx;
+  }
+  return -1;
+}
+
+// Robust CSV parser (handles quoted fields, commas inside quotes, escaped quotes, CR/LF)
+function parseCSV(text){
+  const rows = [];
+  let cur = [], field = '', inQuotes = false;
+  for(let i=0;i<text.length;i++){
+    const c = text[i];
+    if(inQuotes){
+      if(c==='"'){
+        if(text[i+1]==='"'){field+='"';i++}
+        else inQuotes=false;
+      } else field+=c;
+    } else {
+      if(c==='"') inQuotes=true;
+      else if(c===','){cur.push(field);field=''}
+      else if(c==='\n' || c==='\r'){
+        if(field!=='' || cur.length>0){cur.push(field);rows.push(cur);cur=[];field=''}
+        if(c==='\r' && text[i+1]==='\n') i++;
+      } else field+=c;
+    }
+  }
+  if(field!=='' || cur.length>0){cur.push(field);rows.push(cur)}
+  return rows.filter(r=>r.length>0 && r.some(f=>f && f.trim()));
+}
+
+// ============================================================================
+// =================  HEAD OFFICE PDL MODULE  =================================
+// ============================================================================
+
+const pdl = {
+  misRows: null,        // parsed MIS rows (objects with col names)
+  misCols: null,        // header column names
+  squadShopCodes: new Set(),
+  squadDates: new Set(),
+  squadManualCount: 0,
+  squadMode: 'none',
+  result: null
+};
+
+// Stock columns (AD-BM): we'll detect them from the headers
+function detectStockCols(headers){
+  // The 36 commodity columns between Longitude and Remarks
+  const startKeywords = ['raw rice','boiled rice','sugar','wheat','toordhall','toor dhall','palmoil','palm oil','ragi','frk','aay'];
+  const stockCols = [];
+  let started = false;
+  for(let i=0;i<headers.length;i++){
+    const h = String(headers[i]).toLowerCase();
+    if(h==='remarks') break;
+    if(!started){
+      // start when we see the first commodity column after Longitude
+      if(h.includes('longitude')) {started=true; continue}
+    } else {
+      stockCols.push({idx:i,name:headers[i]});
+    }
+  }
+  return stockCols;
+}
+
+// MIS upload
+function setupPdlMisUpload(){
+  const box = document.getElementById('box-pdl-mis');
+  const inp = document.getElementById('file-pdl-mis');
+  ['dragover','dragenter'].forEach(ev=>box.addEventListener(ev,e=>{
+    e.preventDefault();box.style.borderColor='var(--accent)';
+  }));
+  ['dragleave','drop'].forEach(ev=>box.addEventListener(ev,e=>{
+    e.preventDefault();box.style.borderColor='';
+  }));
+  box.addEventListener('drop',e=>{
+    e.preventDefault();
+    if(e.dataTransfer.files[0]) loadPdlMis(e.dataTransfer.files[0]);
+  });
+  inp.addEventListener('change',e=>{
+    if(e.target.files[0]) loadPdlMis(e.target.files[0]);
+  });
+}
+
+async function loadPdlMis(file){
+  try{
+    const wb = await readExcel(file);
+    const sh = wb.Sheets[wb.SheetNames[0]];
+    const allRows = XLSX.utils.sheet_to_json(sh,{header:1,defval:null});
+
+    // Find header row (contains 'FPS Code')
+    let hr = -1;
+    for(let i=0;i<Math.min(20,allRows.length);i++){
+      if(allRows[i] && allRows[i].includes('FPS Code')){hr=i;break}
+    }
+    if(hr<0) throw new Error('Could not find header row in MIS');
+
+    const headers = allRows[hr];
+    const dataRows = allRows.slice(hr+1).filter(r=>r && r[0]!=null);
+
+    pdl.misCols = headers;
+    pdl.misRows = dataRows.map(r=>{
+      const o = {};
+      headers.forEach((h,i)=>o[h]=r[i]);
+      return o;
+    });
+
+    document.getElementById('name-pdl-mis').textContent = '✓ '+file.name;
+    document.getElementById('box-pdl-mis').classList.add('has-file');
+    document.getElementById('pdl-mis-status').innerHTML = `✓ Loaded <b>${pdl.misRows.length}</b> inspection rows`;
+
+    document.getElementById('pdl-panel-squad').style.display='block';
+    document.getElementById('pdl-panel-targets').style.display='block';
+    document.getElementById('pdl-panel-generate').style.display='block';
+
+    toast('MIS loaded');
+  }catch(err){
+    console.error(err);
+    toast('Failed: '+err.message,true);
+  }
+}
+
+// Squad-mode radio handling
+document.querySelectorAll('input[name="squad-mode"]').forEach(r=>{
+  r.addEventListener('change',()=>{
+    pdl.squadMode = r.value;
+    document.querySelectorAll('.squad-mode-pane').forEach(p=>p.style.display='none');
+    if(r.value!=='none'){
+      const pane = document.getElementById('squad-mode-'+r.value);
+      if(pane) pane.style.display='block';
+    }
+  });
+});
+
+document.getElementById('squad-codes-input').addEventListener('input',e=>{
+  const codes = e.target.value.split(/[\s,]+/).map(s=>s.trim()).filter(Boolean);
+  document.getElementById('squad-codes-count').textContent = codes.length+' codes entered';
+});
+
+// ----- Compute -----
+document.getElementById('btn-pdl-compute').addEventListener('click',computePdl);
+
+function computePdl(){
+  if(!pdl.misRows){toast('Upload MIS first',true);return}
+
+  // Two-tier role mapping:
+  //   REGULAR_ROLE_MAP — for CSR/DR/JR Inspected counts (only 23 phones: 21 block staff + 1 DR PDS + 1 JR)
+  //   DEPT_PHONES — for squad/flying squad (ALL 44 dept phones)
+  const REGULAR_ROLE_MAP = {
+    // JR (1)
+    '7338749500':'JR',
+    // DR PDS (1) — only DR PDS counts; DRCS is "other"
+    '7338749504':'DR',
+    // CSR PDS Block Staff (15)
+    '7338749524':'CSR','7338749525':'CSR','7338749526':'CSR','7338749527':'CSR',
+    '7338749528':'CSR','7338749529':'CSR','7338749530':'CSR','7338749531':'CSR',
+    '7338749532':'CSR','7338749533':'CSR','7338749534':'CSR','7338749535':'CSR',
+    '7338749536':'CSR','7338749537':'CSR','7338749538':'CSR',
+    // SI Block Staff (6) — also counted as CSR (block staff for regular inspection)
+    '7338749539':'CSR','7338749540':'CSR','7338749541':'CSR',
+    '7458968899':'CSR','8457896987':'CSR','8541478968':'CSR'
+  };
+
+  // ALL 44 department phones — used only for Flying Squad shop counting
+  const DEPT_PHONES = new Set([
+    ...Object.keys(REGULAR_ROLE_MAP),
+    // Other dept staff (squad-eligible only)
+    '7338749502','7338749503', // DRCS Tvm, DRCS Cheyyar
+    '7338749523',              // CSR PDS Supt
+    // CSR Field staff (19)
+    '7338749505','7338749506','7338749507','7338749508','7338749509',
+    '7338749510','7338749511','7338749512','7338749513','7338749514',
+    '7338749515','7338749516','7338749517','7338749518','7338749519',
+    '7338749520','7338749521','7338749522'
+  ]);
+
+  const roleMap = REGULAR_ROLE_MAP;
+
+  // Stock columns
+  const stockCols = detectStockCols(pdl.misCols);
+
+  // Squad row identifier
+  let squadCodes = new Set();
+  let squadDates = new Set();
+  let squadAnchorDate = null;   // for codes mode: single anchor date
+  let squadTolerance = 2;
+  let squadManualCount = 0;
+  if(pdl.squadMode==='codes'){
+    const txt = document.getElementById('squad-codes-input').value;
+    txt.split(/[\s,]+/).map(s=>s.trim()).filter(Boolean).forEach(c=>squadCodes.add(c.toUpperCase()));
+    const dateVal = document.getElementById('squad-date-codes').value;  // YYYY-MM-DD
+    if(!dateVal){toast('Squad Date is mandatory in Codes mode',true);return}
+    squadAnchorDate = dateVal;
+    squadTolerance = parseInt(document.getElementById('squad-tolerance').value)||0;
+  } else if(pdl.squadMode==='date'){
+    const txt = document.getElementById('squad-dates-input').value;
+    txt.split(/[\s,]+/).map(s=>s.trim()).filter(Boolean).forEach(d=>squadDates.add(d));
+  } else if(pdl.squadMode==='manual'){
+    squadManualCount = parseInt(document.getElementById('squad-manual-count').value)||0;
+  }
+
+  // Convert any cell value into YYYY-MM-DD
+  const rowDateStr = row=>{
+    const d = row['Date of Inspection'];
+    if(!d) return null;
+    if(d instanceof Date) return d.toISOString().slice(0,10);
+    if(typeof d==='number'){
+      const dt = new Date(Date.UTC(1899,11,30) + d*86400000);
+      return dt.toISOString().slice(0,10);
+    }
+    // string — try to parse and normalize
+    const s = String(d).trim();
+    // If already ISO yyyy-mm-dd
+    let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if(m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+    // dd/mm/yyyy or dd-mm-yyyy
+    m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
+    if(m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+    // d-mmm-yyyy etc. fallback
+    const dt = new Date(s);
+    if(!isNaN(dt)) return dt.toISOString().slice(0,10);
+    return null;
+  };
+
+  // Days between two YYYY-MM-DD strings
+  const daysBetween = (a,b)=>{
+    if(!a||!b) return Infinity;
+    return Math.round((new Date(a)-new Date(b))/86400000);
+  };
+
+  // Helpers
+  const isSquadRow = row=>{
+    if(pdl.squadMode==='none' || pdl.squadMode==='manual') return false;
+    if(pdl.squadMode==='codes'){
+      // Strict AND: code matches AND date is within tolerance of anchor
+      const code = String(row['FPS Code']||'').trim().toUpperCase();
+      if(!squadCodes.has(code)) return false;
+      const ds = rowDateStr(row);
+      if(!ds) return false;
+      return Math.abs(daysBetween(ds, squadAnchorDate)) <= squadTolerance;
+    }
+    if(pdl.squadMode==='date'){
+      const ds = rowDateStr(row);
+      if(!ds) return false;
+      for(const sd of squadDates){
+        if(ds===sd || ds.replace(/-/g,'/')===sd) return true;
+      }
+      return false;
+    }
+    return false;
+  };
+
+  const hasIrreg = (row, sign)=>{
+    // sign: 'any' | 'neg' | 'pos'
+    for(const c of stockCols){
+      const v = row[c.name];
+      if(v==null || v==='') continue;
+      const num = Number(v);
+      if(isNaN(num) || num===0) continue;
+      if(sign==='any') return true;
+      if(sign==='neg' && num<0) return true;
+      if(sign==='pos' && num>0) return true;
+    }
+    return false;
+  };
+
+  const fineLakhs = row=>(Number(row['Remittance To Government'])||0)/100000;
+
+  // Buckets
+  const buckets = {
+    CSR: {total:[], regular:[], squad:[]},
+    DR:  {total:[]},
+    JR:  {total:[]}
+  };
+
+  // Department-wide squad rows (ALL 44 dept staff)
+  // Flying Squad sheet uses these — includes squad inspections by SI/DRCS/Field staff etc.
+  const deptSquadRows = [];
+
+  for(const r of pdl.misRows){
+    const phone = r['Inspector Mobile Number'];
+    if(phone==null) continue;
+    const phoneStr = String(Math.round(Number(phone)));
+
+    // 1. Bucket regular roles (only 23 phones)
+    const role = roleMap[phoneStr];
+    if(role){
+      if(role==='DR') buckets.DR.total.push(r);
+      else if(role==='JR') buckets.JR.total.push(r);
+      else {
+        buckets.CSR.total.push(r);
+        if(isSquadRow(r)) buckets.CSR.squad.push(r);
+        else buckets.CSR.regular.push(r);
+      }
+    }
+
+    // 2. Dept-wide squad — ANY staff in DEPT_PHONES doing a squad inspection
+    if(DEPT_PHONES.has(phoneStr) && isSquadRow(r)){
+      deptSquadRows.push(r);
+    }
+  }
+
+  // Final CSR regular adjustment for manual mode
+  if(pdl.squadMode==='manual'){
+    buckets.CSR.regular = buckets.CSR.total; // we don't know which rows
+    // We'll just subtract squadManualCount from final inspected count
+  }
+
+  const calcStats = (rows, subtract=0)=>{
+    const inspected = rows.length - subtract;
+    const irregShops = rows.filter(r=>hasIrreg(r,'any')).length;
+    const amt = rows.reduce((s,r)=>s+fineLakhs(r),0);
+    return {inspected, irregShops, amt};
+  };
+
+  const csrStats = pdl.squadMode==='manual'
+    ? {
+        inspected: buckets.CSR.total.length - squadManualCount,
+        irregShops: buckets.CSR.regular.filter(r=>hasIrreg(r,'any')).length,
+        amt: buckets.CSR.regular.reduce((s,r)=>s+fineLakhs(r),0),
+        squadShops: squadManualCount
+      }
+    : {
+        inspected: buckets.CSR.regular.length,
+        irregShops: buckets.CSR.regular.filter(r=>hasIrreg(r,'any')).length,
+        amt: buckets.CSR.regular.reduce((s,r)=>s+fineLakhs(r),0),
+        squadShops: buckets.CSR.squad.length
+      };
+
+  const drStats = calcStats(buckets.DR.total);
+  const jrStats = calcStats(buckets.JR.total);
+
+  // Irregularity sub-buckets — applied to ALL inspections (CSR regular + DR + JR; squad excluded)
+  const allRegular = [...buckets.CSR.regular, ...buckets.DR.total, ...buckets.JR.total];
+
+  // Compute deficit / excess with 50/50 split for shops that have BOTH
+  let stockDeficitShops = 0, stockDeficitAmt = 0;
+  let excessStockShops = 0, excessStockAmt = 0;
+  for(const row of allRegular){
+    const hn = hasIrreg(row,'neg');
+    const hp = hasIrreg(row,'pos');
+    const fine = fineLakhs(row);
+    if(hn && hp){
+      // Mixed shop — split 50/50
+      stockDeficitShops++;  excessStockShops++;
+      stockDeficitAmt += fine/2;
+      excessStockAmt += fine/2;
+    } else if(hn){
+      stockDeficitShops++;
+      stockDeficitAmt += fine;
+    } else if(hp){
+      excessStockShops++;
+      excessStockAmt += fine;
+    }
+  }
+
+  const allIrregShops = allRegular.filter(r=>hasIrreg(r,'any')).length;
+  const totalAmt = allRegular.reduce((s,r)=>s+fineLakhs(r),0);
+
+  // Squad stats (for sheet 3) — uses ALL 44 dept staff, not just block staff
+  const squadStats = pdl.squadMode==='manual'
+    ? {shops: squadManualCount, irregAmt: 0}
+    : {
+        shops: deptSquadRows.length,
+        irregAmt: deptSquadRows.reduce((s,r)=>s+fineLakhs(r),0)
+      };
+
+  const targets = {
+    csr: parseInt(document.getElementById('target-csr').value)||0,
+    dr: parseInt(document.getElementById('target-dr').value)||0,
+    jr: parseInt(document.getElementById('target-jr').value)||0
+  };
+
+  pdl.result = {
+    csrStats, drStats, jrStats, targets,
+    stockDeficit: {shops: stockDeficitShops, amt: stockDeficitAmt},
+    excessStock:  {shops: excessStockShops,  amt: excessStockAmt},
+    allIrregShops,
+    totalAmt,
+    squad: squadStats,
+    diag: {
+      pastedCount: pdl.squadMode==='codes' ? squadCodes.size : (pdl.squadMode==='manual' ? squadManualCount : 0),
+      matchedDeptSquad: deptSquadRows.length,
+      matchedCsrSquad: buckets.CSR.squad.length
+    }
+  };
+
+  renderPdlResults();
+  toast('✓ PDL computed');
+}
+
+function renderPdlResults(){
+  const r = pdl.result;
+  if(!r) return;
+
+  const fmt = n => n==null ? '0' : (Number.isInteger(n) ? n : n.toFixed(4).replace(/0+$/,'').replace(/\.$/,''));
+  const sf = (target, insp) => Math.max(0, target-insp);
+
+  let html = `
+    <div class="panel">
+      <h2><span class="dot"></span> Computed Values for Thiruvannamalai Row
+        <span style="margin-left:auto;font-size:12px;color:var(--muted);font-weight:400">Click any number to copy</span>
+      </h2>
+
+      <!-- Sheet 1: Inspection -->
+      <div class="pdl-card">
+        <div class="head">
+          📋 Sheet 1 — Inspection
+          <button class="icon-btn" onclick="copyPdlRow('row-inspection')" style="background:rgba(255,255,255,.2);color:white">📋 Copy row</button>
+        </div>
+        <table class="pdl-table" id="row-inspection">
+          <thead>
+            <tr>
+              <th rowspan="3" style="width:40px">S.No</th>
+              <th rowspan="3">Region</th>
+              <th colspan="5">Cooperative Sub Registrar (PDS)</th>
+              <th colspan="5">Deputy Registrar (PDS)</th>
+              <th colspan="5">Joint Registrar</th>
+            </tr>
+            <tr>
+              <th class="subhead">Target</th>
+              <th class="subhead">Inspected</th>
+              <th class="subhead">Short fall</th>
+              <th class="subhead" colspan="2">Irregularities</th>
+
+              <th class="subhead">Target</th>
+              <th class="subhead">Inspected</th>
+              <th class="subhead">Short fall</th>
+              <th class="subhead" colspan="2">Irregularities</th>
+
+              <th class="subhead">Target</th>
+              <th class="subhead">Inspected</th>
+              <th class="subhead">Short fall</th>
+              <th class="subhead" colspan="2">Irregularities</th>
+            </tr>
+            <tr>
+              <th class="subhead" colspan="3"></th><th class="subhead">Shops</th><th class="subhead">Amt.</th>
+              <th class="subhead" colspan="3"></th><th class="subhead">Shops</th><th class="subhead">Amt.</th>
+              <th class="subhead" colspan="3"></th><th class="subhead">Shops</th><th class="subhead">Amt.</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>31</td>
+              <td class="label">Tiruvannamalai</td>
+              ${cell(r.targets.csr)}
+              ${cell(r.csrStats.inspected)}
+              ${cell(sf(r.targets.csr, r.csrStats.inspected))}
+              ${cell(r.csrStats.irregShops)}
+              ${cell(r.csrStats.amt, true)}
+
+              ${cell(r.targets.dr)}
+              ${cell(r.drStats.inspected)}
+              ${cell(sf(r.targets.dr, r.drStats.inspected))}
+              ${cell(r.drStats.irregShops)}
+              ${cell(r.drStats.amt, true)}
+
+              ${cell(r.targets.jr)}
+              ${cell(r.jrStats.inspected)}
+              ${cell(sf(r.targets.jr, r.jrStats.inspected))}
+              ${cell(r.jrStats.irregShops)}
+              ${cell(r.jrStats.amt, true)}
+            </tr>
+          </tbody>
+        </table>
+        <div class="pdl-note">
+          Note: Squad shops (${r.csrStats.squadShops||0}) are excluded from CSR Inspected. Amounts in lakhs (÷100000).
+        </div>
+      </div>
+
+      <!-- Sheet 2: Irregularities -->
+      <div class="pdl-card">
+        <div class="head">
+          ⚠️ Sheet 2 — Irregularities
+          <button class="icon-btn" onclick="copyPdlRow('row-irreg')" style="background:rgba(255,255,255,.2);color:white">📋 Copy row</button>
+        </div>
+        <table class="pdl-table" id="row-irreg">
+          <thead>
+            <tr>
+              <th rowspan="2" style="width:40px">S.No</th>
+              <th rowspan="2">Region</th>
+              <th colspan="2">Stock Deficit</th>
+              <th colspan="2">Bogus Bill</th>
+              <th colspan="2">Excess Stock</th>
+              <th colspan="2">Excess Scale of Supply</th>
+              <th colspan="2">Stock Deficit Non-PDS</th>
+              <th colspan="2">Cash Deficit/Excess</th>
+              <th colspan="2">Under Weighment</th>
+              <th>Shop Closure</th>
+              <th colspan="2">Total Irregularities</th>
+            </tr>
+            <tr>
+              <th class="subhead">Shops</th><th class="subhead">Amt.</th>
+              <th class="subhead">Shops</th><th class="subhead">Amt.</th>
+              <th class="subhead">Shops</th><th class="subhead">Amt.</th>
+              <th class="subhead">Shops</th><th class="subhead">Amt.</th>
+              <th class="subhead">Shops</th><th class="subhead">Amt.</th>
+              <th class="subhead">Shops</th><th class="subhead">Amt.</th>
+              <th class="subhead">Shops</th><th class="subhead">Amt.</th>
+              <th class="subhead">Shops</th>
+              <th class="subhead">Shops</th><th class="subhead">Amt.</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>31</td>
+              <td class="label">Tiruvannamalai</td>
+              ${cell(r.stockDeficit.shops)}${cell(r.stockDeficit.amt,true)}
+              ${cellManual()}${cellManual()}
+              ${cell(r.excessStock.shops)}${cell(r.excessStock.amt,true)}
+              ${cellManual()}${cellManual()}
+              ${cellManual()}${cellManual()}
+              ${cellManual()}${cellManual()}
+              ${cellManual()}${cellManual()}
+              ${cellManual()}
+              ${cell(r.allIrregShops)}${cell(r.totalAmt,true)}
+            </tr>
+          </tbody>
+        </table>
+        <div class="pdl-note">
+          Auto-filled: Stock Deficit (negative AD-BM), Excess Stock (positive AD-BM), Total Irregularities (any non-zero).
+          Light cells need manual entry: Bogus Bill, Excess Scale of Supply, Stock Deficit Non-PDS, Cash Deficit, Under Weighment, Shop Closure.
+        </div>
+      </div>
+
+      <!-- Sheet 3: Flying Squad -->
+      <div class="pdl-card">
+        <div class="head">
+          🚓 Sheet 3 — Flying Squad &amp; Intensive Verification
+          <button class="icon-btn" onclick="copyPdlRow('row-fs')" style="background:rgba(255,255,255,.2);color:white">📋 Copy row</button>
+        </div>
+        <table class="pdl-table" id="row-fs">
+          <thead>
+            <tr>
+              <th rowspan="2" style="width:40px">S.No</th>
+              <th rowspan="2">Region</th>
+              <th colspan="2">Flying Squad</th>
+              <th colspan="2">Intensive Verification</th>
+            </tr>
+            <tr>
+              <th class="subhead">No. of Shops</th>
+              <th class="subhead">Irregularities Detected</th>
+              <th class="subhead">No. of Shops</th>
+              <th class="subhead">Irregularities Detected</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>31</td>
+              <td class="label">Tiruvannamalai</td>
+              ${cell(r.squad.shops)}
+              ${cell(r.squad.irregAmt,true)}
+              ${cellManual()}
+              ${cellManual()}
+            </tr>
+          </tbody>
+        </table>
+        <div class="pdl-note">
+          Auto-filled from rows where the inspector phone is one of the 44 department staff AND the row was identified as a squad inspection.
+          ${r.diag.pastedCount>0 ? `You specified <b>${r.diag.pastedCount}</b> squad codes/count → matched <b>${r.diag.matchedDeptSquad}</b> dept rows in MIS (of which <b>${r.diag.matchedCsrSquad}</b> were by block staff and excluded from CSR Inspected). ${r.diag.pastedCount>r.diag.matchedDeptSquad ? `<span style="color:#dc2626">${r.diag.pastedCount-r.diag.matchedDeptSquad} pasted codes had no matching MIS row.</span>` : ''}` : ''}
+          Manual: Intensive Verification.
+        </div>
+      </div>
+
+      <!-- Sheet 4: Disciplinary -->
+      <div class="pdl-card">
+        <div class="head">
+          ⚖️ Sheet 4 — Disciplinary Action
+          <button class="icon-btn" onclick="copyPdlRow('row-disc')" style="background:rgba(255,255,255,.2);color:white">📋 Copy row</button>
+        </div>
+        <table class="pdl-table" id="row-disc">
+          <thead>
+            <tr>
+              <th style="width:40px">S.No</th>
+              <th>Region</th>
+              <th>Salesman dismissed</th>
+              <th>Depromoted/Transferred</th>
+              <th>Increment cut</th>
+              <th>Criminal cases</th>
+              <th>Persons suspended</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>31</td>
+              <td class="label">Tiruvannamalai</td>
+              ${cell(0)}${cell(0)}${cell(0)}${cell(0)}${cell(0)}
+            </tr>
+          </tbody>
+        </table>
+        <div class="pdl-note">
+          All zeros by default — click any cell to edit before copying.
+        </div>
+      </div>
+
+      <div class="action-bar" style="margin-top:14px">
+        <button class="btn success" onclick="downloadPdlExcel()">📥 Download as Excel (4 sheets, single row each)</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('pdl-results-area').innerHTML = html;
+
+  // Make all cells with data-edit editable on click
+  document.querySelectorAll('#pdl-results-area .copy-cell').forEach(td=>{
+    td.addEventListener('click',e=>{
+      // Copy value to clipboard
+      const v = td.dataset.value || td.textContent.trim();
+      navigator.clipboard.writeText(v).then(()=>{
+        const orig = td.style.background;
+        td.style.background = '#dcfce7';
+        setTimeout(()=>td.style.background=orig,500);
+        toast('Copied: '+v);
+      }).catch(()=>toast('Copy failed',true));
+    });
+  });
+  document.querySelectorAll('#pdl-results-area td[contenteditable]').forEach(td=>{
+    td.addEventListener('focus',()=>td.style.background='#fef9c3');
+    td.addEventListener('blur',()=>td.style.background='');
+  });
+}
+
+function cell(val, isAmt){
+  let display;
+  if(val==null) display='0';
+  else if(isAmt){
+    display = Number(val).toFixed(4).replace(/0+$/,'').replace(/\.$/,'');
+    if(display==='') display='0';
+  } else display = String(val);
+  return `<td class="num copy-cell" data-value="${display}" contenteditable="true">${display}</td>`;
+}
+function cellManual(){
+  return `<td class="num" contenteditable="true" style="background:#fef3c7" title="Manual entry">0</td>`;
+}
+
+// Copy PDL row
+async function copyPdlRow(tableId){
+  const tbl = document.getElementById(tableId);
+  if(!tbl) return;
+  const dataRow = tbl.querySelector('tbody tr');
+  if(!dataRow) return;
+  const cells = [...dataRow.querySelectorAll('td')].map(c=>c.textContent.trim());
+  const text = cells.join('\t');
+
+  // Also build HTML row for paste-into-Excel
+  const html = `<table><tr>${[...dataRow.querySelectorAll('td')].map(c=>`<td>${c.textContent.trim()}</td>`).join('')}</tr></table>`;
+
+  try{
+    await navigator.clipboard.write([new ClipboardItem({
+      'text/html': new Blob([html],{type:'text/html'}),
+      'text/plain': new Blob([text],{type:'text/plain'})
+    })]);
+    toast('✓ Row copied — paste into Excel/Sheets');
+  }catch(e){
+    try{
+      await navigator.clipboard.writeText(text);
+      toast('Copied as text');
+    }catch(e2){toast('Copy failed',true)}
+  }
+}
+
+// Download PDL Excel
+function downloadPdlExcel(){
+  const r = pdl.result;
+  if(!r) return;
+  const wb = XLSX.utils.book_new();
+  const sf = (t,i)=>Math.max(0,t-i);
+
+  // Sheet 1
+  const s1 = [
+    ['S.No','Region','CSR Target','CSR Inspected','CSR Shortfall','CSR Irreg Shops','CSR Irreg Amt',
+     'DR Target','DR Inspected','DR Shortfall','DR Irreg Shops','DR Irreg Amt',
+     'JR Target','JR Inspected','JR Shortfall','JR Irreg Shops','JR Irreg Amt'],
+    [31,'Tiruvannamalai',
+     r.targets.csr, r.csrStats.inspected, sf(r.targets.csr,r.csrStats.inspected), r.csrStats.irregShops, +r.csrStats.amt.toFixed(4),
+     r.targets.dr, r.drStats.inspected, sf(r.targets.dr,r.drStats.inspected), r.drStats.irregShops, +r.drStats.amt.toFixed(4),
+     r.targets.jr, r.jrStats.inspected, sf(r.targets.jr,r.jrStats.inspected), r.jrStats.irregShops, +r.jrStats.amt.toFixed(4)]
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(s1), 'Inspection');
+
+  // Sheet 2
+  const s2 = [
+    ['S.No','Region','Stock Deficit Shops','Stock Deficit Amt','Bogus Bill Shops','Bogus Bill Amt',
+     'Excess Stock Shops','Excess Stock Amt','Excess Scale Shops','Excess Scale Amt',
+     'Stock Deficit Non-PDS Shops','Stock Deficit Non-PDS Amt','Cash Deficit Shops','Cash Deficit Amt',
+     'Under Weighment Shops','Under Weighment Amt','Shop Closure','Total Irreg Shops','Total Irreg Amt'],
+    [31,'Tiruvannamalai',
+     r.stockDeficit.shops, +r.stockDeficit.amt.toFixed(4),
+     0,0, r.excessStock.shops, +r.excessStock.amt.toFixed(4),
+     0,0,0,0,0,0,0,0,0,
+     r.allIrregShops, +r.totalAmt.toFixed(4)]
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(s2), 'Irregularities');
+
+  // Sheet 3
+  const s3 = [
+    ['S.No','Region','Flying Squad Shops','Flying Squad Irreg Amt','Intensive Verif Shops','Intensive Verif Amt'],
+    [31,'Tiruvannamalai', r.squad.shops, +r.squad.irregAmt.toFixed(4), 0, 0]
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(s3), 'Flying Squad');
+
+  // Sheet 4
+  const s4 = [
+    ['S.No','Region','Salesman Dismissed','Depromoted/Transferred','Increment Cut','Criminal Cases','Persons Suspended'],
+    [31,'Tiruvannamalai',0,0,0,0,0]
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(s4), 'Disciplinary');
+
+  XLSX.writeFile(wb, `PDL_HeadOffice_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast('✓ Excel downloaded');
+}
+
+setupPdlMisUpload();
+
+// ============================================================================
+// =================  WHATSAPP REMINDER MODULE  ===============================
+// ============================================================================
+
+const REMINDER_TRACKERS_KEY = 'reminder_trackers_v1';
+const REMINDER_PHONES_KEY   = 'reminder_phones_v1';
+const REMINDER_TEMPLATE_KEY = 'reminder_template_v1';
+
+const DEFAULT_REMINDER_TEMPLATE =
+`🔔 *{TITLE}*
+📋 Status as of: {DATE}
+
+🔴 *Not Started* ({COUNT_NS}):
+{LIST_NS}
+
+🟡 *Partially Filled* ({COUNT_PF}):
+{LIST_PF}
+
+✅ Completed: {DONE} / {TOTAL}
+
+Please complete pending entries at the earliest.`;
+
+const rem = {
+  trackers: [],   // [{id, name, url, lastSync, lastData}]
+  editingId: null
+};
+
+// Load saved trackers and phones
+function loadReminderState(){
+  try{
+    const t = JSON.parse(localStorage.getItem(REMINDER_TRACKERS_KEY)||'[]');
+    rem.trackers = Array.isArray(t)?t:[];
+  }catch(e){rem.trackers=[]}
+  document.getElementById('phone-mapping').value = localStorage.getItem(REMINDER_PHONES_KEY)||'';
+}
+
+function saveTrackers(){
+  localStorage.setItem(REMINDER_TRACKERS_KEY, JSON.stringify(rem.trackers));
+}
+
+function flashTag(id){
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.style.opacity = '1';
+  setTimeout(()=>el.style.opacity = '0', 1500);
+}
+
+// Render the list of saved trackers
+function renderTrackers(){
+  const wrap = document.getElementById('trackers-list');
+  if(rem.trackers.length===0){
+    wrap.innerHTML = '<div class="empty-trackers">No trackers added yet. Click <b>➕ Add Tracker</b> to start.</div>';
+    return;
+  }
+  wrap.innerHTML = rem.trackers.map(t=>{
+    const stats = t.lastData ? `
+      <div class="stats-row">
+        <span class="stat-pill r">🔴 Not Started: ${t.lastData.notStarted.length}</span>
+        <span class="stat-pill y">🟡 Partial: ${t.lastData.partial.length}</span>
+        <span class="stat-pill g">✅ Completed: ${t.lastData.completed.length}</span>
+        <span class="stat-pill" style="background:rgba(148,163,184,.15);color:#cbd5e1">Total: ${t.lastData.total}</span>
+        <span class="last-sync">Last sync: ${t.lastSync ? new Date(t.lastSync).toLocaleString() : 'never'}</span>
+      </div>` : '';
+    return `<div class="tracker-card" data-id="${t.id}">
+      <div class="head">
+        <div class="name">📋 ${t.name||'(unnamed)'}</div>
+      </div>
+      <div class="url" title="${t.url}">${t.url}</div>
+      ${stats}
+      <div class="actions">
+        <button class="btn" data-action="sync">🔄 Sync</button>
+        <button class="btn success" data-action="generate" ${t.lastData?'':'disabled'}>📲 Generate Message</button>
+        <button class="btn-tiny" data-action="edit">✏️ Edit</button>
+        <button class="btn-tiny danger" data-action="delete">🗑️ Delete</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  wrap.querySelectorAll('.tracker-card').forEach(card=>{
+    const id = card.dataset.id;
+    card.querySelector('[data-action="sync"]').addEventListener('click',()=>syncTracker(id));
+    card.querySelector('[data-action="generate"]').addEventListener('click',()=>openReminderEditor(id));
+    card.querySelector('[data-action="edit"]').addEventListener('click',()=>openTrackerModal(id));
+    card.querySelector('[data-action="delete"]').addEventListener('click',()=>{
+      if(confirm('Delete this tracker?')){
+        rem.trackers = rem.trackers.filter(x=>x.id!==id);
+        saveTrackers();
+        renderTrackers();
+      }
+    });
+  });
+}
+
+// Add/Edit modal
+function openTrackerModal(id){
+  rem.editingId = id||null;
+  const t = id ? rem.trackers.find(x=>x.id===id) : null;
+  document.getElementById('tracker-modal-title').textContent = t ? 'Edit Tracker' : 'Add Tracker';
+  document.getElementById('tracker-name-input').value = t?.name||'';
+  document.getElementById('tracker-url-input').value = t?.url||'';
+  document.getElementById('tracker-modal').style.display='flex';
+}
+
+function closeTrackerModal(){
+  document.getElementById('tracker-modal').style.display='none';
+  rem.editingId = null;
+}
+
+document.getElementById('btn-add-tracker').addEventListener('click',()=>openTrackerModal(null));
+document.getElementById('tracker-modal-close').addEventListener('click',closeTrackerModal);
+document.getElementById('tracker-modal-cancel').addEventListener('click',closeTrackerModal);
+document.getElementById('tracker-modal').addEventListener('click',e=>{
+  if(e.target.id==='tracker-modal') closeTrackerModal();
+});
+document.getElementById('tracker-modal-save').addEventListener('click',()=>{
+  const name = document.getElementById('tracker-name-input').value.trim();
+  const url = document.getElementById('tracker-url-input').value.trim();
+  if(!name || !url){toast('Name and URL required',true);return}
+  if(rem.editingId){
+    const t = rem.trackers.find(x=>x.id===rem.editingId);
+    if(t){t.name=name;t.url=url}
+  } else {
+    rem.trackers.push({
+      id: 'tr_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
+      name, url, lastSync:null, lastData:null
+    });
+  }
+  saveTrackers();
+  closeTrackerModal();
+  renderTrackers();
+  toast('Tracker saved');
+});
+
+// Help modal
+document.getElementById('btn-tracker-help').addEventListener('click',()=>{
+  document.getElementById('tracker-help-modal').style.display='flex';
+});
+document.getElementById('tracker-help-close').addEventListener('click',()=>{
+  document.getElementById('tracker-help-modal').style.display='none';
+});
+document.getElementById('tracker-help-modal').addEventListener('click',e=>{
+  if(e.target.id==='tracker-help-modal') e.target.style.display='none';
+});
+
+// Save phones
+document.getElementById('btn-save-phones').addEventListener('click',()=>{
+  localStorage.setItem(REMINDER_PHONES_KEY, document.getElementById('phone-mapping').value);
+  flashTag('phone-saved-tag');
+  toast('Phone mapping saved');
+});
+
+// ----- SYNC TRACKER (reads CSV, classifies blocks) -----
+async function syncTracker(id){
+  const t = rem.trackers.find(x=>x.id===id);
+  if(!t) return;
+  toast('🔄 Syncing '+t.name+'...');
+  try{
+    const fetchUrl = t.url + (t.url.includes('?')?'&':'?') + '_=' + Date.now();
+    const resp = await fetch(fetchUrl);
+    if(!resp.ok) throw new Error('HTTP '+resp.status+' — check sheet is published as CSV');
+    const csv = await resp.text();
+    if(!csv || csv.length<5) throw new Error('Empty CSV');
+
+    const rows = parseCSV(csv);  // already exists from squad module
+    if(rows.length<2) throw new Error('No data rows');
+
+    const data = classifyTrackerRows(rows);
+    t.lastSync = Date.now();
+    t.lastData = data;
+    saveTrackers();
+    renderTrackers();
+    toast(`✓ ${t.name} synced — ${data.notStarted.length} not started, ${data.partial.length} partial, ${data.completed.length} done`);
+  }catch(err){
+    console.error(err);
+    toast('Sync failed: '+err.message,true);
+  }
+}
+
+// Classify each row by reading the Overall column
+function classifyTrackerRows(rows){
+  const headers = rows[0].map(h=>String(h||'').trim());
+
+  // Find Overall column (prefer one named "Overall", else last non-empty)
+  let overallCol = -1;
+  for(let c=headers.length-1;c>=0;c--){
+    if(/overall/i.test(headers[c])){overallCol=c;break}
+  }
+  if(overallCol<0) overallCol = headers.length-1;
+
+  const notStarted=[],partial=[],completed=[],partialDetails=[];
+
+  for(let r=1;r<rows.length;r++){
+    const row = rows[r];
+    const name = String(row[0]||'').trim();
+    if(!name) continue;
+    const overall = String(row[overallCol]||'').trim();
+
+    // Tests in priority order
+    const isComplete = /✅/.test(overall) || (/complete/i.test(overall) && !/incomplete|not\s*complete/i.test(overall));
+    const isPartial  = /🟡|⚠️/.test(overall) || /partial/i.test(overall);
+    const isNotStart = /🔴|❌/.test(overall) || /not\s*started|missing/i.test(overall) || overall==='';
+
+    if(isComplete){
+      completed.push(name);
+    } else if(isPartial){
+      partial.push(name);
+      // count filled vs total in middle columns
+      let filled=0,total=0;
+      for(let c=1;c<overallCol;c++){
+        const v = String(row[c]||'').trim();
+        if(!v) continue;
+        total++;
+        if(/✅/.test(v) || (/complete/i.test(v) && !/incomplete/i.test(v))) filled++;
+      }
+      partialDetails.push({name, filled, total});
+    } else if(isNotStart){
+      notStarted.push(name);
+    } else {
+      // Anything else — treat as not started
+      notStarted.push(name);
+    }
+  }
+
+  return {
+    notStarted, partial, completed,
+    partialDetails,
+    total: notStarted.length + partial.length + completed.length
+  };
+}
+
+// ----- OPEN REMINDER EDITOR -----
+function openReminderEditor(id){
+  const t = rem.trackers.find(x=>x.id===id);
+  if(!t || !t.lastData){toast('Sync this tracker first',true);return}
+  rem.activeId = id;
+
+  const savedTpl = localStorage.getItem(REMINDER_TEMPLATE_KEY) || DEFAULT_REMINDER_TEMPLATE;
+  const d = t.lastData;
+
+  const html = `
+    <div class="panel">
+      <h2><span class="dot"></span> 📲 Generate WhatsApp Message — ${t.name}</h2>
+      <div class="reminder-out">
+        <div class="head">
+          <div>
+            🔴 ${d.notStarted.length} Not Started • 🟡 ${d.partial.length} Partial • ✅ ${d.completed.length} Done • Total ${d.total}
+          </div>
+          <button class="icon-btn" onclick="closeReminderEditor()" style="background:rgba(255,255,255,.2);color:white">× Close</button>
+        </div>
+        <div class="reminder-controls">
+          <h4>Title</h4>
+          <input type="text" id="rem-title" value="${escapeAttr(t.name)}" placeholder="e.g. PDL-1 — March 2026">
+
+          <h4>Include in message</h4>
+          <div class="options-row">
+            <label><input type="checkbox" id="rem-inc-ns" checked> 🔴 Not Started</label>
+            <label><input type="checkbox" id="rem-inc-pf" checked> 🟡 Partial</label>
+            <label><input type="checkbox" id="rem-inc-done"> ✅ Completed</label>
+            <label><input type="checkbox" id="rem-show-counts" checked> Show partial counts (5/8)</label>
+          </div>
+
+          <h4>Tag mode</h4>
+          <div class="options-row">
+            <label><input type="radio" name="rem-tag" id="rem-tag-no" checked> Plain names</label>
+            <label><input type="radio" name="rem-tag" id="rem-tag-yes"> Use @ phone tags</label>
+          </div>
+
+          <h4>Message template <button class="btn-tiny" onclick="saveReminderTemplate()" style="margin-left:8px">💾 Save as default</button> <button class="btn-tiny" onclick="resetReminderTemplate()">↻ Reset</button></h4>
+          <textarea id="rem-template" rows="12">${escapeHtml(savedTpl)}</textarea>
+          <div class="placeholders-help">
+            <b>Placeholders:</b>
+            <code>{TITLE}</code> <code>{DATE}</code> <code>{TIME}</code>
+            <code>{LIST_NS}</code> <code>{LIST_PF}</code> <code>{LIST_DONE}</code>
+            <code>{COUNT_NS}</code> <code>{COUNT_PF}</code> <code>{DONE}</code> <code>{TOTAL}</code> <code>{PENDING}</code>
+          </div>
+
+          <div class="action-bar" style="margin-top:14px">
+            <button class="btn success" onclick="generateReminderMsg()">✨ Generate Message</button>
+          </div>
+        </div>
+        <div id="rem-output-wrap" style="display:none">
+          <div class="reminder-output-box" id="rem-output"></div>
+          <div style="padding:10px 18px;background:#f8fafc;border-top:1px solid #e2e8f0;display:flex;gap:8px;align-items:center">
+            <button class="btn" onclick="copyReminderMsg()">📋 Copy to Clipboard</button>
+            <span id="rem-copied" style="font-size:12px;color:#059669;opacity:0;transition:opacity .3s">✓ copied</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('reminder-result-area').innerHTML = html;
+  // Scroll into view
+  document.getElementById('reminder-result-area').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function closeReminderEditor(){
+  document.getElementById('reminder-result-area').innerHTML = '';
+  rem.activeId = null;
+}
+
+function escapeHtml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function escapeAttr(s){
+  return escapeHtml(s).replace(/"/g,'&quot;');
+}
+
+function saveReminderTemplate(){
+  const tpl = document.getElementById('rem-template').value;
+  localStorage.setItem(REMINDER_TEMPLATE_KEY, tpl);
+  toast('Template saved as default');
+}
+function resetReminderTemplate(){
+  document.getElementById('rem-template').value = DEFAULT_REMINDER_TEMPLATE;
+}
+
+function parsePhoneMapping(txt){
+  const m = {};
+  txt.split(/\r?\n/).forEach(line=>{
+    const parts = line.split('|');
+    if(parts.length>=2){
+      const name = parts[0].trim();
+      const phone = parts[1].trim().replace(/[^0-9]/g,'');
+      if(name && phone) m[name] = phone;
+    }
+  });
+  return m;
+}
+
+function buildBlockList(names, useTags, phoneMap, partialMap, showCounts){
+  if(!names || names.length===0) return '— None —';
+  return names.map((n,i)=>{
+    const num = (i+1)+'. ';
+    const display = useTags && phoneMap[n] ? '@'+phoneMap[n]+' ('+n+')' : n;
+    const cnt = (partialMap && partialMap[n] && showCounts) ? ' — '+partialMap[n].filled+'/'+partialMap[n].total+' sheets done' : '';
+    return num+display+cnt;
+  }).join('\n');
+}
+
+function generateReminderMsg(){
+  const t = rem.trackers.find(x=>x.id===rem.activeId);
+  if(!t || !t.lastData) return;
+  const d = t.lastData;
+
+  const incNS    = document.getElementById('rem-inc-ns').checked;
+  const incPF    = document.getElementById('rem-inc-pf').checked;
+  const incDone  = document.getElementById('rem-inc-done').checked;
+  const showCnt  = document.getElementById('rem-show-counts').checked;
+  const useTags  = document.getElementById('rem-tag-yes').checked;
+
+  const phoneMap = useTags ? parsePhoneMapping(document.getElementById('phone-mapping').value) : {};
+  const partialMap = {};
+  d.partialDetails.forEach(p=>partialMap[p.name]=p);
+
+  const now = new Date();
+  const date = now.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+  const time = now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+
+  let template = document.getElementById('rem-template').value;
+
+  // Strip section if unchecked: remove header line + placeholder line + trailing blank
+  function stripSection(tpl, placeholder){
+    const lines = tpl.split('\n');
+    const out = [];
+    for(let i=0;i<lines.length;i++){
+      if(lines[i].includes(placeholder)){
+        // Remove preceding header line if present
+        if(out.length>0){
+          const prev = out[out.length-1];
+          if(/.*:\s*$|.*\(.*\):/.test(prev) && !prev.includes('Completed:')) out.pop();
+        }
+        // Skip blank line right after
+        if(i+1<lines.length && lines[i+1].trim()==='') i++;
+        continue;
+      }
+      out.push(lines[i]);
+    }
+    return out.join('\n');
+  }
+
+  if(!incNS) template = stripSection(template,'{LIST_NS}');
+  if(!incPF) template = stripSection(template,'{LIST_PF}');
+  if(!incDone) template = stripSection(template,'{LIST_DONE}');
+
+  const replacements = {
+    '{TITLE}': document.getElementById('rem-title').value || t.name,
+    '{DATE}': date,
+    '{TIME}': time,
+    '{LIST_NS}': buildBlockList(d.notStarted, useTags, phoneMap, null, false),
+    '{LIST_PF}': buildBlockList(d.partial, useTags, phoneMap, partialMap, showCnt),
+    '{LIST_DONE}': buildBlockList(d.completed, useTags, phoneMap, null, false),
+    '{COUNT_NS}': d.notStarted.length,
+    '{COUNT_PF}': d.partial.length,
+    '{COUNT_DONE}': d.completed.length,
+    '{DONE}': d.completed.length,
+    '{TOTAL}': d.total,
+    '{PENDING}': d.notStarted.length + d.partial.length
+  };
+  Object.keys(replacements).forEach(k=>{
+    template = template.split(k).join(replacements[k]);
+  });
+
+  // Collapse 3+ blank lines into 1
+  template = template.replace(/\n{3,}/g,'\n\n').trim();
+
+  document.getElementById('rem-output').textContent = template;
+  document.getElementById('rem-output-wrap').style.display = 'block';
+}
+
+async function copyReminderMsg(){
+  const txt = document.getElementById('rem-output').textContent;
+  try{
+    await navigator.clipboard.writeText(txt);
+    const tag = document.getElementById('rem-copied');
+    tag.style.opacity = '1';
+    setTimeout(()=>tag.style.opacity = '0', 1500);
+    toast('✓ Copied');
+  }catch(e){toast('Copy failed: '+e.message,true)}
+}
+
+// Init
+loadReminderState();
+renderTrackers();
+
+
+
+
+</script>
+
+</body>
+</html>
