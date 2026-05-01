@@ -879,84 +879,96 @@ document.addEventListener('keydown', e=>{
 <!-- ================================================================ -->
 <div class="tab-content" id="tab-reminder">
 
-<div class="panel">
-  <h2><span class="dot"></span> Saved Trackers</h2>
+<!-- Settings Sheet connection (one-time per device) -->
+<div class="panel" id="settings-sheet-panel">
+  <h2><span class="dot"></span> ⚙️ Settings Google Sheet</h2>
   <p style="font-size:13px;color:var(--muted);margin-bottom:12px">
-    Paste each Tracker's published-CSV link once — saved in your browser forever. Click 🔄 Sync to fetch latest status, then 📲 Generate to build the reminder.
+    All your tracker URLs and phone mapping are stored in <b>one Google Sheet</b>. Paste its published-CSV link once per device — the app auto-loads everything on every open.
   </p>
-  <div id="trackers-list"></div>
-  <div class="action-bar">
-    <button class="btn" id="btn-add-tracker">➕ Add Tracker</button>
-    <button class="btn secondary" id="btn-tracker-help">📖 How to publish a Tracker</button>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <input type="text" id="settings-sheet-url" placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=csv"
+      style="flex:1;min-width:280px;background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:9px 12px;border-radius:6px;font-size:13px">
+    <button class="btn secondary" id="btn-save-settings-url">💾 Save URL</button>
+    <button class="btn success" id="btn-sync-settings">🔄 Sync from Sheet</button>
+  </div>
+  <div id="settings-sync-status" style="margin-top:8px;font-size:12px;color:var(--muted)"></div>
+  <div style="margin-top:10px">
+    <button class="btn-tiny" id="btn-show-settings-help">📖 How to create the Settings Sheet</button>
   </div>
 </div>
 
+<!-- Tracker list (populated from Settings Sheet) -->
 <div class="panel">
-  <h2><span class="dot"></span> Phone Mapping (for @-tags, optional)</h2>
-  <p style="font-size:13px;color:var(--muted);margin-bottom:8px">
-    Format: one per line, <code style="background:rgba(0,0,0,.3);padding:1px 6px;border-radius:3px">BlockName | 919876543210</code>. Paste once, used across all trackers.
-  </p>
-  <textarea id="phone-mapping" rows="6" placeholder="Tiruvannamalai HQ | 919876543210
-Polur | 919876543211
-Cheyyar | 919876543212"
-    style="width:100%;background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:10px;border-radius:6px;font-size:13px;font-family:monospace"></textarea>
-  <div class="action-bar">
-    <button class="btn secondary" id="btn-save-phones">💾 Save mapping</button>
-    <span id="phone-saved-tag" style="font-size:12px;color:#34d399;opacity:0;transition:opacity .3s">✓ saved</span>
-  </div>
+  <h2><span class="dot"></span> Trackers
+    <button class="btn secondary" id="btn-sync-all-trackers" style="margin-left:auto;font-size:12px;padding:6px 14px">🔄 Sync All Trackers</button>
+  </h2>
+  <div id="trackers-list"></div>
 </div>
 
 <div id="reminder-result-area"></div>
 
 </div>
 
-<!-- Add/Edit Tracker Modal -->
-<div class="modal-overlay" id="tracker-modal" style="display:none">
-  <div class="modal-card" style="max-width:540px">
-    <button class="modal-close" id="tracker-modal-close">×</button>
-    <h2 id="tracker-modal-title">Add Tracker</h2>
-    <div style="margin-top:12px">
-      <label style="font-size:13px;color:#475569;font-weight:600">Tracker Name</label>
-      <input type="text" id="tracker-name-input" placeholder="e.g. PDL-1 Offtake"
-        style="width:100%;padding:9px 12px;border:1px solid #cbd5e1;border-radius:5px;font-size:13px;margin-top:4px">
+<!-- Settings Sheet Help Modal -->
+<div class="modal-overlay" id="settings-help-modal" style="display:none">
+  <div class="modal-card">
+    <button class="modal-close" id="settings-help-close">×</button>
+    <h2>📖 How to create the Settings Google Sheet</h2>
+
+    <h3>Step 1: Create a new Google Sheet</h3>
+    <p style="font-size:13px;color:#334155;line-height:1.6">Create a new Google Sheet (name it "Office Suite Settings" or anything you like). It needs <b>3 sheets/tabs</b>:</p>
+
+    <h3>Tab 1: Trackers</h3>
+    <div class="modal-table">
+      <table>
+        <thead><tr><th>Name</th><th>URL</th></tr></thead>
+        <tbody>
+          <tr><td>PDL-1 Offtake</td><td>https://docs.google.com/spreadsheets/d/e/.../pub?gid=...&output=csv</td></tr>
+          <tr><td>PDS-G PDL</td><td>https://docs.google.com/spreadsheets/d/e/.../pub?gid=...&output=csv</td></tr>
+          <tr><td>PDL-2</td><td>https://docs.google.com/spreadsheets/d/e/.../pub?gid=...&output=csv</td></tr>
+        </tbody>
+      </table>
     </div>
-    <div style="margin-top:12px">
-      <label style="font-size:13px;color:#475569;font-weight:600">Published CSV URL</label>
-      <input type="text" id="tracker-url-input" placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?gid=...&single=true&output=csv"
-        style="width:100%;padding:9px 12px;border:1px solid #cbd5e1;border-radius:5px;font-size:13px;margin-top:4px">
-      <div style="font-size:11px;color:#94a3b8;margin-top:4px">⚠️ Use the URL of the <b>Tracker tab specifically</b> (not the whole spreadsheet)</div>
+    <ul class="modal-notes"><li>Each URL should be the published CSV URL of that tracker's <b>Tracker tab specifically</b></li></ul>
+
+    <h3>Tab 2: PhoneMapping</h3>
+    <div class="modal-table">
+      <table>
+        <thead><tr><th>Block</th><th>Phone</th></tr></thead>
+        <tbody>
+          <tr><td>Tiruvannamalai HQ</td><td>919876543210</td></tr>
+          <tr><td>Polur</td><td>919876543211</td></tr>
+        </tbody>
+      </table>
     </div>
-    <div style="margin-top:18px;text-align:right;display:flex;gap:8px;justify-content:flex-end">
-      <button class="icon-btn" id="tracker-modal-cancel">Cancel</button>
-      <button class="btn" id="tracker-modal-save">Save</button>
+
+    <h3>Tab 3: Template</h3>
+    <p style="font-size:13px;color:#334155;line-height:1.6">Put your WhatsApp message template in cell <b>A1</b> (the entire template as one cell — use Alt+Enter for new lines inside the cell).</p>
+
+    <h3>Step 2: Publish the Settings Sheet</h3>
+    <ol class="modal-notes">
+      <li><b>File → Share → Publish to web</b></li>
+      <li>Set to <b>"Entire Document"</b> and <b>"Comma-separated values (.csv)"</b></li>
+      <li>Click <b>Publish</b> → copy the URL</li>
+      <li>Paste into the Settings URL box above → Save URL → Sync</li>
+    </ol>
+
+    <h3>Step 3: Use from any device</h3>
+    <ol class="modal-notes">
+      <li>Open the webapp on your phone/iPad/office PC</li>
+      <li>Go to 📲 WhatsApp Reminder tab</li>
+      <li>Paste the Settings Sheet URL once → Save → Sync</li>
+      <li>All trackers and phone mapping load automatically</li>
+      <li>Next time you open the app: auto-loads without any action</li>
+    </ol>
+
+    <div class="modal-warning">
+      ⚠️ The Settings Sheet URL is saved only in <b>your browser's localStorage</b> on each device — paste it once per device (PC, phone, iPad). Everything else (trackers, phones, template) comes from the Google Sheet automatically.
     </div>
   </div>
 </div>
 
-<!-- Tracker Help Modal -->
-<div class="modal-overlay" id="tracker-help-modal" style="display:none">
-  <div class="modal-card">
-    <button class="modal-close" id="tracker-help-close">×</button>
-    <h2>📖 How to publish a Tracker sheet</h2>
-    <h3>Why a per-tab link?</h3>
-    <p style="font-size:13px;color:#334155;line-height:1.6">
-      You don't want block staff data exposed — just the Tracker. Google Sheets lets you publish only the Tracker tab.
-    </p>
-    <h3>Steps</h3>
-    <ol class="modal-notes">
-      <li>Open the Google Sheet that has the <b>Tracker</b> tab</li>
-      <li>Click <b>File → Share → Publish to web</b></li>
-      <li>In the dialog, change "Entire Document" to the <b>Tracker</b> tab specifically</li>
-      <li>Set format to <b>"Comma-separated values (.csv)"</b></li>
-      <li>Click <b>Publish</b> → confirm</li>
-      <li>Copy the URL (looks like <code>https://docs.google.com/spreadsheets/d/e/.../pub?gid=...&single=true&output=csv</code>)</li>
-      <li>Click <b>Add Tracker</b> in the webapp → paste the URL → save</li>
-    </ol>
-    <div class="modal-warning">
-      ⚠️ Anyone with the published link can read the Tracker tab. Don't put confidential info in it.
-    </div>
-  </div>
-</div>
+<div class="tab-content" id="tab-future"><!-- Tracker Help Modal -->
 
 <div class="tab-content" id="tab-future">
   <div class="panel">
@@ -2937,8 +2949,12 @@ setupPdlMisUpload();
 // =================  WHATSAPP REMINDER MODULE  ===============================
 // ============================================================================
 
-const REMINDER_TRACKERS_KEY = 'reminder_trackers_v1';
-const REMINDER_PHONES_KEY   = 'reminder_phones_v1';
+// ============================================================================
+// =================  WHATSAPP REMINDER MODULE (v2 — Settings Sheet)  =========
+// ============================================================================
+
+const SETTINGS_URL_KEY      = 'office_settings_sheet_url_v1';
+const SETTINGS_CACHE_KEY    = 'office_settings_cache_v1';
 const REMINDER_TEMPLATE_KEY = 'reminder_template_v1';
 
 const DEFAULT_REMINDER_TEMPLATE =
@@ -2956,57 +2972,234 @@ const DEFAULT_REMINDER_TEMPLATE =
 Please complete pending entries at the earliest.`;
 
 const rem = {
-  trackers: [],   // [{id, name, url, lastSync, lastData}]
-  editingId: null
+  trackers: [],     // [{id, name, url, lastSync, lastData}]
+  phoneMap: {},     // {blockName: phone}
+  template: DEFAULT_REMINDER_TEMPLATE,
+  activeId: null
 };
 
-// Load saved trackers and phones
-function loadReminderState(){
+// ── Settings Sheet URL ──────────────────────────────────────────────────────
+function initReminder(){
+  const savedUrl = localStorage.getItem(SETTINGS_URL_KEY)||'';
+  if(savedUrl) document.getElementById('settings-sheet-url').value = savedUrl;
+
+  // Auto-load from cache immediately (so trackers appear without waiting for fetch)
+  const cached = localStorage.getItem(SETTINGS_CACHE_KEY);
+  if(cached){
+    try{
+      applySettingsData(JSON.parse(cached), false);
+    }catch(e){}
+  }
+
+  // Auto-sync from Settings Sheet in background on load
+  if(savedUrl) syncSettingsSheet(true);
+}
+
+document.getElementById('btn-save-settings-url').addEventListener('click',()=>{
+  const url = document.getElementById('settings-sheet-url').value.trim();
+  if(!url){toast('Paste the Settings Sheet URL first',true);return}
+  localStorage.setItem(SETTINGS_URL_KEY, url);
+  toast('Settings URL saved');
+  setSettingsStatus('URL saved. Click Sync to load your trackers.','');
+});
+
+document.getElementById('btn-sync-settings').addEventListener('click',()=>syncSettingsSheet(false));
+
+function setSettingsStatus(msg, kind){
+  const el = document.getElementById('settings-sync-status');
+  el.textContent = msg;
+  el.style.color = kind==='ok' ? '#34d399' : kind==='err' ? '#fca5a5' : 'var(--muted)';
+}
+
+// ── Fetch and parse Settings Sheet ─────────────────────────────────────────
+async function syncSettingsSheet(silent){
+  const url = localStorage.getItem(SETTINGS_URL_KEY);
+  if(!url){
+    if(!silent) toast('Save the Settings Sheet URL first',true);
+    return;
+  }
+  if(!silent) setSettingsStatus('🔄 Syncing settings...','');
   try{
-    const t = JSON.parse(localStorage.getItem(REMINDER_TRACKERS_KEY)||'[]');
-    rem.trackers = Array.isArray(t)?t:[];
-  }catch(e){rem.trackers=[]}
-  document.getElementById('phone-mapping').value = localStorage.getItem(REMINDER_PHONES_KEY)||'';
+    // Settings Sheet published as "Entire Document" CSV gives Sheet1 only.
+    // We need to fetch each tab by GID. We'll use the base URL + gid variations.
+    // Strategy: user publishes entire doc → we get tab by replacing/adding gid param.
+    const baseUrl = url.split('?')[0];
+    const params = new URLSearchParams(url.split('?')[1]||'');
+
+    // Fetch all 3 tabs: first find GIDs from URL pattern or try sequentially
+    // Simpler: ask user to publish entire doc → we parse Sheet1 (Trackers),
+    // then swap gid for Sheet2 (PhoneMapping) and Sheet3 (Template)
+    // If gid=0 → Sheet1. We try gid=0,1,2 pattern or use sheet name.
+
+    const fetchTab = async(gid)=>{
+      const u = `${baseUrl}?gid=${gid}&single=true&output=csv&_=${Date.now()}`;
+      const r = await fetch(u);
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      return parseCSV(await r.text());
+    };
+
+    // Try fetching. Most Google Sheets assign gid=0 to first sheet, but can vary.
+    // We'll fetch the whole-doc CSV (no gid) and then try gid-based for others.
+    const wholeResp = await fetch(url.includes('_=') ? url : url + (url.includes('?')?'&':'?')+'_='+Date.now());
+    if(!wholeResp.ok) throw new Error('HTTP '+wholeResp.status+' — is the sheet published?');
+
+    // For multi-sheet we need individual tab GIDs.
+    // Simplest: publish each tab separately and store 3 URLs.
+    // Better UX: try to get GID list from the spreadsheet HTML page.
+    // We'll use a pragmatic approach: parse sheet1 from whole-doc CSV,
+    // then try gid=0,1,2 fallback for phone/template tabs.
+    const sheet1Rows = parseCSV(await wholeResp.text());
+
+    // Detect which tab we got (check headers)
+    let trackersRows=[], phonesRows=[], templateRows=[];
+
+    const h = (sheet1Rows[0]||[]).map(c=>String(c||'').toLowerCase());
+    if(h.some(c=>c.includes('name')||c.includes('url'))){
+      trackersRows = sheet1Rows;
+    }
+
+    // Try gids 0,1,2,3 for phones and template
+    for(let gid=0;gid<=4;gid++){
+      try{
+        const rows = await fetchTab(gid);
+        if(rows.length<1) continue;
+        const hdr = (rows[0]||[]).map(c=>String(c||'').toLowerCase());
+        if(hdr.some(c=>c.includes('phone')||c.includes('mobile')) && phonesRows.length===0){
+          phonesRows = rows;
+        } else if(hdr.some(c=>c.includes('name')||c.includes('tracker')||c.includes('url')) && trackersRows.length===0){
+          trackersRows = rows;
+        } else if(rows.length>=1 && String(rows[0][0]||'').includes('{') && templateRows.length===0){
+          templateRows = rows;
+        }
+      }catch(e){}
+    }
+
+    const data = {trackers:[], phoneMap:{}, template:DEFAULT_REMINDER_TEMPLATE};
+
+    // Parse Trackers tab
+    if(trackersRows.length>1){
+      const hdr = trackersRows[0].map(c=>String(c||'').toLowerCase());
+      const nameCol = hdr.findIndex(c=>c.includes('name'));
+      const urlCol  = hdr.findIndex(c=>c.includes('url'));
+      if(nameCol>=0 && urlCol>=0){
+        for(let r=1;r<trackersRows.length;r++){
+          const row = trackersRows[r];
+          const name = String(row[nameCol]||'').trim();
+          const url_ = String(row[urlCol]||'').trim();
+          if(name && url_){
+            // Preserve existing lastSync/lastData if tracker already known
+            const existing = rem.trackers.find(t=>t.name===name);
+            data.trackers.push({
+              id: existing?.id || ('tr_'+Date.now()+'_'+Math.random().toString(36).slice(2,6)+'_'+r),
+              name, url: url_,
+              lastSync: existing?.lastSync||null,
+              lastData: existing?.lastData||null
+            });
+          }
+        }
+      }
+    }
+
+    // Parse PhoneMapping tab
+    if(phonesRows.length>1){
+      const hdr = phonesRows[0].map(c=>String(c||'').toLowerCase());
+      const bCol = hdr.findIndex(c=>c.includes('block')||c.includes('name'));
+      const pCol = hdr.findIndex(c=>c.includes('phone')||c.includes('mobile')||c.includes('number'));
+      if(bCol>=0 && pCol>=0){
+        for(let r=1;r<phonesRows.length;r++){
+          const row = phonesRows[r];
+          const b = String(row[bCol]||'').trim();
+          const p = String(row[pCol]||'').replace(/[^0-9]/g,'');
+          if(b && p) data.phoneMap[b] = p;
+        }
+      }
+    }
+
+    // Parse Template tab (A1 cell)
+    if(templateRows.length>=1 && templateRows[0][0]){
+      const t = String(templateRows[0][0]).trim();
+      if(t.length>20) data.template = t;
+    }
+
+    // Also check localStorage for custom template
+    const localTpl = localStorage.getItem(REMINDER_TEMPLATE_KEY);
+    if(localTpl) data.template = localTpl;
+
+    localStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(data));
+    applySettingsData(data, true);
+    setSettingsStatus(`✓ Settings synced at ${new Date().toLocaleTimeString()} — ${data.trackers.length} trackers, ${Object.keys(data.phoneMap).length} phone mappings`,'ok');
+    if(!silent) toast('✓ Settings loaded from Google Sheet');
+
+  }catch(err){
+    console.error(err);
+    setSettingsStatus('✗ '+err.message,'err');
+    if(!silent) toast('Settings sync failed: '+err.message,true);
+  }
 }
 
-function saveTrackers(){
-  localStorage.setItem(REMINDER_TRACKERS_KEY, JSON.stringify(rem.trackers));
+function applySettingsData(data, merge){
+  if(data.trackers && data.trackers.length>0){
+    if(merge){
+      // Merge: preserve lastSync/lastData from existing trackers
+      data.trackers.forEach(nt=>{
+        const ex = rem.trackers.find(t=>t.name===nt.name);
+        if(ex){ nt.lastSync=ex.lastSync; nt.lastData=ex.lastData; }
+      });
+    }
+    rem.trackers = data.trackers;
+  }
+  if(data.phoneMap) rem.phoneMap = data.phoneMap;
+  if(data.template) rem.template = data.template;
+  renderTrackers();
 }
 
-function flashTag(id){
-  const el = document.getElementById(id);
-  if(!el) return;
-  el.style.opacity = '1';
-  setTimeout(()=>el.style.opacity = '0', 1500);
-}
+// Help modal
+document.getElementById('btn-show-settings-help').addEventListener('click',()=>{
+  document.getElementById('settings-help-modal').style.display='flex';
+});
+document.getElementById('settings-help-close').addEventListener('click',()=>{
+  document.getElementById('settings-help-modal').style.display='none';
+});
+document.getElementById('settings-help-modal').addEventListener('click',e=>{
+  if(e.target.id==='settings-help-modal') e.target.style.display='none';
+});
 
-// Render the list of saved trackers
+// Sync All button
+document.getElementById('btn-sync-all-trackers').addEventListener('click',async()=>{
+  if(rem.trackers.length===0){toast('No trackers loaded yet. Sync Settings first.',true);return}
+  toast('Syncing all trackers...');
+  for(const t of rem.trackers) await syncTracker(t.id);
+  toast('✓ All trackers synced');
+});
+
+// ── Render tracker cards ───────────────────────────────────────────────────
 function renderTrackers(){
   const wrap = document.getElementById('trackers-list');
+  if(!wrap) return;
   if(rem.trackers.length===0){
-    wrap.innerHTML = '<div class="empty-trackers">No trackers added yet. Click <b>➕ Add Tracker</b> to start.</div>';
+    wrap.innerHTML = `<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px;border:2px dashed var(--border);border-radius:8px">
+      No trackers loaded yet.<br>Paste your Settings Sheet URL above and click 🔄 Sync.
+    </div>`;
     return;
   }
   wrap.innerHTML = rem.trackers.map(t=>{
     const stats = t.lastData ? `
       <div class="stats-row">
-        <span class="stat-pill r">🔴 Not Started: ${t.lastData.notStarted.length}</span>
-        <span class="stat-pill y">🟡 Partial: ${t.lastData.partial.length}</span>
-        <span class="stat-pill g">✅ Completed: ${t.lastData.completed.length}</span>
+        <span class="stat-pill r">🔴 ${t.lastData.notStarted.length} Not Started</span>
+        <span class="stat-pill y">🟡 ${t.lastData.partial.length} Partial</span>
+        <span class="stat-pill g">✅ ${t.lastData.completed.length} Done</span>
         <span class="stat-pill" style="background:rgba(148,163,184,.15);color:#cbd5e1">Total: ${t.lastData.total}</span>
-        <span class="last-sync">Last sync: ${t.lastSync ? new Date(t.lastSync).toLocaleString() : 'never'}</span>
-      </div>` : '';
+        <span class="last-sync" style="margin-left:auto;font-size:11px;color:var(--muted)">
+          ${t.lastSync ? 'Synced '+new Date(t.lastSync).toLocaleTimeString() : 'Not synced yet'}
+        </span>
+      </div>` : `<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Not synced yet — click 🔄 Sync</div>`;
     return `<div class="tracker-card" data-id="${t.id}">
-      <div class="head">
-        <div class="name">📋 ${t.name||'(unnamed)'}</div>
-      </div>
+      <div class="head"><div class="name">📋 ${t.name}</div></div>
       <div class="url" title="${t.url}">${t.url}</div>
       ${stats}
       <div class="actions">
         <button class="btn" data-action="sync">🔄 Sync</button>
         <button class="btn success" data-action="generate" ${t.lastData?'':'disabled'}>📲 Generate Message</button>
-        <button class="btn-tiny" data-action="edit">✏️ Edit</button>
-        <button class="btn-tiny danger" data-action="delete">🗑️ Delete</button>
       </div>
     </div>`;
   }).join('');
@@ -3014,108 +3207,49 @@ function renderTrackers(){
   wrap.querySelectorAll('.tracker-card').forEach(card=>{
     const id = card.dataset.id;
     card.querySelector('[data-action="sync"]').addEventListener('click',()=>syncTracker(id));
-    card.querySelector('[data-action="generate"]').addEventListener('click',()=>openReminderEditor(id));
-    card.querySelector('[data-action="edit"]').addEventListener('click',()=>openTrackerModal(id));
-    card.querySelector('[data-action="delete"]').addEventListener('click',()=>{
-      if(confirm('Delete this tracker?')){
-        rem.trackers = rem.trackers.filter(x=>x.id!==id);
-        saveTrackers();
-        renderTrackers();
-      }
-    });
+    const genBtn = card.querySelector('[data-action="generate"]');
+    if(!genBtn.disabled) genBtn.addEventListener('click',()=>openReminderEditor(id));
   });
 }
 
-// Add/Edit modal
-function openTrackerModal(id){
-  rem.editingId = id||null;
-  const t = id ? rem.trackers.find(x=>x.id===id) : null;
-  document.getElementById('tracker-modal-title').textContent = t ? 'Edit Tracker' : 'Add Tracker';
-  document.getElementById('tracker-name-input').value = t?.name||'';
-  document.getElementById('tracker-url-input').value = t?.url||'';
-  document.getElementById('tracker-modal').style.display='flex';
-}
-
-function closeTrackerModal(){
-  document.getElementById('tracker-modal').style.display='none';
-  rem.editingId = null;
-}
-
-document.getElementById('btn-add-tracker').addEventListener('click',()=>openTrackerModal(null));
-document.getElementById('tracker-modal-close').addEventListener('click',closeTrackerModal);
-document.getElementById('tracker-modal-cancel').addEventListener('click',closeTrackerModal);
-document.getElementById('tracker-modal').addEventListener('click',e=>{
-  if(e.target.id==='tracker-modal') closeTrackerModal();
-});
-document.getElementById('tracker-modal-save').addEventListener('click',()=>{
-  const name = document.getElementById('tracker-name-input').value.trim();
-  const url = document.getElementById('tracker-url-input').value.trim();
-  if(!name || !url){toast('Name and URL required',true);return}
-  if(rem.editingId){
-    const t = rem.trackers.find(x=>x.id===rem.editingId);
-    if(t){t.name=name;t.url=url}
-  } else {
-    rem.trackers.push({
-      id: 'tr_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
-      name, url, lastSync:null, lastData:null
-    });
-  }
-  saveTrackers();
-  closeTrackerModal();
-  renderTrackers();
-  toast('Tracker saved');
-});
-
-// Help modal
-document.getElementById('btn-tracker-help').addEventListener('click',()=>{
-  document.getElementById('tracker-help-modal').style.display='flex';
-});
-document.getElementById('tracker-help-close').addEventListener('click',()=>{
-  document.getElementById('tracker-help-modal').style.display='none';
-});
-document.getElementById('tracker-help-modal').addEventListener('click',e=>{
-  if(e.target.id==='tracker-help-modal') e.target.style.display='none';
-});
-
-// Save phones
-document.getElementById('btn-save-phones').addEventListener('click',()=>{
-  localStorage.setItem(REMINDER_PHONES_KEY, document.getElementById('phone-mapping').value);
-  flashTag('phone-saved-tag');
-  toast('Phone mapping saved');
-});
-
-// ----- SYNC TRACKER (reads CSV, classifies blocks) -----
+// ── Sync individual tracker ────────────────────────────────────────────────
 async function syncTracker(id){
   const t = rem.trackers.find(x=>x.id===id);
   if(!t) return;
-  toast('🔄 Syncing '+t.name+'...');
+  const card = document.querySelector(`.tracker-card[data-id="${id}"]`);
+  if(card){
+    const btn = card.querySelector('[data-action="sync"]');
+    if(btn){ btn.textContent='⏳ Syncing...'; btn.disabled=true; }
+  }
   try{
-    const fetchUrl = t.url + (t.url.includes('?')?'&':'?') + '_=' + Date.now();
+    const fetchUrl = t.url+(t.url.includes('?')?'&':'?')+'_='+Date.now();
     const resp = await fetch(fetchUrl);
-    if(!resp.ok) throw new Error('HTTP '+resp.status+' — check sheet is published as CSV');
+    if(!resp.ok) throw new Error('HTTP '+resp.status);
     const csv = await resp.text();
-    if(!csv || csv.length<5) throw new Error('Empty CSV');
-
-    const rows = parseCSV(csv);  // already exists from squad module
-    if(rows.length<2) throw new Error('No data rows');
-
-    const data = classifyTrackerRows(rows);
+    if(!csv||csv.length<5) throw new Error('Empty CSV');
+    const rows = parseCSV(csv);
+    if(rows.length<2) throw new Error('No data rows in Tracker tab');
     t.lastSync = Date.now();
-    t.lastData = data;
-    saveTrackers();
+    t.lastData = classifyTrackerRows(rows);
+    // Update cache
+    const cached = JSON.parse(localStorage.getItem(SETTINGS_CACHE_KEY)||'{}');
+    if(cached.trackers){
+      const ci = cached.trackers.findIndex(x=>x.name===t.name);
+      if(ci>=0){cached.trackers[ci].lastSync=t.lastSync;cached.trackers[ci].lastData=t.lastData;}
+      localStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(cached));
+    }
     renderTrackers();
-    toast(`✓ ${t.name} synced — ${data.notStarted.length} not started, ${data.partial.length} partial, ${data.completed.length} done`);
+    toast(`✓ ${t.name}: ${t.lastData.notStarted.length} not started, ${t.lastData.partial.length} partial, ${t.lastData.completed.length} done`);
   }catch(err){
     console.error(err);
-    toast('Sync failed: '+err.message,true);
+    toast('Sync failed ('+t.name+'): '+err.message,true);
+    renderTrackers();
   }
 }
 
-// Classify each row by reading the Overall column
+// ── Classify tracker rows ──────────────────────────────────────────────────
 function classifyTrackerRows(rows){
   const headers = rows[0].map(h=>String(h||'').trim());
-
-  // Find Overall column (prefer one named "Overall", else last non-empty)
   let overallCol = -1;
   for(let c=headers.length-1;c>=0;c--){
     if(/overall/i.test(headers[c])){overallCol=c;break}
@@ -3123,63 +3257,46 @@ function classifyTrackerRows(rows){
   if(overallCol<0) overallCol = headers.length-1;
 
   const notStarted=[],partial=[],completed=[],partialDetails=[];
-
   for(let r=1;r<rows.length;r++){
-    const row = rows[r];
-    const name = String(row[0]||'').trim();
+    const row=rows[r];
+    const name=String(row[0]||'').trim();
     if(!name) continue;
-    const overall = String(row[overallCol]||'').trim();
-
-    // Tests in priority order
-    const isComplete = /✅/.test(overall) || (/complete/i.test(overall) && !/incomplete|not\s*complete/i.test(overall));
-    const isPartial  = /🟡|⚠️/.test(overall) || /partial/i.test(overall);
-    const isNotStart = /🔴|❌/.test(overall) || /not\s*started|missing/i.test(overall) || overall==='';
-
+    const ov=String(row[overallCol]||'').trim();
+    const isComplete=/✅/.test(ov)||(/complete/i.test(ov)&&!/incomplete|not\s*complete/i.test(ov));
+    const isPartial=/🟡|⚠️/.test(ov)||/partial/i.test(ov);
     if(isComplete){
       completed.push(name);
-    } else if(isPartial){
+    }else if(isPartial){
       partial.push(name);
-      // count filled vs total in middle columns
       let filled=0,total=0;
       for(let c=1;c<overallCol;c++){
-        const v = String(row[c]||'').trim();
+        const v=String(row[c]||'').trim();
         if(!v) continue;
         total++;
-        if(/✅/.test(v) || (/complete/i.test(v) && !/incomplete/i.test(v))) filled++;
+        if(/✅/.test(v)||(/complete/i.test(v)&&!/incomplete/i.test(v))) filled++;
       }
-      partialDetails.push({name, filled, total});
-    } else if(isNotStart){
-      notStarted.push(name);
-    } else {
-      // Anything else — treat as not started
+      partialDetails.push({name,filled,total});
+    }else{
       notStarted.push(name);
     }
   }
-
-  return {
-    notStarted, partial, completed,
-    partialDetails,
-    total: notStarted.length + partial.length + completed.length
-  };
+  return{notStarted,partial,completed,partialDetails,total:notStarted.length+partial.length+completed.length};
 }
 
-// ----- OPEN REMINDER EDITOR -----
+// ── Reminder Editor ────────────────────────────────────────────────────────
 function openReminderEditor(id){
   const t = rem.trackers.find(x=>x.id===id);
-  if(!t || !t.lastData){toast('Sync this tracker first',true);return}
+  if(!t||!t.lastData){toast('Sync this tracker first',true);return}
   rem.activeId = id;
-
-  const savedTpl = localStorage.getItem(REMINDER_TEMPLATE_KEY) || DEFAULT_REMINDER_TEMPLATE;
+  const savedTpl = localStorage.getItem(REMINDER_TEMPLATE_KEY)||rem.template||DEFAULT_REMINDER_TEMPLATE;
   const d = t.lastData;
 
-  const html = `
+  document.getElementById('reminder-result-area').innerHTML = `
     <div class="panel">
       <h2><span class="dot"></span> 📲 Generate WhatsApp Message — ${t.name}</h2>
       <div class="reminder-out">
         <div class="head">
-          <div>
-            🔴 ${d.notStarted.length} Not Started • 🟡 ${d.partial.length} Partial • ✅ ${d.completed.length} Done • Total ${d.total}
-          </div>
+          <div>🔴 ${d.notStarted.length} Not Started &nbsp;•&nbsp; 🟡 ${d.partial.length} Partial &nbsp;•&nbsp; ✅ ${d.completed.length} Done &nbsp;•&nbsp; Total ${d.total}</div>
           <button class="icon-btn" onclick="closeReminderEditor()" style="background:rgba(255,255,255,.2);color:white">× Close</button>
         </div>
         <div class="reminder-controls">
@@ -3191,16 +3308,19 @@ function openReminderEditor(id){
             <label><input type="checkbox" id="rem-inc-ns" checked> 🔴 Not Started</label>
             <label><input type="checkbox" id="rem-inc-pf" checked> 🟡 Partial</label>
             <label><input type="checkbox" id="rem-inc-done"> ✅ Completed</label>
-            <label><input type="checkbox" id="rem-show-counts" checked> Show partial counts (5/8)</label>
+            <label><input type="checkbox" id="rem-show-counts" checked> Show partial counts</label>
           </div>
 
           <h4>Tag mode</h4>
           <div class="options-row">
             <label><input type="radio" name="rem-tag" id="rem-tag-no" checked> Plain names</label>
-            <label><input type="radio" name="rem-tag" id="rem-tag-yes"> Use @ phone tags</label>
+            <label><input type="radio" name="rem-tag" id="rem-tag-yes"> Use @ phone tags ${Object.keys(rem.phoneMap).length>0?'('+Object.keys(rem.phoneMap).length+' numbers loaded)':'(no mapping loaded)'}</label>
           </div>
 
-          <h4>Message template <button class="btn-tiny" onclick="saveReminderTemplate()" style="margin-left:8px">💾 Save as default</button> <button class="btn-tiny" onclick="resetReminderTemplate()">↻ Reset</button></h4>
+          <h4>Message template
+            <button class="btn-tiny" onclick="saveReminderTemplate()" style="margin-left:8px">💾 Save as default</button>
+            <button class="btn-tiny" onclick="resetReminderTemplate()">↻ Reset</button>
+          </h4>
           <textarea id="rem-template" rows="12">${escapeHtml(savedTpl)}</textarea>
           <div class="placeholders-help">
             <b>Placeholders:</b>
@@ -3208,7 +3328,6 @@ function openReminderEditor(id){
             <code>{LIST_NS}</code> <code>{LIST_PF}</code> <code>{LIST_DONE}</code>
             <code>{COUNT_NS}</code> <code>{COUNT_PF}</code> <code>{DONE}</code> <code>{TOTAL}</code> <code>{PENDING}</code>
           </div>
-
           <div class="action-bar" style="margin-top:14px">
             <button class="btn success" onclick="generateReminderMsg()">✨ Generate Message</button>
           </div>
@@ -3221,144 +3340,94 @@ function openReminderEditor(id){
           </div>
         </div>
       </div>
-    </div>
-  `;
-  document.getElementById('reminder-result-area').innerHTML = html;
-  // Scroll into view
+    </div>`;
   document.getElementById('reminder-result-area').scrollIntoView({behavior:'smooth',block:'start'});
 }
 
 function closeReminderEditor(){
-  document.getElementById('reminder-result-area').innerHTML = '';
-  rem.activeId = null;
+  document.getElementById('reminder-result-area').innerHTML='';
+  rem.activeId=null;
 }
-
-function escapeHtml(s){
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-function escapeAttr(s){
-  return escapeHtml(s).replace(/"/g,'&quot;');
-}
-
+function escapeHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function escapeAttr(s){return escapeHtml(s).replace(/"/g,'&quot;')}
 function saveReminderTemplate(){
-  const tpl = document.getElementById('rem-template').value;
-  localStorage.setItem(REMINDER_TEMPLATE_KEY, tpl);
+  localStorage.setItem(REMINDER_TEMPLATE_KEY,document.getElementById('rem-template').value);
   toast('Template saved as default');
 }
-function resetReminderTemplate(){
-  document.getElementById('rem-template').value = DEFAULT_REMINDER_TEMPLATE;
-}
+function resetReminderTemplate(){document.getElementById('rem-template').value=DEFAULT_REMINDER_TEMPLATE}
 
-function parsePhoneMapping(txt){
-  const m = {};
-  txt.split(/\r?\n/).forEach(line=>{
-    const parts = line.split('|');
-    if(parts.length>=2){
-      const name = parts[0].trim();
-      const phone = parts[1].trim().replace(/[^0-9]/g,'');
-      if(name && phone) m[name] = phone;
-    }
-  });
-  return m;
-}
-
-function buildBlockList(names, useTags, phoneMap, partialMap, showCounts){
-  if(!names || names.length===0) return '— None —';
+function buildBlockList(names,useTags,phoneMap,partialMap,showCounts){
+  if(!names||names.length===0) return '— None —';
   return names.map((n,i)=>{
-    const num = (i+1)+'. ';
-    const display = useTags && phoneMap[n] ? '@'+phoneMap[n]+' ('+n+')' : n;
-    const cnt = (partialMap && partialMap[n] && showCounts) ? ' — '+partialMap[n].filled+'/'+partialMap[n].total+' sheets done' : '';
+    const num=(i+1)+'. ';
+    const display=useTags&&phoneMap[n]?'@'+phoneMap[n]+' ('+n+')':n;
+    const cnt=(partialMap&&partialMap[n]&&showCounts)?' — '+partialMap[n].filled+'/'+partialMap[n].total+' sheets done':'';
     return num+display+cnt;
   }).join('\n');
 }
 
 function generateReminderMsg(){
-  const t = rem.trackers.find(x=>x.id===rem.activeId);
-  if(!t || !t.lastData) return;
-  const d = t.lastData;
-
-  const incNS    = document.getElementById('rem-inc-ns').checked;
-  const incPF    = document.getElementById('rem-inc-pf').checked;
-  const incDone  = document.getElementById('rem-inc-done').checked;
-  const showCnt  = document.getElementById('rem-show-counts').checked;
-  const useTags  = document.getElementById('rem-tag-yes').checked;
-
-  const phoneMap = useTags ? parsePhoneMapping(document.getElementById('phone-mapping').value) : {};
-  const partialMap = {};
+  const t=rem.trackers.find(x=>x.id===rem.activeId);
+  if(!t||!t.lastData) return;
+  const d=t.lastData;
+  const incNS=document.getElementById('rem-inc-ns').checked;
+  const incPF=document.getElementById('rem-inc-pf').checked;
+  const incDone=document.getElementById('rem-inc-done').checked;
+  const showCnt=document.getElementById('rem-show-counts').checked;
+  const useTags=document.getElementById('rem-tag-yes').checked;
+  const phoneMap=useTags?rem.phoneMap:{};
+  const partialMap={};
   d.partialDetails.forEach(p=>partialMap[p.name]=p);
-
-  const now = new Date();
-  const date = now.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
-  const time = now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
-
-  let template = document.getElementById('rem-template').value;
-
-  // Strip section if unchecked: remove header line + placeholder line + trailing blank
-  function stripSection(tpl, placeholder){
-    const lines = tpl.split('\n');
-    const out = [];
+  const now=new Date();
+  const date=now.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+  const time=now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+  let template=document.getElementById('rem-template').value;
+  function stripSection(tpl,placeholder){
+    const lines=tpl.split('\n'),out=[];
     for(let i=0;i<lines.length;i++){
       if(lines[i].includes(placeholder)){
-        // Remove preceding header line if present
-        if(out.length>0){
-          const prev = out[out.length-1];
-          if(/.*:\s*$|.*\(.*\):/.test(prev) && !prev.includes('Completed:')) out.pop();
-        }
-        // Skip blank line right after
-        if(i+1<lines.length && lines[i+1].trim()==='') i++;
+        if(out.length>0){const prev=out[out.length-1];if(/.*:\s*$|.*\(.*\):/.test(prev)&&!/Completed:/.test(prev))out.pop()}
+        if(i+1<lines.length&&lines[i+1].trim()==='')i++;
         continue;
       }
       out.push(lines[i]);
     }
     return out.join('\n');
   }
-
-  if(!incNS) template = stripSection(template,'{LIST_NS}');
-  if(!incPF) template = stripSection(template,'{LIST_PF}');
-  if(!incDone) template = stripSection(template,'{LIST_DONE}');
-
-  const replacements = {
-    '{TITLE}': document.getElementById('rem-title').value || t.name,
-    '{DATE}': date,
-    '{TIME}': time,
-    '{LIST_NS}': buildBlockList(d.notStarted, useTags, phoneMap, null, false),
-    '{LIST_PF}': buildBlockList(d.partial, useTags, phoneMap, partialMap, showCnt),
-    '{LIST_DONE}': buildBlockList(d.completed, useTags, phoneMap, null, false),
-    '{COUNT_NS}': d.notStarted.length,
-    '{COUNT_PF}': d.partial.length,
-    '{COUNT_DONE}': d.completed.length,
-    '{DONE}': d.completed.length,
-    '{TOTAL}': d.total,
-    '{PENDING}': d.notStarted.length + d.partial.length
+  if(!incNS) template=stripSection(template,'{LIST_NS}');
+  if(!incPF) template=stripSection(template,'{LIST_PF}');
+  if(!incDone) template=stripSection(template,'{LIST_DONE}');
+  const rep={
+    '{TITLE}':document.getElementById('rem-title').value||t.name,
+    '{DATE}':date,'{TIME}':time,
+    '{LIST_NS}':buildBlockList(d.notStarted,useTags,phoneMap,null,false),
+    '{LIST_PF}':buildBlockList(d.partial,useTags,phoneMap,partialMap,showCnt),
+    '{LIST_DONE}':buildBlockList(d.completed,useTags,phoneMap,null,false),
+    '{COUNT_NS}':d.notStarted.length,'{COUNT_PF}':d.partial.length,
+    '{COUNT_DONE}':d.completed.length,'{DONE}':d.completed.length,
+    '{TOTAL}':d.total,'{PENDING}':d.notStarted.length+d.partial.length
   };
-  Object.keys(replacements).forEach(k=>{
-    template = template.split(k).join(replacements[k]);
-  });
-
-  // Collapse 3+ blank lines into 1
-  template = template.replace(/\n{3,}/g,'\n\n').trim();
-
-  document.getElementById('rem-output').textContent = template;
-  document.getElementById('rem-output-wrap').style.display = 'block';
+  Object.keys(rep).forEach(k=>{template=template.split(k).join(rep[k])});
+  template=template.replace(/\n{3,}/g,'\n\n').trim();
+  document.getElementById('rem-output').textContent=template;
+  document.getElementById('rem-output-wrap').style.display='block';
 }
 
 async function copyReminderMsg(){
-  const txt = document.getElementById('rem-output').textContent;
+  const txt=document.getElementById('rem-output').textContent;
   try{
     await navigator.clipboard.writeText(txt);
-    const tag = document.getElementById('rem-copied');
-    tag.style.opacity = '1';
-    setTimeout(()=>tag.style.opacity = '0', 1500);
-    toast('✓ Copied');
+    const tag=document.getElementById('rem-copied');
+    tag.style.opacity='1';setTimeout(()=>tag.style.opacity='0',1500);
+    toast('✓ Copied to clipboard');
   }catch(e){toast('Copy failed: '+e.message,true)}
 }
 
 // Init
-loadReminderState();
-renderTrackers();
+initReminder();
 
 
-
+</script>
 
 </script>
 
