@@ -1208,6 +1208,7 @@ function processReports(){
 
   // 4. Process each MIS row
   const blockStaffInspections = {}; // designation -> count
+  const blockStaffByDate = {};       // designation -> {dateStr: count}
   const drInspections = []; // detailed list for Deputy Registrar
   const jrInspections = []; // detailed list for Joint Registrar
 
@@ -1215,8 +1216,27 @@ function processReports(){
   state.phoneMap.forEach(p=>{
     if(classifyRole(p.designation)==='Block Staff'){
       blockStaffInspections[p.designation.trim()] = 0;
+      blockStaffByDate[p.designation.trim()] = {};
     }
   });
+
+  // Helper: convert any date value to YYYY-MM-DD
+  function toIsoDate(d){
+    if(!d) return null;
+    if(d instanceof Date) return d.toISOString().slice(0,10);
+    if(typeof d==='number'){
+      const dt = new Date(Date.UTC(1899,11,30) + d*86400000);
+      return dt.toISOString().slice(0,10);
+    }
+    const s = String(d).trim();
+    let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if(m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+    m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
+    if(m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+    const dt = new Date(s);
+    if(!isNaN(dt)) return dt.toISOString().slice(0,10);
+    return null;
+  }
 
   let unmatchedPhones = 0;
   dataRows.forEach((r,i)=>{
@@ -1232,8 +1252,14 @@ function processReports(){
     const date = r[colDate];
 
     if(lookup.role==='Block Staff'){
-      blockStaffInspections[lookup.designation] =
-        (blockStaffInspections[lookup.designation]||0)+1;
+      const desig = lookup.designation;
+      blockStaffInspections[desig] = (blockStaffInspections[desig]||0)+1;
+      // Track date
+      const isoDate = toIsoDate(date);
+      if(isoDate){
+        if(!blockStaffByDate[desig]) blockStaffByDate[desig]={};
+        blockStaffByDate[desig][isoDate] = (blockStaffByDate[desig][isoDate]||0)+1;
+      }
     } else if(lookup.role==='Deputy Registrar'){
       drInspections.push({
         sl: drInspections.length+1,
@@ -1262,6 +1288,7 @@ function processReports(){
 
   state.results = {
     blockStaffList,
+    blockStaffByDate,
     drInspections,
     jrInspections,
     totalRows: dataRows.length,
@@ -1447,8 +1474,12 @@ function renderResults(){
   html += renderDetail('Deputy Registrar', r.drInspections, 'card-dr', '#7c3aed', '#a78bfa');
   html += renderDetail('Joint Registrar', r.jrInspections, 'card-jr', '#0891b2', '#22d3ee');
 
+  // Consistency Report (date-wise attendance-style view)
+  html += renderConsistencyReport(r);
+
   document.getElementById('results-area').innerHTML = html;
   document.getElementById('btn-download-excel').addEventListener('click', downloadExcel);
+  bindConsistencyEvents();
 }
 
 function renderDetail(title, list, cardId, bg1, bg2){
@@ -1490,6 +1521,418 @@ function renderDetail(title, list, cardId, bg1, bg2){
   </div>
   `;
 }
+
+// ============================================================
+// CONSISTENCY REPORT (date-wise inspection view)
+// ============================================================
+const consistency = {
+  showAllDays: false,
+  threshold: 10,
+  data: null,
+  holidays: new Set(),       // YYYY-MM-DD strings of public holidays
+  hiddenBlocks: new Set()    // staff names filtered out
+};
+
+// Compute default shop holidays: 1st & 2nd Friday + 3rd & 4th Sunday of the month
+function defaultShopHolidays(year, month){
+  // year, month (1-12)
+  const fridays = [], sundays = [];
+  const daysInMonth = new Date(year, month, 0).getDate();
+  for(let d=1; d<=daysInMonth; d++){
+    const dt = new Date(year, month-1, d);
+    const dow = dt.getDay(); // 0=Sun, 5=Fri
+    if(dow===5) fridays.push(d);
+    if(dow===0) sundays.push(d);
+  }
+  const holidays = new Set();
+  // 1st & 2nd Friday
+  if(fridays[0]) holidays.add(`${year}-${String(month).padStart(2,'0')}-${String(fridays[0]).padStart(2,'0')}`);
+  if(fridays[1]) holidays.add(`${year}-${String(month).padStart(2,'0')}-${String(fridays[1]).padStart(2,'0')}`);
+  // 3rd & 4th Sunday
+  if(sundays[2]) holidays.add(`${year}-${String(month).padStart(2,'0')}-${String(sundays[2]).padStart(2,'0')}`);
+  if(sundays[3]) holidays.add(`${year}-${String(month).padStart(2,'0')}-${String(sundays[3]).padStart(2,'0')}`);
+  return holidays;
+}
+
+function renderConsistencyReport(r){
+  if(!r.blockStaffByDate) return '';
+
+  // Collect all dates that have inspections
+  const allDatesSet = new Set();
+  Object.values(r.blockStaffByDate).forEach(dateMap=>{
+    Object.keys(dateMap).forEach(d=>allDatesSet.add(d));
+  });
+  if(allDatesSet.size===0){
+    return `<div class="panel">
+      <h2><span class="dot"></span> 📅 Consistency Report</h2>
+      <div class="empty-state"><div class="icon">📭</div>No date data available in MIS</div>
+    </div>`;
+  }
+
+  // Determine month from earliest date (or report month input)
+  const sortedDates = [...allDatesSet].sort();
+  const firstDate = sortedDates[0];
+  const [yyyy, mm] = firstDate.split('-');
+  const year = parseInt(yyyy), month = parseInt(mm);
+
+  // Generate all days of the month
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const allMonthDays = [];
+  for(let d=1; d<=daysInMonth; d++){
+    allMonthDays.push(`${yyyy}-${mm}-${String(d).padStart(2,'0')}`);
+  }
+
+  consistency.data = {
+    allMonthDays,
+    inspectionDates: sortedDates,
+    blockStaffByDate: r.blockStaffByDate,
+    blockStaffList: r.blockStaffList,
+    monthLabel: getMonthLabel(),
+    year, month
+  };
+  // Initialize default shop holidays for this month if not already set
+  if(consistency.holidays.size === 0){
+    consistency.holidays = defaultShopHolidays(year, month);
+  }
+
+  return `
+    <div class="panel" id="consistency-panel">
+      <h2><span class="dot"></span> 📅 Consistency Report — Date-wise Inspections
+        <span style="margin-left:auto;font-size:12px;color:var(--muted);font-weight:400">
+          ${consistency.data.inspectionDates.length} active days of ${daysInMonth}
+        </span>
+      </h2>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
+        Review which block staff inspected on which days. Useful to spot bursts (many shops in one day) or inactivity patterns.
+      </p>
+
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:14px;padding:12px;background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px">
+        <label style="font-size:13px;font-weight:600">Date display:</label>
+        <div style="display:flex;gap:14px;font-size:13px">
+          <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+            <input type="radio" name="cons-mode" value="active" ${!consistency.showAllDays?'checked':''}> Only inspection days
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+            <input type="radio" name="cons-mode" value="all" ${consistency.showAllDays?'checked':''}> All days of month
+          </label>
+        </div>
+
+        <label style="font-size:13px;font-weight:600;margin-left:14px">Highlight when ≥</label>
+        <input type="number" id="cons-threshold" value="${consistency.threshold}" min="1" max="50"
+          style="width:70px;background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:6px 10px;border-radius:5px;font-size:13px">
+        <span style="font-size:12px;color:var(--muted)">shops in one day</span>
+
+        <div style="margin-left:auto;display:flex;gap:6px">
+          <button class="btn-tiny" onclick="downloadConsistencyExcel()">📥 Excel</button>
+          <button class="btn-tiny" onclick="downloadConsistencyPDF()">📄 PDF</button>
+        </div>
+      </div>
+
+      <!-- Block Filter + Holiday Controls -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+        <div style="padding:12px;background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px">
+          <div style="font-size:13px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
+            <span>🔍 Filter blocks</span>
+            <span style="display:flex;gap:6px">
+              <button class="btn-tiny" onclick="toggleAllBlocks(true)">Select all</button>
+              <button class="btn-tiny" onclick="toggleAllBlocks(false)">Hide all</button>
+            </span>
+          </div>
+          <div id="cons-filter-list" style="max-height:140px;overflow-y:auto;display:flex;flex-wrap:wrap;gap:5px"></div>
+        </div>
+        <div style="padding:12px;background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px">
+          <div style="font-size:13px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
+            <span>🎉 Holidays</span>
+            <span style="display:flex;gap:6px;align-items:center">
+              <input type="date" id="cons-holiday-add"
+                style="background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:4px 8px;border-radius:4px;font-size:12px">
+              <button class="btn-tiny" onclick="addHolidayFromInput()">➕ Add</button>
+              <button class="btn-tiny" onclick="resetDefaultHolidays()" title="Reset to default 1st&2nd Friday + 3rd&4th Sunday">↻ Default</button>
+              <button class="btn-tiny danger" onclick="clearHolidays()">Clear all</button>
+            </span>
+          </div>
+          <div id="cons-holiday-list" style="max-height:90px;overflow-y:auto;display:flex;flex-wrap:wrap;gap:5px"></div>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px">
+            💡 Tip: Click any date column header in the table to toggle as holiday.
+          </div>
+        </div>
+      </div>
+
+      <div id="consistency-table-wrap" style="overflow-x:auto;background:white;border-radius:10px;border:1px solid #cbd5e1;color:#1e293b">
+        ${renderConsistencyTable()}
+      </div>
+    </div>`;
+}
+
+function renderConsistencyTable(){
+  const c = consistency.data;
+  if(!c) return '';
+  const dates = consistency.showAllDays ? c.allMonthDays : c.inspectionDates;
+  const threshold = consistency.threshold;
+  const holidays = consistency.holidays;
+
+  // Apply block filter — visible staff only
+  const visibleStaff = c.blockStaffList
+    .slice()
+    .sort((a,b)=>a.name.localeCompare(b.name))
+    .filter(s=>!consistency.hiddenBlocks.has(s.name));
+
+  // Header row
+  let html = `<table class="cons-table" id="cons-table-render" style="width:100%;border-collapse:collapse;font-size:12px;font-family:'Segoe UI',sans-serif">
+    <thead>
+      <tr>
+        <th style="background:#1e3a8a;color:white;padding:8px 6px;border:1px solid #1e40af;position:sticky;left:0;z-index:2">#</th>
+        <th style="background:#1e3a8a;color:white;padding:8px 10px;border:1px solid #1e40af;text-align:left;position:sticky;left:30px;z-index:2;min-width:160px">Block / Staff</th>
+        <th style="background:#1e3a8a;color:white;padding:8px 10px;border:1px solid #1e40af;text-align:center;min-width:80px">Completed</th>
+        ${dates.map(d=>{
+          const dt = new Date(d);
+          const dayNum = dt.getDate();
+          const dayName = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getDay()];
+          const isHoliday = holidays.has(d);
+          const bgColor = isHoliday ? '#94a3b8' : '#3b82f6';
+          const title = isHoliday ? 'Holiday — click to mark as working day' : 'Working day — click to mark as holiday';
+          return `<th data-holiday-toggle="${d}" title="${title}"
+            style="background:${bgColor};color:white;padding:6px 4px;border:1px solid #1e40af;text-align:center;min-width:42px;font-size:11px;cursor:pointer">
+            ${dayNum}<br><span style="font-size:9px;opacity:.85">${dayName}</span>
+          </th>`;
+        }).join('')}
+      </tr>
+    </thead>
+    <tbody>`;
+
+  visibleStaff.forEach((s, idx)=>{
+    const dateMap = c.blockStaffByDate[s.name] || {};
+    html += `<tr>
+      <td style="padding:6px;border:1px solid #e2e8f0;text-align:center;font-weight:600;color:#475569;background:#f8fafc;position:sticky;left:0">${idx+1}</td>
+      <td style="padding:6px 10px;border:1px solid #e2e8f0;font-weight:600;background:#f8fafc;position:sticky;left:30px">${s.name}</td>
+      <td style="padding:6px;border:1px solid #e2e8f0;text-align:center;font-weight:700;color:${s.count>=45?'#059669':s.count>=30?'#d97706':'#dc2626'}">${s.count}</td>
+      ${dates.map(d=>{
+        const cnt = dateMap[d] || 0;
+        const isHoliday = holidays.has(d);
+        const holidayBg = isHoliday ? 'background:#f1f5f9;' : '';
+        if(cnt===0){
+          return `<td style="padding:5px;border:1px solid #e2e8f0;text-align:center;color:#cbd5e1;${holidayBg}"></td>`;
+        }
+        const isHigh = cnt >= threshold;
+        const cellBg = isHigh ? '#fef3c7' : (isHoliday ? '#f1f5f9' : '');
+        const cellColor = isHigh ? '#b45309' : '#0f172a';
+        return `<td style="padding:5px;border:1px solid #e2e8f0;text-align:center;font-weight:${isHigh?'700':'500'};background:${cellBg};color:${cellColor}">${cnt}</td>`;
+      }).join('')}
+    </tr>`;
+  });
+
+  // Add a "PUBLIC HOLIDAY" overlay row that visually merges holiday columns vertically
+  // Realised via a strip just below header showing "PH" rotated text
+  // Actually, we use the gray header bg + light cell background to show holiday status, simpler.
+
+  html += `</tbody></table>`;
+  return html;
+}
+
+function bindConsistencyEvents(){
+  const radios = document.querySelectorAll('input[name="cons-mode"]');
+  radios.forEach(r=>r.addEventListener('change',e=>{
+    consistency.showAllDays = e.target.value==='all';
+    refreshConsistencyTable();
+  }));
+  const t = document.getElementById('cons-threshold');
+  if(t) t.addEventListener('input',e=>{
+    consistency.threshold = parseInt(e.target.value)||10;
+    refreshConsistencyTable();
+  });
+  // Initial paint of filter list and holiday list
+  renderFilterList();
+  renderHolidayList();
+  attachHolidayHeaderClicks();
+}
+
+function refreshConsistencyTable(){
+  const wrap = document.getElementById('consistency-table-wrap');
+  if(!wrap) return;
+  wrap.innerHTML = renderConsistencyTable();
+  attachHolidayHeaderClicks();
+  renderHolidayList();
+}
+
+function attachHolidayHeaderClicks(){
+  document.querySelectorAll('th[data-holiday-toggle]').forEach(th=>{
+    th.addEventListener('click',()=>{
+      const d = th.dataset.holidayToggle;
+      if(consistency.holidays.has(d)) consistency.holidays.delete(d);
+      else consistency.holidays.add(d);
+      refreshConsistencyTable();
+    });
+  });
+}
+
+function renderFilterList(){
+  const wrap = document.getElementById('cons-filter-list');
+  if(!wrap || !consistency.data) return;
+  const staff = consistency.data.blockStaffList.slice().sort((a,b)=>a.name.localeCompare(b.name));
+  wrap.innerHTML = staff.map(s=>{
+    const checked = !consistency.hiddenBlocks.has(s.name);
+    return `<label style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(15,23,42,.4);border:1px solid var(--border);border-radius:14px;font-size:11px;cursor:pointer">
+      <input type="checkbox" data-block-filter="${s.name}" ${checked?'checked':''} style="margin:0">
+      <span>${s.name}</span>
+    </label>`;
+  }).join('');
+  wrap.querySelectorAll('[data-block-filter]').forEach(cb=>{
+    cb.addEventListener('change',e=>{
+      const name = e.target.dataset.blockFilter;
+      if(e.target.checked) consistency.hiddenBlocks.delete(name);
+      else consistency.hiddenBlocks.add(name);
+      refreshConsistencyTable();
+    });
+  });
+}
+
+function toggleAllBlocks(showAll){
+  if(!consistency.data) return;
+  if(showAll){
+    consistency.hiddenBlocks.clear();
+  } else {
+    consistency.data.blockStaffList.forEach(s=>consistency.hiddenBlocks.add(s.name));
+  }
+  renderFilterList();
+  refreshConsistencyTable();
+}
+
+function renderHolidayList(){
+  const wrap = document.getElementById('cons-holiday-list');
+  if(!wrap) return;
+  const list = [...consistency.holidays].sort();
+  if(list.length===0){
+    wrap.innerHTML = '<i style="color:var(--muted);font-size:11px">No holidays set</i>';
+    return;
+  }
+  wrap.innerHTML = list.map(d=>{
+    const dt = new Date(d);
+    const dayName = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getDay()];
+    return `<span style="display:inline-flex;align-items:center;gap:6px;padding:3px 8px;background:rgba(148,163,184,.2);border:1px solid #94a3b8;border-radius:14px;font-size:11px;color:var(--ink)">
+      ${dt.getDate()}-${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][dt.getMonth()]} (${dayName})
+      <span style="cursor:pointer;color:#fca5a5;font-weight:700" onclick="removeHoliday('${d}')">×</span>
+    </span>`;
+  }).join('');
+}
+
+function addHolidayFromInput(){
+  const inp = document.getElementById('cons-holiday-add');
+  if(!inp || !inp.value) return;
+  consistency.holidays.add(inp.value);
+  inp.value = '';
+  refreshConsistencyTable();
+}
+
+function removeHoliday(d){
+  consistency.holidays.delete(d);
+  refreshConsistencyTable();
+}
+
+function clearHolidays(){
+  if(!confirm('Clear all holidays?')) return;
+  consistency.holidays.clear();
+  refreshConsistencyTable();
+}
+
+function resetDefaultHolidays(){
+  if(!consistency.data) return;
+  consistency.holidays = defaultShopHolidays(consistency.data.year, consistency.data.month);
+  refreshConsistencyTable();
+}
+
+function downloadConsistencyExcel(){
+  const c = consistency.data;
+  if(!c) return;
+  const dates = consistency.showAllDays ? c.allMonthDays : c.inspectionDates;
+  const staffList = c.blockStaffList.slice()
+    .sort((a,b)=>a.name.localeCompare(b.name))
+    .filter(s=>!consistency.hiddenBlocks.has(s.name));
+  const holidays = consistency.holidays;
+
+  const header = ['#', 'Block / Staff', 'Completed', ...dates.map(d=>{
+    const dt = new Date(d);
+    const tag = holidays.has(d) ? ' [H]' : '';
+    return `${dt.getDate()}-${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][dt.getMonth()]}${tag}`;
+  })];
+  const rows = [header];
+  staffList.forEach((s,i)=>{
+    const dm = c.blockStaffByDate[s.name]||{};
+    rows.push([i+1, s.name, s.count, ...dates.map(d=>dm[d]||'')]);
+  });
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:5},{wch:24},{wch:12}, ...dates.map(()=>({wch:8}))];
+  XLSX.utils.book_append_sheet(wb, ws, 'Consistency');
+  XLSX.writeFile(wb, `Consistency_${c.monthLabel.replace(' ','_')}.xlsx`);
+  toast('✓ Excel downloaded — [H] marks holidays');
+}
+
+function downloadConsistencyPDF(){
+  const c = consistency.data;
+  if(!c) return;
+  const dates = consistency.showAllDays ? c.allMonthDays : c.inspectionDates;
+  const staffList = c.blockStaffList.slice()
+    .sort((a,b)=>a.name.localeCompare(b.name))
+    .filter(s=>!consistency.hiddenBlocks.has(s.name));
+  const threshold = consistency.threshold;
+  const holidays = consistency.holidays;
+
+  let bodyRows = '';
+  staffList.forEach((s,i)=>{
+    const dm = c.blockStaffByDate[s.name]||{};
+    bodyRows += `<tr>
+      <td style="text-align:center">${i+1}</td>
+      <td><b>${s.name}</b></td>
+      <td style="text-align:center;font-weight:700;color:${s.count>=45?'#059669':s.count>=30?'#d97706':'#dc2626'}">${s.count}</td>
+      ${dates.map(d=>{
+        const cnt=dm[d]||0;
+        const isHol = holidays.has(d);
+        const holBg = isHol?'background:#f1f5f9;':'';
+        if(cnt===0) return `<td style="${holBg}"></td>`;
+        const hi = cnt>=threshold;
+        const bg = hi?'background:#fef3c7;font-weight:700':holBg;
+        return `<td style="text-align:center;${bg}">${cnt}</td>`;
+      }).join('')}
+    </tr>`;
+  });
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Consistency Report ${c.monthLabel}</title>
+    <style>
+      body{font-family:Arial,sans-serif;padding:20px;color:#1e293b}
+      h1{font-size:18px;margin:0 0 6px;color:#1e3a8a}
+      .sub{font-size:12px;color:#64748b;margin-bottom:18px}
+      table{width:100%;border-collapse:collapse;font-size:10px}
+      th{background:#1e3a8a;color:white;padding:6px 4px;border:1px solid #1e40af;text-align:center}
+      th.date{background:#3b82f6}
+      th.holiday{background:#94a3b8}
+      td{padding:5px;border:1px solid #cbd5e1}
+      tbody tr:nth-child(even){background:#f8fafc}
+      @media print{body{padding:10px}}
+    </style></head><body>
+    <h1>📅 Consistency Report — ${c.monthLabel}</h1>
+    <div class="sub">${dates.length} ${consistency.showAllDays?'days of month':'days with inspections'} • Highlight threshold: ≥${threshold} shops/day • ${holidays.size} holiday(s) (gray cols) • ${staffList.length} of ${c.blockStaffList.length} blocks shown</div>
+    <table>
+      <thead><tr><th>#</th><th style="text-align:left">Block / Staff</th><th>Completed</th>
+        ${dates.map(d=>{
+          const dt=new Date(d);
+          const isHol = holidays.has(d);
+          const cls = isHol?'holiday':'date';
+          return `<th class="${cls}">${dt.getDate()}<br><small>${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getDay()]}${isHol?' H':''}</small></th>`;
+        }).join('')}
+      </tr></thead>
+      <tbody>${bodyRows}</tbody>
+    </table>
+    </body></html>`;
+
+  const w = window.open('','_blank');
+  w.document.write(html);
+  w.document.close();
+  // Trigger print after document loads
+  setTimeout(()=>{ try{ w.print(); }catch(e){} }, 500);
+  toast('✓ PDF print dialog opened — choose "Save as PDF"');
+}
+
 
 // ============================================================
 // SCREENSHOT (clipboard + download)
@@ -2213,7 +2656,7 @@ async function syncFromGSheet(){
   try{
     // Add cache buster so refresh always works
     const fetchUrl = url + (url.includes('?')?'&':'?') + '_=' + Date.now();
-    const resp = await fetch(fetchUrl);
+    const resp = await safeFetch(fetchUrl);
     if(!resp.ok) throw new Error('HTTP '+resp.status+' — check that your sheet is published as CSV');
     const csv = await resp.text();
     if(!csv || csv.length<5) throw new Error('Empty response from sheet');
@@ -2278,6 +2721,37 @@ function findCol(headers, candidates){
     if(idx>=0) return idx;
   }
   return -1;
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// safeFetch: tries direct fetch first; on CORS/network failure, falls back
+// to public CORS proxies. Useful when the app is opened as file:// where
+// browsers block cross-origin requests.
+// ──────────────────────────────────────────────────────────────────────────
+const CORS_PROXIES = [
+  url => 'https://corsproxy.io/?' + encodeURIComponent(url),
+  url => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
+  url => 'https://thingproxy.freeboard.io/fetch/' + url
+];
+
+async function safeFetch(url, options){
+  // Try direct first
+  try{
+    const r = await fetch(url, options);
+    if(r.ok) return r;
+    throw new Error('HTTP '+r.status);
+  }catch(directErr){
+    // Only retry GETs through proxies (POSTs to bridge use direct only)
+    if(options && options.method && options.method.toUpperCase() !== 'GET') throw directErr;
+    for(const proxy of CORS_PROXIES){
+      try{
+        const proxyUrl = proxy(url);
+        const r = await fetch(proxyUrl);
+        if(r.ok) return r;
+      }catch(e){ /* try next proxy */ }
+    }
+    throw new Error('All fetch attempts failed (direct + '+CORS_PROXIES.length+' proxies)');
+  }
 }
 
 // Robust CSV parser (handles quoted fields, commas inside quotes, escaped quotes, CR/LF)
@@ -3073,7 +3547,7 @@ async function syncSettingsSheet(silent){
   try{
     // Fetch Sheet1 (Trackers) via whole-doc CSV
     const wholeUrl = url + (url.includes('?')?'&':'?') + '_='+Date.now();
-    const resp = await fetch(wholeUrl);
+    const resp = await safeFetch(wholeUrl);
     if(!resp.ok) throw new Error('HTTP '+resp.status);
     const csv = await resp.text();
     const sheet1 = parseCSV(csv);
@@ -3084,7 +3558,7 @@ async function syncSettingsSheet(silent){
 
     for(let gid=0; gid<=5; gid++){
       try{
-        const r = await fetch(`${baseUrl}?gid=${gid}&single=true&output=csv&_=${Date.now()}`);
+        const r = await safeFetch(`${baseUrl}?gid=${gid}&single=true&output=csv&_=${Date.now()}`);
         if(!r.ok) continue;
         const rows = parseCSV(await r.text());
         if(rows.length<1) continue;
@@ -3357,7 +3831,7 @@ async function syncTracker(id){
   if(card){const b=card.querySelector('[data-action="sync"]');if(b){b.textContent='⏳';b.disabled=true;}}
   try{
     const fu=t.url+(t.url.includes('?')?'&':'?')+'_='+Date.now();
-    const r=await fetch(fu);
+    const r=await safeFetch(fu);
     if(!r.ok) throw new Error('HTTP '+r.status);
     const csv=await r.text();
     if(!csv||csv.length<5) throw new Error('Empty response');
@@ -3554,482 +4028,6 @@ async function copyReminderMsg(){
 // Init
 initReminder();
 
-
-const SETTINGS_URL_KEY      = 'office_settings_sheet_url_v1';
-const SETTINGS_CACHE_KEY    = 'office_settings_cache_v1';
-const REMINDER_TEMPLATE_KEY = 'reminder_template_v1';
-
-const DEFAULT_REMINDER_TEMPLATE =
-`🔔 *{TITLE}*
-📋 Status as of: {DATE}
-
-🔴 *Not Started* ({COUNT_NS}):
-{LIST_NS}
-
-🟡 *Partially Filled* ({COUNT_PF}):
-{LIST_PF}
-
-✅ Completed: {DONE} / {TOTAL}
-
-Please complete pending entries at the earliest.`;
-
-const rem = {
-  trackers: [],     // [{id, name, url, lastSync, lastData}]
-  phoneMap: {},     // {blockName: phone}
-  template: DEFAULT_REMINDER_TEMPLATE,
-  activeId: null
-};
-
-// ── Settings Sheet URL ──────────────────────────────────────────────────────
-function initReminder(){
-  const savedUrl = localStorage.getItem(SETTINGS_URL_KEY)||'';
-  if(savedUrl) document.getElementById('settings-sheet-url').value = savedUrl;
-
-  // Auto-load from cache immediately (so trackers appear without waiting for fetch)
-  const cached = localStorage.getItem(SETTINGS_CACHE_KEY);
-  if(cached){
-    try{
-      applySettingsData(JSON.parse(cached), false);
-    }catch(e){}
-  }
-
-  // Auto-sync from Settings Sheet in background on load
-  if(savedUrl) syncSettingsSheet(true);
-}
-
-document.getElementById('btn-save-settings-url').addEventListener('click',()=>{
-  const url = document.getElementById('settings-sheet-url').value.trim();
-  if(!url){toast('Paste the Settings Sheet URL first',true);return}
-  localStorage.setItem(SETTINGS_URL_KEY, url);
-  toast('Settings URL saved');
-  setSettingsStatus('URL saved. Click Sync to load your trackers.','');
-});
-
-document.getElementById('btn-sync-settings').addEventListener('click',()=>syncSettingsSheet(false));
-
-function setSettingsStatus(msg, kind){
-  const el = document.getElementById('settings-sync-status');
-  el.textContent = msg;
-  el.style.color = kind==='ok' ? '#34d399' : kind==='err' ? '#fca5a5' : 'var(--muted)';
-}
-
-// ── Fetch and parse Settings Sheet ─────────────────────────────────────────
-async function syncSettingsSheet(silent){
-  const url = localStorage.getItem(SETTINGS_URL_KEY);
-  if(!url){
-    if(!silent) toast('Save the Settings Sheet URL first',true);
-    return;
-  }
-  if(!silent) setSettingsStatus('🔄 Syncing settings...','');
-  try{
-    // Settings Sheet published as "Entire Document" CSV gives Sheet1 only.
-    // We need to fetch each tab by GID. We'll use the base URL + gid variations.
-    // Strategy: user publishes entire doc → we get tab by replacing/adding gid param.
-    const baseUrl = url.split('?')[0];
-    const params = new URLSearchParams(url.split('?')[1]||'');
-
-    // Fetch all 3 tabs: first find GIDs from URL pattern or try sequentially
-    // Simpler: ask user to publish entire doc → we parse Sheet1 (Trackers),
-    // then swap gid for Sheet2 (PhoneMapping) and Sheet3 (Template)
-    // If gid=0 → Sheet1. We try gid=0,1,2 pattern or use sheet name.
-
-    const fetchTab = async(gid)=>{
-      const u = `${baseUrl}?gid=${gid}&single=true&output=csv&_=${Date.now()}`;
-      const r = await fetch(u);
-      if(!r.ok) throw new Error('HTTP '+r.status);
-      return parseCSV(await r.text());
-    };
-
-    // Try fetching. Most Google Sheets assign gid=0 to first sheet, but can vary.
-    // We'll fetch the whole-doc CSV (no gid) and then try gid-based for others.
-    const wholeResp = await fetch(url.includes('_=') ? url : url + (url.includes('?')?'&':'?')+'_='+Date.now());
-    if(!wholeResp.ok) throw new Error('HTTP '+wholeResp.status+' — is the sheet published?');
-
-    // For multi-sheet we need individual tab GIDs.
-    // Simplest: publish each tab separately and store 3 URLs.
-    // Better UX: try to get GID list from the spreadsheet HTML page.
-    // We'll use a pragmatic approach: parse sheet1 from whole-doc CSV,
-    // then try gid=0,1,2 fallback for phone/template tabs.
-    const sheet1Rows = parseCSV(await wholeResp.text());
-
-    // Detect which tab we got (check headers)
-    let trackersRows=[], phonesRows=[], templateRows=[];
-
-    const h = (sheet1Rows[0]||[]).map(c=>String(c||'').toLowerCase());
-    if(h.some(c=>c.includes('name')||c.includes('url'))){
-      trackersRows = sheet1Rows;
-    }
-
-    // Try gids 0,1,2,3 for phones and template
-    for(let gid=0;gid<=4;gid++){
-      try{
-        const rows = await fetchTab(gid);
-        if(rows.length<1) continue;
-        const hdr = (rows[0]||[]).map(c=>String(c||'').toLowerCase());
-        if(hdr.some(c=>c.includes('phone')||c.includes('mobile')) && phonesRows.length===0){
-          phonesRows = rows;
-        } else if(hdr.some(c=>c.includes('name')||c.includes('tracker')||c.includes('url')) && trackersRows.length===0){
-          trackersRows = rows;
-        } else if(rows.length>=1 && String(rows[0][0]||'').includes('{') && templateRows.length===0){
-          templateRows = rows;
-        }
-      }catch(e){}
-    }
-
-    const data = {trackers:[], phoneMap:{}, template:DEFAULT_REMINDER_TEMPLATE};
-
-    // Parse Trackers tab
-    if(trackersRows.length>1){
-      const hdr = trackersRows[0].map(c=>String(c||'').toLowerCase());
-      const nameCol = hdr.findIndex(c=>c.includes('name'));
-      const urlCol  = hdr.findIndex(c=>c.includes('url'));
-      if(nameCol>=0 && urlCol>=0){
-        for(let r=1;r<trackersRows.length;r++){
-          const row = trackersRows[r];
-          const name = String(row[nameCol]||'').trim();
-          const url_ = String(row[urlCol]||'').trim();
-          if(name && url_){
-            // Preserve existing lastSync/lastData if tracker already known
-            const existing = rem.trackers.find(t=>t.name===name);
-            data.trackers.push({
-              id: existing?.id || ('tr_'+Date.now()+'_'+Math.random().toString(36).slice(2,6)+'_'+r),
-              name, url: url_,
-              lastSync: existing?.lastSync||null,
-              lastData: existing?.lastData||null
-            });
-          }
-        }
-      }
-    }
-
-    // Parse PhoneMapping tab
-    if(phonesRows.length>1){
-      const hdr = phonesRows[0].map(c=>String(c||'').toLowerCase());
-      const bCol = hdr.findIndex(c=>c.includes('block')||c.includes('name'));
-      const pCol = hdr.findIndex(c=>c.includes('phone')||c.includes('mobile')||c.includes('number'));
-      if(bCol>=0 && pCol>=0){
-        for(let r=1;r<phonesRows.length;r++){
-          const row = phonesRows[r];
-          const b = String(row[bCol]||'').trim();
-          const p = String(row[pCol]||'').replace(/[^0-9]/g,'');
-          if(b && p) data.phoneMap[b] = p;
-        }
-      }
-    }
-
-    // Parse Template tab (A1 cell)
-    if(templateRows.length>=1 && templateRows[0][0]){
-      const t = String(templateRows[0][0]).trim();
-      if(t.length>20) data.template = t;
-    }
-
-    // Also check localStorage for custom template
-    const localTpl = localStorage.getItem(REMINDER_TEMPLATE_KEY);
-    if(localTpl) data.template = localTpl;
-
-    localStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(data));
-    applySettingsData(data, true);
-    setSettingsStatus(`✓ Settings synced at ${new Date().toLocaleTimeString()} — ${data.trackers.length} trackers, ${Object.keys(data.phoneMap).length} phone mappings`,'ok');
-    if(!silent) toast('✓ Settings loaded from Google Sheet');
-
-  }catch(err){
-    console.error(err);
-    setSettingsStatus('✗ '+err.message,'err');
-    if(!silent) toast('Settings sync failed: '+err.message,true);
-  }
-}
-
-function applySettingsData(data, merge){
-  if(data.trackers && data.trackers.length>0){
-    if(merge){
-      // Merge: preserve lastSync/lastData from existing trackers
-      data.trackers.forEach(nt=>{
-        const ex = rem.trackers.find(t=>t.name===nt.name);
-        if(ex){ nt.lastSync=ex.lastSync; nt.lastData=ex.lastData; }
-      });
-    }
-    rem.trackers = data.trackers;
-  }
-  if(data.phoneMap) rem.phoneMap = data.phoneMap;
-  if(data.template) rem.template = data.template;
-  renderTrackers();
-}
-
-// Help modal
-document.getElementById('btn-show-settings-help').addEventListener('click',()=>{
-  document.getElementById('settings-help-modal').style.display='flex';
-});
-document.getElementById('settings-help-close').addEventListener('click',()=>{
-  document.getElementById('settings-help-modal').style.display='none';
-});
-document.getElementById('settings-help-modal').addEventListener('click',e=>{
-  if(e.target.id==='settings-help-modal') e.target.style.display='none';
-});
-
-// Sync All button
-document.getElementById('btn-sync-all-trackers').addEventListener('click',async()=>{
-  if(rem.trackers.length===0){toast('No trackers loaded yet. Sync Settings first.',true);return}
-  toast('Syncing all trackers...');
-  for(const t of rem.trackers) await syncTracker(t.id);
-  toast('✓ All trackers synced');
-});
-
-// ── Render tracker cards ───────────────────────────────────────────────────
-function renderTrackers(){
-  const wrap = document.getElementById('trackers-list');
-  if(!wrap) return;
-  if(rem.trackers.length===0){
-    wrap.innerHTML = `<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px;border:2px dashed var(--border);border-radius:8px">
-      No trackers loaded yet.<br>Paste your Settings Sheet URL above and click 🔄 Sync.
-    </div>`;
-    return;
-  }
-  wrap.innerHTML = rem.trackers.map(t=>{
-    const stats = t.lastData ? `
-      <div class="stats-row">
-        <span class="stat-pill r">🔴 ${t.lastData.notStarted.length} Not Started</span>
-        <span class="stat-pill y">🟡 ${t.lastData.partial.length} Partial</span>
-        <span class="stat-pill g">✅ ${t.lastData.completed.length} Done</span>
-        <span class="stat-pill" style="background:rgba(148,163,184,.15);color:#cbd5e1">Total: ${t.lastData.total}</span>
-        <span class="last-sync" style="margin-left:auto;font-size:11px;color:var(--muted)">
-          ${t.lastSync ? 'Synced '+new Date(t.lastSync).toLocaleTimeString() : 'Not synced yet'}
-        </span>
-      </div>` : `<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Not synced yet — click 🔄 Sync</div>`;
-    return `<div class="tracker-card" data-id="${t.id}">
-      <div class="head"><div class="name">📋 ${t.name}</div></div>
-      <div class="url" title="${t.url}">${t.url}</div>
-      ${stats}
-      <div class="actions">
-        <button class="btn" data-action="sync">🔄 Sync</button>
-        <button class="btn success" data-action="generate" ${t.lastData?'':'disabled'}>📲 Generate Message</button>
-      </div>
-    </div>`;
-  }).join('');
-
-  wrap.querySelectorAll('.tracker-card').forEach(card=>{
-    const id = card.dataset.id;
-    card.querySelector('[data-action="sync"]').addEventListener('click',()=>syncTracker(id));
-    const genBtn = card.querySelector('[data-action="generate"]');
-    if(!genBtn.disabled) genBtn.addEventListener('click',()=>openReminderEditor(id));
-  });
-}
-
-// ── Sync individual tracker ────────────────────────────────────────────────
-async function syncTracker(id){
-  const t = rem.trackers.find(x=>x.id===id);
-  if(!t) return;
-  const card = document.querySelector(`.tracker-card[data-id="${id}"]`);
-  if(card){
-    const btn = card.querySelector('[data-action="sync"]');
-    if(btn){ btn.textContent='⏳ Syncing...'; btn.disabled=true; }
-  }
-  try{
-    const fetchUrl = t.url+(t.url.includes('?')?'&':'?')+'_='+Date.now();
-    const resp = await fetch(fetchUrl);
-    if(!resp.ok) throw new Error('HTTP '+resp.status);
-    const csv = await resp.text();
-    if(!csv||csv.length<5) throw new Error('Empty CSV');
-    const rows = parseCSV(csv);
-    if(rows.length<2) throw new Error('No data rows in Tracker tab');
-    t.lastSync = Date.now();
-    t.lastData = classifyTrackerRows(rows);
-    // Update cache
-    const cached = JSON.parse(localStorage.getItem(SETTINGS_CACHE_KEY)||'{}');
-    if(cached.trackers){
-      const ci = cached.trackers.findIndex(x=>x.name===t.name);
-      if(ci>=0){cached.trackers[ci].lastSync=t.lastSync;cached.trackers[ci].lastData=t.lastData;}
-      localStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(cached));
-    }
-    renderTrackers();
-    toast(`✓ ${t.name}: ${t.lastData.notStarted.length} not started, ${t.lastData.partial.length} partial, ${t.lastData.completed.length} done`);
-  }catch(err){
-    console.error(err);
-    toast('Sync failed ('+t.name+'): '+err.message,true);
-    renderTrackers();
-  }
-}
-
-// ── Classify tracker rows ──────────────────────────────────────────────────
-function classifyTrackerRows(rows){
-  const headers = rows[0].map(h=>String(h||'').trim());
-  let overallCol = -1;
-  for(let c=headers.length-1;c>=0;c--){
-    if(/overall/i.test(headers[c])){overallCol=c;break}
-  }
-  if(overallCol<0) overallCol = headers.length-1;
-
-  const notStarted=[],partial=[],completed=[],partialDetails=[];
-  for(let r=1;r<rows.length;r++){
-    const row=rows[r];
-    const name=String(row[0]||'').trim();
-    if(!name) continue;
-    const ov=String(row[overallCol]||'').trim();
-    const isComplete=/✅/.test(ov)||(/complete/i.test(ov)&&!/incomplete|not\s*complete/i.test(ov));
-    const isPartial=/🟡|⚠️/.test(ov)||/partial/i.test(ov);
-    if(isComplete){
-      completed.push(name);
-    }else if(isPartial){
-      partial.push(name);
-      let filled=0,total=0;
-      for(let c=1;c<overallCol;c++){
-        const v=String(row[c]||'').trim();
-        if(!v) continue;
-        total++;
-        if(/✅/.test(v)||(/complete/i.test(v)&&!/incomplete/i.test(v))) filled++;
-      }
-      partialDetails.push({name,filled,total});
-    }else{
-      notStarted.push(name);
-    }
-  }
-  return{notStarted,partial,completed,partialDetails,total:notStarted.length+partial.length+completed.length};
-}
-
-// ── Reminder Editor ────────────────────────────────────────────────────────
-function openReminderEditor(id){
-  const t = rem.trackers.find(x=>x.id===id);
-  if(!t||!t.lastData){toast('Sync this tracker first',true);return}
-  rem.activeId = id;
-  const savedTpl = localStorage.getItem(REMINDER_TEMPLATE_KEY)||rem.template||DEFAULT_REMINDER_TEMPLATE;
-  const d = t.lastData;
-
-  document.getElementById('reminder-result-area').innerHTML = `
-    <div class="panel">
-      <h2><span class="dot"></span> 📲 Generate WhatsApp Message — ${t.name}</h2>
-      <div class="reminder-out">
-        <div class="head">
-          <div>🔴 ${d.notStarted.length} Not Started &nbsp;•&nbsp; 🟡 ${d.partial.length} Partial &nbsp;•&nbsp; ✅ ${d.completed.length} Done &nbsp;•&nbsp; Total ${d.total}</div>
-          <button class="icon-btn" onclick="closeReminderEditor()" style="background:rgba(255,255,255,.2);color:white">× Close</button>
-        </div>
-        <div class="reminder-controls">
-          <h4>Title</h4>
-          <input type="text" id="rem-title" value="${escapeAttr(t.name)}" placeholder="e.g. PDL-1 — March 2026">
-
-          <h4>Include in message</h4>
-          <div class="options-row">
-            <label><input type="checkbox" id="rem-inc-ns" checked> 🔴 Not Started</label>
-            <label><input type="checkbox" id="rem-inc-pf" checked> 🟡 Partial</label>
-            <label><input type="checkbox" id="rem-inc-done"> ✅ Completed</label>
-            <label><input type="checkbox" id="rem-show-counts" checked> Show partial counts</label>
-          </div>
-
-          <h4>Tag mode</h4>
-          <div class="options-row">
-            <label><input type="radio" name="rem-tag" id="rem-tag-no" checked> Plain names</label>
-            <label><input type="radio" name="rem-tag" id="rem-tag-yes"> Use @ phone tags ${Object.keys(rem.phoneMap).length>0?'('+Object.keys(rem.phoneMap).length+' numbers loaded)':'(no mapping loaded)'}</label>
-          </div>
-
-          <h4>Message template
-            <button class="btn-tiny" onclick="saveReminderTemplate()" style="margin-left:8px">💾 Save as default</button>
-            <button class="btn-tiny" onclick="resetReminderTemplate()">↻ Reset</button>
-          </h4>
-          <textarea id="rem-template" rows="12">${escapeHtml(savedTpl)}</textarea>
-          <div class="placeholders-help">
-            <b>Placeholders:</b>
-            <code>{TITLE}</code> <code>{DATE}</code> <code>{TIME}</code>
-            <code>{LIST_NS}</code> <code>{LIST_PF}</code> <code>{LIST_DONE}</code>
-            <code>{COUNT_NS}</code> <code>{COUNT_PF}</code> <code>{DONE}</code> <code>{TOTAL}</code> <code>{PENDING}</code>
-          </div>
-          <div class="action-bar" style="margin-top:14px">
-            <button class="btn success" onclick="generateReminderMsg()">✨ Generate Message</button>
-          </div>
-        </div>
-        <div id="rem-output-wrap" style="display:none">
-          <div class="reminder-output-box" id="rem-output"></div>
-          <div style="padding:10px 18px;background:#f8fafc;border-top:1px solid #e2e8f0;display:flex;gap:8px;align-items:center">
-            <button class="btn" onclick="copyReminderMsg()">📋 Copy to Clipboard</button>
-            <span id="rem-copied" style="font-size:12px;color:#059669;opacity:0;transition:opacity .3s">✓ copied</span>
-          </div>
-        </div>
-      </div>
-    </div>`;
-  document.getElementById('reminder-result-area').scrollIntoView({behavior:'smooth',block:'start'});
-}
-
-function closeReminderEditor(){
-  document.getElementById('reminder-result-area').innerHTML='';
-  rem.activeId=null;
-}
-function escapeHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
-function escapeAttr(s){return escapeHtml(s).replace(/"/g,'&quot;')}
-function saveReminderTemplate(){
-  localStorage.setItem(REMINDER_TEMPLATE_KEY,document.getElementById('rem-template').value);
-  toast('Template saved as default');
-}
-function resetReminderTemplate(){document.getElementById('rem-template').value=DEFAULT_REMINDER_TEMPLATE}
-
-function buildBlockList(names,useTags,phoneMap,partialMap,showCounts){
-  if(!names||names.length===0) return '— None —';
-  return names.map((n,i)=>{
-    const num=(i+1)+'. ';
-    const display=useTags&&phoneMap[n]?'@'+phoneMap[n]+' ('+n+')':n;
-    const cnt=(partialMap&&partialMap[n]&&showCounts)?' — '+partialMap[n].filled+'/'+partialMap[n].total+' sheets done':'';
-    return num+display+cnt;
-  }).join('\n');
-}
-
-function generateReminderMsg(){
-  const t=rem.trackers.find(x=>x.id===rem.activeId);
-  if(!t||!t.lastData) return;
-  const d=t.lastData;
-  const incNS=document.getElementById('rem-inc-ns').checked;
-  const incPF=document.getElementById('rem-inc-pf').checked;
-  const incDone=document.getElementById('rem-inc-done').checked;
-  const showCnt=document.getElementById('rem-show-counts').checked;
-  const useTags=document.getElementById('rem-tag-yes').checked;
-  const phoneMap=useTags?rem.phoneMap:{};
-  const partialMap={};
-  d.partialDetails.forEach(p=>partialMap[p.name]=p);
-  const now=new Date();
-  const date=now.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
-  const time=now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
-  let template=document.getElementById('rem-template').value;
-  function stripSection(tpl,placeholder){
-    const lines=tpl.split('\n'),out=[];
-    for(let i=0;i<lines.length;i++){
-      if(lines[i].includes(placeholder)){
-        if(out.length>0){const prev=out[out.length-1];if(/.*:\s*$|.*\(.*\):/.test(prev)&&!/Completed:/.test(prev))out.pop()}
-        if(i+1<lines.length&&lines[i+1].trim()==='')i++;
-        continue;
-      }
-      out.push(lines[i]);
-    }
-    return out.join('\n');
-  }
-  if(!incNS) template=stripSection(template,'{LIST_NS}');
-  if(!incPF) template=stripSection(template,'{LIST_PF}');
-  if(!incDone) template=stripSection(template,'{LIST_DONE}');
-  const rep={
-    '{TITLE}':document.getElementById('rem-title').value||t.name,
-    '{DATE}':date,'{TIME}':time,
-    '{LIST_NS}':buildBlockList(d.notStarted,useTags,phoneMap,null,false),
-    '{LIST_PF}':buildBlockList(d.partial,useTags,phoneMap,partialMap,showCnt),
-    '{LIST_DONE}':buildBlockList(d.completed,useTags,phoneMap,null,false),
-    '{COUNT_NS}':d.notStarted.length,'{COUNT_PF}':d.partial.length,
-    '{COUNT_DONE}':d.completed.length,'{DONE}':d.completed.length,
-    '{TOTAL}':d.total,'{PENDING}':d.notStarted.length+d.partial.length
-  };
-  Object.keys(rep).forEach(k=>{template=template.split(k).join(rep[k])});
-  template=template.replace(/\n{3,}/g,'\n\n').trim();
-  document.getElementById('rem-output').textContent=template;
-  document.getElementById('rem-output-wrap').style.display='block';
-}
-
-async function copyReminderMsg(){
-  const txt=document.getElementById('rem-output').textContent;
-  try{
-    await navigator.clipboard.writeText(txt);
-    const tag=document.getElementById('rem-copied');
-    tag.style.opacity='1';setTimeout(()=>tag.style.opacity='0',1500);
-    toast('✓ Copied to clipboard');
-  }catch(e){toast('Copy failed: '+e.message,true)}
-}
-
-// Init
-initReminder();
-
-
-</script>
 
 </script>
 
