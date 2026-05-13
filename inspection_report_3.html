@@ -2543,6 +2543,15 @@ document.getElementById('btn-generate-squad').addEventListener('click',()=>{
   const r = autoAssign();
   if(!r) return;
   sq.result = r;
+  // Pre-sort assignments for consistent table display (TVM first, then Cheyyar)
+  sq.result.sortedAssignments = r.assignments.slice().sort((a,b)=>{
+    const ca = a.shops.length>0?(TVM_CIRCLE_BLOCKS.includes(a.shops[0].block)?0:1):2;
+    const cb = b.shops.length>0?(TVM_CIRCLE_BLOCKS.includes(b.shops[0].block)?0:1):2;
+    if(ca!==cb) return ca-cb;
+    const ba = a.shops.length>0?a.shops[0].block:'';
+    const bb = b.shops.length>0?b.shops[0].block:'';
+    return ba.localeCompare(bb);
+  });
   renderSquadResults();
   toast('Squad table generated');
 });
@@ -2582,7 +2591,7 @@ function renderSquadResults(){
             </tr>
           </thead>
           <tbody>
-            ${renderSquadRows(r.assignments)}
+            ${renderSquadRows(r.sortedAssignments || r.assignments)}
           </tbody>
         </table>
       </div>
@@ -2631,6 +2640,7 @@ function renderSquadResults(){
 }
 
 function renderSquadRows(assignments){
+  // assignments is already sorted (TVM first, Cheyyar second)
   let rows = '';
   let serial = 0;
   assignments.forEach((a,ai)=>{
@@ -2650,7 +2660,7 @@ function renderSquadRows(assignments){
         <td class="swap-cell" data-swap-type="society" data-ai="${ai}" data-si="${si}" title="Click to swap society">${sh.society} <span style="color:#94a3b8;font-size:10px">▼</span></td>
         <td class="center swap-cell" data-swap-type="shop" data-ai="${ai}" data-si="${si}" title="Click to swap shop">${sh.shop_code} <span style="color:#94a3b8;font-size:10px">▼</span></td>
         <td>${sh.shop_name} <span class="${sh.isFT?'ft-badge':'pt-badge'}">${sh.isFT?'FT':'PT'}</span>${isPriority?' ⭐':''}</td>
-        ${si===0 ? `<td rowspan="${a.shops.length}" class="officer-cell">${a.staff.name}<br><small style="font-weight:400;color:#475569">${a.staff.desig||''}</small><br><small style="color:#64748b">${a.staff.office||''}</small></td>` : ''}
+        ${si===0 ? `<td rowspan="${a.shops.length}" class="officer-cell">${a.staff.name}<br><small style="font-weight:400;color:#475569">${a.staff.desig||''}${a.staff.office?'<br>'+a.staff.office:''}</small></td>` : ''}
       </tr>`;
     });
   });
@@ -2675,8 +2685,10 @@ function openSwapMenu(cell){
   const type = cell.dataset.swapType;
   const ai = parseInt(cell.dataset.ai);
   const si = parseInt(cell.dataset.si);
-  if(!sq.result || !sq.result.assignments[ai]) return;
-  const currentShop = sq.result.assignments[ai].shops[si];
+  // Use sortedAssignments for display-index lookup
+  const displayList = sq.result.sortedAssignments || sq.result.assignments;
+  if(!sq.result || !displayList[ai]) return;
+  const currentShop = displayList[ai].shops[si];
   if(!currentShop) return;
 
   // Build the list of ALL shop codes currently assigned (to exclude from swap)
@@ -2775,37 +2787,31 @@ function openSwapMenu(cell){
         const newCode = opt.dataset.code;
         const newShop = sq.master.find(s=>s.shop_code===newCode);
         if(newShop){
-          sq.result.assignments[ai].shops[si] = newShop;
+          displayList[ai].shops[si] = newShop;
           rerenderSquadAfterSwap();
         }
       } else {
         const newSociety = opt.dataset.society;
-        // Replace ALL shops of this row's officer that were from the old society
         const oldSociety = currentShop.society;
         const oldBlock = currentShop.block;
-        // Find which positions belong to old society
         const positionsToReplace = [];
-        sq.result.assignments[ai].shops.forEach((s,idx)=>{
+        displayList[ai].shops.forEach((s,idx)=>{
           if(s.society === oldSociety && s.block === oldBlock) positionsToReplace.push(idx);
         });
-        // Get available shops from new society
         const assignedSet = new Set();
         sq.result.assignments.forEach(a=>a.shops.forEach(s=>assignedSet.add(s.shop_code)));
-        // Don't exclude the shops we're about to replace
         positionsToReplace.forEach(idx=>{
-          assignedSet.delete(sq.result.assignments[ai].shops[idx].shop_code);
+          assignedSet.delete(displayList[ai].shops[idx].shop_code);
         });
         const newShops = sq.master.filter(s=>
           s.block === oldBlock && s.society === newSociety && !assignedSet.has(s.shop_code)
         );
-        // Sort FT first
         newShops.sort((a,b)=>{
           if(a.isFT!==b.isFT) return a.isFT?-1:1;
           return a.shop_code.localeCompare(b.shop_code);
         });
-        // Replace
         positionsToReplace.forEach((idx,i)=>{
-          if(newShops[i]) sq.result.assignments[ai].shops[idx] = newShops[i];
+          if(newShops[i]) displayList[ai].shops[idx] = newShops[i];
         });
         rerenderSquadAfterSwap();
       }
@@ -2825,11 +2831,9 @@ function openSwapMenu(cell){
 }
 
 function rerenderSquadAfterSwap(){
-  // Rebuild leftover and re-render
   const r = sq.result;
   const assignedCodes = new Set();
   r.assignments.forEach(a=>a.shops.forEach(s=>assignedCodes.add(s.shop_code)));
-  // Recompute leftover relative to the originally selected blocks
   const allShops = sq.master.filter(s=>sq.selectedBlocks.has(s.block));
   r.leftover = allShops.filter(s=>!assignedCodes.has(s.shop_code));
   r.leftoverByBlock = {};
@@ -2845,6 +2849,15 @@ function rerenderSquadAfterSwap(){
       if(a.isFT!==b.isFT) return a.isFT?-1:1;
       return a.shop_code.localeCompare(b.shop_code);
     });
+  });
+  // Re-sort sorted assignments (TVM first) — shops may have changed circles
+  r.sortedAssignments = r.assignments.slice().sort((a,b)=>{
+    const ca = a.shops.length>0?(TVM_CIRCLE_BLOCKS.includes(a.shops[0].block)?0:1):2;
+    const cb = b.shops.length>0?(TVM_CIRCLE_BLOCKS.includes(b.shops[0].block)?0:1):2;
+    if(ca!==cb) return ca-cb;
+    const ba = a.shops.length>0?a.shops[0].block:'';
+    const bb = b.shops.length>0?b.shops[0].block:'';
+    return ba.localeCompare(bb);
   });
   renderSquadResults();
   toast('Swap applied');
@@ -2881,14 +2894,36 @@ function finalCheckSquad(){
 async function copySquadTableForWord(){
   const table = document.getElementById('squad-output-table');
   if(!table) return;
+  // Clone table and strip swap UI elements before copying
+  const clone = table.cloneNode(true);
+  // Remove ▼ arrow spans (they are inside swap-cell tds)
+  clone.querySelectorAll('span').forEach(s=>{
+    if(s.textContent.trim()==='▼') s.remove();
+  });
+  // Also strip data- attributes and class names for clean Word paste
+  clone.querySelectorAll('[data-swap-type]').forEach(td=>{
+    td.removeAttribute('data-swap-type');
+    td.removeAttribute('data-ai');
+    td.removeAttribute('data-si');
+    td.style.cursor = '';
+  });
+
   const html = `<table border="1" cellspacing="0" cellpadding="6" style="border-collapse:collapse;font-family:Arial;font-size:12pt">
-    ${table.innerHTML.replace(/<small[^>]*>/g,'<br><span style="font-size:10pt;color:#555">').replace(/<\/small>/g,'</span>').replace(/class="[^"]*"/g,'').replace(/<span[^>]*ft-badge[^>]*>/g,'<span style="background:#10b981;color:white;padding:1px 4px;font-size:9pt">').replace(/<span[^>]*pt-badge[^>]*>/g,'<span style="background:#f59e0b;color:white;padding:1px 4px;font-size:9pt">')}
+    ${clone.innerHTML
+      .replace(/<small[^>]*>/g,'<span style="font-size:10pt;color:#555">')
+      .replace(/<\/small>/g,'</span>')
+      .replace(/class="[^"]*"/g,'')
+      .replace(/<span[^>]*ft-badge[^>]*>/g,'<span style="background:#10b981;color:white;padding:1px 4px;font-size:9pt">')
+      .replace(/<span[^>]*pt-badge[^>]*>/g,'<span style="background:#f59e0b;color:white;padding:1px 4px;font-size:9pt">')
+      // Clean up multiple <br> (empty lines in officer cell)
+      .replace(/(<br\s*\/?>){2,}/gi,'<br>')
+    }
   </table>`;
 
-  // Plain text fallback
+  // Plain text fallback — use clone so ▼ is already removed
   let text = '';
-  document.querySelectorAll('#squad-output-table tr').forEach(tr=>{
-    const cells = [...tr.querySelectorAll('th,td')].map(c=>c.innerText.replace(/\s+/g,' ').trim());
+  clone.querySelectorAll('tr').forEach(tr=>{
+    const cells = [...tr.querySelectorAll('th,td')].map(c=>c.innerText.replace(/▼/g,'').replace(/\s+/g,' ').trim());
     text += cells.join('\t')+'\n';
   });
 
@@ -3034,12 +3069,26 @@ async function syncFromGSheet(){
     for(let i=1;i<rows.length;i++){
       const r = rows[i];
       if(!r || !r[colName] || !r[colName].trim()) continue;
-      const circle = (r[colCircle]||'').trim().toUpperCase();
-      let normCircle = 'TVM';
-      if(circle.startsWith('CH') || circle.includes('CHEYY')) normCircle='Cheyyar';
-      else if(circle.startsWith('PDS') || circle==='ANY') normCircle='PDS';
-      else if(circle.startsWith('TVM') || circle.includes('THIRU') || circle.includes('TIRU')) normCircle='TVM';
-      else if(circle) normCircle = circle.charAt(0)+circle.slice(1).toLowerCase();
+      const circleRaw = (r[colCircle]||'').trim().toUpperCase();
+      const officeRaw = (r[colOffice]||'').trim();
+
+      // Helper: infer circle from a text string (block name or circle name)
+      function inferCircle(txt){
+        const t = txt.toUpperCase();
+        if(t.startsWith('CH') || t.includes('CHEYY') || t.includes('செய்') || t.includes('ஆரணி') ||
+           t.includes('அனக்') || t.includes('வெம்') || t.includes('வந்த') || t.includes('பெரண') ||
+           t.includes('தெள்ளார்')) return 'Cheyyar';
+        if(t.startsWith('PDS') || t==='ANY') return 'PDS';
+        // Check if office matches any known Tamil block name
+        if(TVM_CIRCLE_BLOCKS.some(b=>txt.includes(b.trim()) || b.trim().includes(txt.trim()))) return 'TVM';
+        if(CHEYYAR_CIRCLE_BLOCKS.some(b=>txt.replace(/\s+/g,' ').trim().includes(b.replace(/\s+/g,' ').trim()) ||
+           b.replace(/\s+/g,' ').trim().includes(txt.replace(/\s+/g,' ').trim()))) return 'Cheyyar';
+        if(t.startsWith('TVM') || t.includes('THIRU') || t.includes('TIRU')) return 'TVM';
+        return null;
+      }
+
+      // Determine circle: prefer explicit Circle column, fall back to Office column
+      let normCircle = inferCircle(circleRaw) || inferCircle(officeRaw) || 'TVM';
 
       const availRaw = (r[colAvail]||'').trim().toLowerCase();
       const available = !(availRaw==='no' || availRaw==='n' || availRaw==='false' ||
