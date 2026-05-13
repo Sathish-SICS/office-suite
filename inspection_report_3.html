@@ -2363,27 +2363,160 @@ function autoAssign(){
     return {groups: sortSocieties(tvmRemain>=chRemain?tvmGroups:chGroups)};
   }
 
-  // 4. Loop staff, assign 3 shops per staff
-  const assignments = []; // [{staff, shops:[...]}]
+  // 4. Loop staff, assign 3 shops per staff using 2-PASS algorithm
+  //    PASS 1: Try to find a society with ≥3 FT shops available (best case)
+  //    PASS 2: Fallback for remaining staff — relax constraints gradually:
+  //            - try society with 2 FT + 1 FT from another society
+  //            - then 2 FT + 1 PT
+  //            - then 1 FT + 2 PT (last resort)
+  const assignments = []; // [{staff, shops:[...], strict:bool}]
+  const remainingStaff = [];
+
+  // Helper: count unused FT shops in a society group
+  function unusedFT(g){
+    return g.shops.filter(s=>s.isFT && !used.has(s.shop_code));
+  }
+  function unusedPT(g){
+    return g.shops.filter(s=>!s.isFT && !used.has(s.shop_code));
+  }
+  function unusedAll(g){
+    return g.shops.filter(s=>!used.has(s.shop_code));
+  }
+
+  // PASS 1 — strict: society with ≥3 unused FT shops
   for(const staff of availStaff){
     const pool = poolForStaff(staff);
-    const picked = [];
-
-    // Pass 1: same society — find a society with ≥1 unused shop, prefer 3 unused
-    for(const g of pool.groups){
-      if(picked.length>=3) break;
-      const avail = g.shops.filter(x=>!used.has(x.shop_code));
-      if(avail.length===0) continue;
-      // Take up to 3 from this society (priority+FT first due to sort)
-      for(const sh of avail){
-        if(picked.length>=3) break;
-        picked.push(sh);
-        used.add(sh.shop_code);
+    let picked = null;
+    // Sort societies by: most FT first (prefer strong societies)
+    const sortedByFT = pool.groups.slice().sort((a,b)=>{
+      const fa = unusedFT(a).length, fb = unusedFT(b).length;
+      if(fa!==fb) return fb-fa;
+      // priority shops tie-break
+      const pa = a.shops.filter(s=>sq.priorityShops.has(s.shop_code) && !used.has(s.shop_code)).length;
+      const pb = b.shops.filter(s=>sq.priorityShops.has(s.shop_code) && !used.has(s.shop_code)).length;
+      return pb-pa;
+    });
+    for(const g of sortedByFT){
+      const ftAvail = unusedFT(g);
+      // Priority shops in this society first
+      const priorityHere = g.shops.filter(s=>sq.priorityShops.has(s.shop_code) && !used.has(s.shop_code));
+      if(ftAvail.length >= 3){
+        // Pick 3 FT shops, priority shops first
+        const sortedShops = ftAvail.slice().sort((a,b)=>{
+          const pa = sq.priorityShops.has(a.shop_code)?0:1;
+          const pb = sq.priorityShops.has(b.shop_code)?0:1;
+          return pa-pb;
+        });
+        picked = sortedShops.slice(0,3);
+        picked.forEach(s=>used.add(s.shop_code));
+        break;
       }
     }
-    // If less than 3 picked, just keep what we got (rare end-of-pool case)
-    assignments.push({staff,shops:picked});
+    if(picked){
+      assignments.push({staff, shops:picked, strict:true});
+    } else {
+      remainingStaff.push(staff);
+    }
   }
+
+  // PASS 2 — relaxed: for staff who didn't get assigned in Pass 1
+  for(const staff of remainingStaff){
+    const pool = poolForStaff(staff);
+    let picked = [];
+
+    // Step 2a: Try a society with 2 unused FT shops → take both, then 1 FT from another
+    // Sort societies: most FT first
+    const sortedSocsByFT = pool.groups.slice().sort((a,b)=>{
+      const fa = unusedFT(a).length, fb = unusedFT(b).length;
+      return fb - fa;
+    });
+
+    for(const g of sortedSocsByFT){
+      const ftAvail = unusedFT(g);
+      if(ftAvail.length >= 2 && picked.length===0){
+        // Take 2 FT from this society
+        picked = ftAvail.slice(0,2);
+        picked.forEach(s=>used.add(s.shop_code));
+        // Now find 1 more FT from another society in same circle
+        for(const g2 of sortedSocsByFT){
+          if(g2.society === g.society) continue;
+          const extraFT = unusedFT(g2);
+          if(extraFT.length > 0){
+            picked.push(extraFT[0]);
+            used.add(extraFT[0].shop_code);
+            break;
+          }
+        }
+        if(picked.length===3) break;
+        // If still not 3 → leave picked as is, will fall through
+      }
+    }
+
+    // Step 2b: If still 0 picked, try to assemble 3 FT from any single-FT societies in the circle
+    if(picked.length === 0){
+      for(const g of sortedSocsByFT){
+        if(picked.length>=3) break;
+        const ftAvail = unusedFT(g);
+        for(const s of ftAvail){
+          if(picked.length>=3) break;
+          if(picked.some(p=>p.shop_code===s.shop_code)) continue;
+          picked.push(s);
+          used.add(s.shop_code);
+        }
+      }
+    }
+
+    // Step 2c: If 2 picked but no third FT found → try once more across all societies
+    if(picked.length === 2){
+      for(const g of sortedSocsByFT){
+        if(picked.length>=3) break;
+        const ftAvail = unusedFT(g);
+        for(const s of ftAvail){
+          if(picked.length>=3) break;
+          if(picked.some(p=>p.shop_code===s.shop_code)) continue;
+          picked.push(s);
+          used.add(s.shop_code);
+        }
+      }
+    }
+
+    // Step 2d: Last resort — PT shops. Prefer same society as already-picked FT first.
+    if(picked.length < 3){
+      const sameSoc = picked.length>0 ? picked[0].society : null;
+      if(sameSoc){
+        for(const g of pool.groups){
+          if(picked.length>=3) break;
+          if(g.society !== sameSoc) continue;
+          const ptAvail = unusedPT(g);
+          for(const s of ptAvail){
+            if(picked.length>=3) break;
+            picked.push(s);
+            used.add(s.shop_code);
+          }
+        }
+      }
+      // Still short → any PT from pool
+      for(const g of pool.groups){
+        if(picked.length>=3) break;
+        const ptAvail = unusedPT(g);
+        for(const s of ptAvail){
+          if(picked.length>=3) break;
+          picked.push(s);
+          used.add(s.shop_code);
+        }
+      }
+    }
+
+    assignments.push({staff, shops:picked, strict:false});
+  }
+
+  // Restore original staff order (Pass 1 + Pass 2 merge can shuffle it)
+  const orderMap = new Map(availStaff.map((s,i)=>[s.name+'|'+(s.desig||''), i]));
+  assignments.sort((a,b)=>{
+    const ka = orderMap.get(a.staff.name+'|'+(a.staff.desig||''));
+    const kb = orderMap.get(b.staff.name+'|'+(b.staff.desig||''));
+    return (ka??99) - (kb??99);
+  });
 
   // 5. Compute leftover shops per block
   const leftover = allShops.filter(s=>!used.has(s.shop_code));
@@ -2430,7 +2563,9 @@ function renderSquadResults(){
         <button class="btn success" onclick="copySquadTableForWord()">📋 Copy Table (paste into Word)</button>
         <button class="btn secondary" onclick="downloadSquadExcel()">📥 Download Excel</button>
         <button class="btn secondary" onclick="copyCard('squad-card')">📸 Copy as image</button>
+        <button class="btn" onclick="finalCheckSquad()" style="background:#7c3aed">✓ Final Check (duplicates)</button>
       </div>
+      <div id="squad-check-result" style="margin-bottom:12px"></div>
 
       <div class="squad-table-wrap" id="squad-card">
         <div class="head">
@@ -2510,16 +2645,236 @@ function renderSquadRows(assignments){
     a.shops.forEach((sh,si)=>{
       serial++;
       const isPriority = sq.priorityShops.has(sh.shop_code);
-      rows += `<tr class="${si===0?'officer-start':''} ${isPriority?'priority-row':''}">
+      rows += `<tr class="${si===0?'officer-start':''} ${isPriority?'priority-row':''}" data-ai="${ai}" data-si="${si}">
         <td class="center">${serial}</td>
-        <td>${sh.society}</td>
-        <td class="center">${sh.shop_code}</td>
+        <td class="swap-cell" data-swap-type="society" data-ai="${ai}" data-si="${si}" title="Click to swap society">${sh.society} <span style="color:#94a3b8;font-size:10px">▼</span></td>
+        <td class="center swap-cell" data-swap-type="shop" data-ai="${ai}" data-si="${si}" title="Click to swap shop">${sh.shop_code} <span style="color:#94a3b8;font-size:10px">▼</span></td>
         <td>${sh.shop_name} <span class="${sh.isFT?'ft-badge':'pt-badge'}">${sh.isFT?'FT':'PT'}</span>${isPriority?' ⭐':''}</td>
         ${si===0 ? `<td rowspan="${a.shops.length}" class="officer-cell">${a.staff.name}<br><small style="font-weight:400;color:#475569">${a.staff.desig||''}</small><br><small style="color:#64748b">${a.staff.office||''}</small></td>` : ''}
       </tr>`;
     });
   });
+  // Bind swap clicks after render
+  setTimeout(bindSquadSwapClicks, 0);
   return rows;
+}
+
+function bindSquadSwapClicks(){
+  document.querySelectorAll('.swap-cell').forEach(cell=>{
+    cell.addEventListener('click', e=>{
+      e.stopPropagation();
+      openSwapMenu(cell);
+    });
+  });
+}
+
+function openSwapMenu(cell){
+  // Close any existing menu
+  document.querySelectorAll('.swap-menu').forEach(m=>m.remove());
+
+  const type = cell.dataset.swapType;
+  const ai = parseInt(cell.dataset.ai);
+  const si = parseInt(cell.dataset.si);
+  if(!sq.result || !sq.result.assignments[ai]) return;
+  const currentShop = sq.result.assignments[ai].shops[si];
+  if(!currentShop) return;
+
+  // Build the list of ALL shop codes currently assigned (to exclude from swap)
+  const assignedCodes = new Set();
+  sq.result.assignments.forEach(a=>a.shops.forEach(s=>assignedCodes.add(s.shop_code)));
+
+  let options = [];
+  let title = '';
+
+  if(type === 'shop'){
+    // Replace shop with another from SAME SOCIETY (any unused shop in that society)
+    title = `Swap shop within "${currentShop.society}"`;
+    options = sq.master.filter(s=>
+      s.block === currentShop.block &&
+      s.society === currentShop.society &&
+      !assignedCodes.has(s.shop_code)
+    );
+    // Sort FT first, then PT, then by code
+    options.sort((a,b)=>{
+      if(a.isFT!==b.isFT) return a.isFT?-1:1;
+      return a.shop_code.localeCompare(b.shop_code);
+    });
+  } else {
+    // Replace society — pick another society in SAME BLOCK with available shops
+    title = `Swap society within block "${currentShop.block}"`;
+    // Group leftover shops by society
+    const societies = {};
+    sq.master.forEach(s=>{
+      if(s.block !== currentShop.block) return;
+      if(s.society === currentShop.society) return;
+      if(assignedCodes.has(s.shop_code)) return;
+      if(!societies[s.society]) societies[s.society] = {society:s.society, block:s.block, shops:[]};
+      societies[s.society].shops.push(s);
+    });
+    options = Object.values(societies);
+    // Sort by most FT first
+    options.sort((a,b)=>{
+      const fa = a.shops.filter(s=>s.isFT).length;
+      const fb = b.shops.filter(s=>s.isFT).length;
+      return fb-fa;
+    });
+  }
+
+  // Build menu
+  const menu = document.createElement('div');
+  menu.className = 'swap-menu';
+  menu.style.cssText = `
+    position:absolute;z-index:1000;background:white;border:1px solid #cbd5e1;
+    border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.25);
+    max-height:340px;overflow-y:auto;min-width:260px;font-size:12px;color:#1e293b;
+  `;
+  let html = `<div style="padding:10px 12px;background:#1e3a8a;color:white;font-weight:600;border-radius:8px 8px 0 0;display:flex;justify-content:space-between;align-items:center">
+    <span>${title}</span>
+    <span style="cursor:pointer;font-size:18px" onclick="this.closest('.swap-menu').remove()">×</span>
+  </div>`;
+
+  if(options.length === 0){
+    html += `<div style="padding:14px;color:#94a3b8;text-align:center;font-style:italic">No alternatives available — all shops already assigned.</div>`;
+  } else {
+    html += '<div style="padding:6px">';
+    if(type === 'shop'){
+      options.forEach(opt=>{
+        html += `<div class="swap-opt" data-code="${opt.shop_code}" style="padding:8px 10px;cursor:pointer;border-radius:4px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #f1f5f9">
+          <div>
+            <b>${opt.shop_code}</b> — ${opt.shop_name}
+          </div>
+          <span class="${opt.isFT?'ft-badge':'pt-badge'}" style="font-size:10px;padding:2px 6px;border-radius:3px;background:${opt.isFT?'#10b981':'#f59e0b'};color:white">${opt.isFT?'FT':'PT'}</span>
+        </div>`;
+      });
+    } else {
+      options.forEach(opt=>{
+        const ftCnt = opt.shops.filter(s=>s.isFT).length;
+        const ptCnt = opt.shops.length - ftCnt;
+        html += `<div class="swap-opt" data-society="${opt.society}" style="padding:8px 10px;cursor:pointer;border-radius:4px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #f1f5f9">
+          <div><b>${opt.society}</b></div>
+          <span style="font-size:10px;color:#64748b">${ftCnt} FT, ${ptCnt} PT</span>
+        </div>`;
+      });
+    }
+    html += '</div>';
+  }
+  menu.innerHTML = html;
+  document.body.appendChild(menu);
+
+  // Position menu below the clicked cell
+  const rect = cell.getBoundingClientRect();
+  menu.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+  menu.style.left = (rect.left + window.scrollX) + 'px';
+
+  // Hover style for options
+  menu.querySelectorAll('.swap-opt').forEach(opt=>{
+    opt.addEventListener('mouseenter', ()=>opt.style.background='#dbeafe');
+    opt.addEventListener('mouseleave', ()=>opt.style.background='');
+    opt.addEventListener('click', ()=>{
+      if(type === 'shop'){
+        const newCode = opt.dataset.code;
+        const newShop = sq.master.find(s=>s.shop_code===newCode);
+        if(newShop){
+          sq.result.assignments[ai].shops[si] = newShop;
+          rerenderSquadAfterSwap();
+        }
+      } else {
+        const newSociety = opt.dataset.society;
+        // Replace ALL shops of this row's officer that were from the old society
+        const oldSociety = currentShop.society;
+        const oldBlock = currentShop.block;
+        // Find which positions belong to old society
+        const positionsToReplace = [];
+        sq.result.assignments[ai].shops.forEach((s,idx)=>{
+          if(s.society === oldSociety && s.block === oldBlock) positionsToReplace.push(idx);
+        });
+        // Get available shops from new society
+        const assignedSet = new Set();
+        sq.result.assignments.forEach(a=>a.shops.forEach(s=>assignedSet.add(s.shop_code)));
+        // Don't exclude the shops we're about to replace
+        positionsToReplace.forEach(idx=>{
+          assignedSet.delete(sq.result.assignments[ai].shops[idx].shop_code);
+        });
+        const newShops = sq.master.filter(s=>
+          s.block === oldBlock && s.society === newSociety && !assignedSet.has(s.shop_code)
+        );
+        // Sort FT first
+        newShops.sort((a,b)=>{
+          if(a.isFT!==b.isFT) return a.isFT?-1:1;
+          return a.shop_code.localeCompare(b.shop_code);
+        });
+        // Replace
+        positionsToReplace.forEach((idx,i)=>{
+          if(newShops[i]) sq.result.assignments[ai].shops[idx] = newShops[i];
+        });
+        rerenderSquadAfterSwap();
+      }
+      menu.remove();
+    });
+  });
+
+  // Close on outside click
+  setTimeout(()=>{
+    document.addEventListener('click', function closer(e){
+      if(!menu.contains(e.target)){
+        menu.remove();
+        document.removeEventListener('click', closer);
+      }
+    });
+  }, 100);
+}
+
+function rerenderSquadAfterSwap(){
+  // Rebuild leftover and re-render
+  const r = sq.result;
+  const assignedCodes = new Set();
+  r.assignments.forEach(a=>a.shops.forEach(s=>assignedCodes.add(s.shop_code)));
+  // Recompute leftover relative to the originally selected blocks
+  const allShops = sq.master.filter(s=>sq.selectedBlocks.has(s.block));
+  r.leftover = allShops.filter(s=>!assignedCodes.has(s.shop_code));
+  r.leftoverByBlock = {};
+  r.leftover.forEach(s=>{
+    if(!r.leftoverByBlock[s.block]) r.leftoverByBlock[s.block] = [];
+    r.leftoverByBlock[s.block].push(s);
+  });
+  Object.values(r.leftoverByBlock).forEach(arr=>{
+    arr.sort((a,b)=>{
+      const pa = sq.priorityShops.has(a.shop_code)?0:1;
+      const pb = sq.priorityShops.has(b.shop_code)?0:1;
+      if(pa!==pb) return pa-pb;
+      if(a.isFT!==b.isFT) return a.isFT?-1:1;
+      return a.shop_code.localeCompare(b.shop_code);
+    });
+  });
+  renderSquadResults();
+  toast('Swap applied');
+}
+
+function finalCheckSquad(){
+  if(!sq.result){toast('Generate the table first',true);return}
+  const box = document.getElementById('squad-check-result');
+  const codes = {};   // code -> list of {ai, staffName}
+  sq.result.assignments.forEach(a=>{
+    a.shops.forEach(s=>{
+      if(!codes[s.shop_code]) codes[s.shop_code] = [];
+      codes[s.shop_code].push(a.staff.name);
+    });
+  });
+  const duplicates = Object.entries(codes).filter(([code,list])=>list.length>1);
+  if(duplicates.length === 0){
+    box.innerHTML = `<div style="padding:12px 16px;background:#d1fae5;border:1px solid #10b981;border-radius:8px;color:#065f46;font-weight:600">
+      ✅ All clear — no duplicate shop codes. Total ${Object.keys(codes).length} unique shops assigned.
+    </div>`;
+  } else {
+    box.innerHTML = `<div style="padding:12px 16px;background:#fee2e2;border:1px solid #ef4444;border-radius:8px;color:#991b1b">
+      <b>⚠️ Found ${duplicates.length} duplicate shop code(s):</b>
+      <ul style="margin:6px 0 0 18px;font-weight:400">
+        ${duplicates.map(([code,list])=>`<li><b>${code}</b> assigned to: ${list.join(', ')}</li>`).join('')}
+      </ul>
+      <div style="margin-top:8px;font-size:12px">Click the shop cell on those rows to swap one of them.</div>
+    </div>`;
+  }
+  box.scrollIntoView({behavior:'smooth',block:'center'});
 }
 
 // ----- Copy Squad Table for Word (HTML format → Word preserves table) -----
@@ -3543,6 +3898,17 @@ function setSettingsStatus(msg, kind){
 async function syncSettingsSheet(silent){
   const url = localStorage.getItem(SETTINGS_URL_KEY);
   if(!url){ if(!silent) toast('Save the Settings Sheet CSV URL first',true); return; }
+
+  // URL VALIDATION — common mistakes
+  if(url.includes('pubhtml') || url.includes('/edit') || url.includes('/htmlview')){
+    setSettingsStatus('✗ This is not a CSV URL. Use: File → Publish to web → choose "Comma-separated values (.csv)"','err');
+    if(!silent) toast('Wrong URL format — must end in output=csv, not pubhtml',true);
+    return;
+  }
+  if(!url.includes('output=csv') && !url.includes('format=csv')){
+    setSettingsStatus('⚠️ URL does not contain output=csv — may not work. Republish as CSV.','err');
+  }
+
   if(!silent) setSettingsStatus('🔄 Syncing...','');
   try{
     // Fetch Sheet1 (Trackers) via whole-doc CSV
@@ -3550,6 +3916,12 @@ async function syncSettingsSheet(silent){
     const resp = await safeFetch(wholeUrl);
     if(!resp.ok) throw new Error('HTTP '+resp.status);
     const csv = await resp.text();
+
+    // SANITY CHECK — if response is HTML, reject
+    if(csv.trim().startsWith('<!DOCTYPE') || csv.trim().startsWith('<html') || csv.includes('<head>')){
+      throw new Error('Response is HTML, not CSV. Republish your sheet as CSV format (File → Publish to web → CSV).');
+    }
+
     const sheet1 = parseCSV(csv);
 
     // Try to get gid for PhoneMapping and Template tabs
@@ -3560,7 +3932,9 @@ async function syncSettingsSheet(silent){
       try{
         const r = await safeFetch(`${baseUrl}?gid=${gid}&single=true&output=csv&_=${Date.now()}`);
         if(!r.ok) continue;
-        const rows = parseCSV(await r.text());
+        const txt = await r.text();
+        if(txt.trim().startsWith('<!DOCTYPE') || txt.trim().startsWith('<html')) continue;
+        const rows = parseCSV(txt);
         if(rows.length<1) continue;
         const hdr = (rows[0]||[]).map(c=>String(c||'').toLowerCase());
         const hasPhone = hdr.some(c=>c.includes('phone')||c.includes('mobile'));
@@ -3661,18 +4035,31 @@ async function saveToSheet(action, payload){
     toast('Add the Apps Script Web App URL first (Setup Guide → Step 3)',true);
     return false;
   }
+  if(!bridgeUrl.includes('script.google.com') || !bridgeUrl.includes('/exec')){
+    toast('Bridge URL must be from script.google.com and end with /exec',true);
+    return false;
+  }
   try{
+    // Use text/plain content-type to avoid CORS preflight (Apps Script does not handle OPTIONS)
     const resp = await fetch(bridgeUrl, {
       method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({action, ...payload})
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({action, ...payload}),
+      redirect: 'follow'
     });
-    if(!resp.ok) throw new Error('HTTP '+resp.status);
-    const data = await resp.json();
+    if(!resp.ok) throw new Error('HTTP '+resp.status+' — Web App may not be deployed correctly. Redeploy: Deploy → Manage deployments → make sure "Who has access: Anyone"');
+    const txt = await resp.text();
+    let data;
+    try{ data = JSON.parse(txt); }
+    catch(e){ throw new Error('Bad response from bridge — ensure Apps Script returns JSON'); }
     if(data.error) throw new Error(data.error);
     return true;
   }catch(err){
-    toast('Save to Sheet failed: '+err.message,true);
+    if(err.message.includes('NetworkError') || err.message.includes('Failed to fetch')){
+      toast('✗ Cannot reach Apps Script. Check: 1) URL ends with /exec  2) Deploy → Anyone access  3) URL pasted from latest deployment',true);
+    } else {
+      toast('Save to Sheet failed: '+err.message,true);
+    }
     return false;
   }
 }
@@ -3775,11 +4162,14 @@ function renderTrackers(){
 
   wrap.querySelectorAll('.tracker-card').forEach(card=>{
     const id=card.dataset.id;
-    card.querySelector('[data-action="sync"]').addEventListener('click',()=>syncTracker(id));
-    const gb=card.querySelector('[data-action="generate"]');
-    if(!gb.disabled) gb.addEventListener('click',()=>openReminderEditor(id));
-    card.querySelector('[data-action="edit"]').addEventListener('click',()=>openTrackerModal(id));
-    card.querySelector('[data-action="delete"]').addEventListener('click',()=>{
+    const syncBtn = card.querySelector('[data-action="sync"]');
+    if(syncBtn) syncBtn.addEventListener('click',()=>syncTracker(id));
+    const gb = card.querySelector('[data-action="generate"]');
+    if(gb && !gb.disabled) gb.addEventListener('click',()=>openReminderEditor(id));
+    const editBtn = card.querySelector('[data-action="edit"]');
+    if(editBtn) editBtn.addEventListener('click',()=>openTrackerModal(id));
+    const delBtn = card.querySelector('[data-action="delete"]');
+    if(delBtn) delBtn.addEventListener('click',()=>{
       if(confirm('Delete tracker "'+rem.trackers.find(t=>t.id===id)?.name+'"?')){
         rem.trackers=rem.trackers.filter(t=>t.id!==id);
         renderTrackers();
@@ -3827,6 +4217,11 @@ document.getElementById('tracker-modal-save').addEventListener('click',()=>{
 async function syncTracker(id){
   const t=rem.trackers.find(x=>x.id===id);
   if(!t) return;
+  // URL validation
+  if(t.url.includes('pubhtml') || t.url.includes('/edit') || t.url.includes('/htmlview')){
+    toast(`✗ ${t.name}: URL is HTML format. Republish as CSV (output=csv).`,true);
+    return;
+  }
   const card=document.querySelector(`.tracker-card[data-id="${id}"]`);
   if(card){const b=card.querySelector('[data-action="sync"]');if(b){b.textContent='⏳';b.disabled=true;}}
   try{
@@ -3835,6 +4230,9 @@ async function syncTracker(id){
     if(!r.ok) throw new Error('HTTP '+r.status);
     const csv=await r.text();
     if(!csv||csv.length<5) throw new Error('Empty response');
+    if(csv.trim().startsWith('<!DOCTYPE') || csv.trim().startsWith('<html')){
+      throw new Error('Got HTML, not CSV — check tracker URL format');
+    }
     const rows=parseCSV(csv);
     if(rows.length<2) throw new Error('No data rows in Tracker tab');
     t.lastSync=Date.now();
