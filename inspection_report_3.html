@@ -6,6 +6,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/file-saver/2.0.5/FileSaver.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 :root{
   --bg:#0f172a; --panel:#1e293b; --panel-2:#334155;
@@ -581,7 +582,7 @@ document.addEventListener('keydown', e=>{
   </div>
   <div style="display:flex;gap:10px;align-items:center">
     <label style="font-size:12px;color:var(--muted)">Report Month:</label>
-    <input type="month" id="reportMonth" class="month-input" value="2026-04">
+    <input type="month" id="reportMonth" class="month-input">
   </div>
 </header>
 
@@ -590,6 +591,7 @@ document.addEventListener('keydown', e=>{
   <div class="tab" data-tab="squad">🚓 Squad Duty Order</div>
   <div class="tab" data-tab="pdl">📋 Head Office PDL</div>
   <div class="tab" data-tab="reminder">📲 WhatsApp Reminder</div>
+  <div class="tab" data-tab="createsheet">🏗️ Create District Sheets</div>
   <div class="tab" data-tab="future" style="opacity:.5">➕ Future Modules</div>
 </div>
 
@@ -1008,7 +1010,117 @@ document.addEventListener('keydown', e=>{
   </div>
 </div>
 
-<div class="tab-content" id="tab-future">
+<!-- ====================================================================== -->
+<!-- CREATE DISTRICT SHEETS TAB -->
+<!-- ====================================================================== -->
+<div class="tab-content" id="tab-createsheet">
+
+<div class="panel">
+  <h2><span class="dot"></span> 📂 Step 1: Upload HO Excel File</h2>
+  <p style="font-size:13px;color:var(--muted);margin-bottom:12px">
+    Download the State Head Office sheet as Excel (.xlsx) and upload here. The app will detect the 38 district rows and let you replace them with your blocks/CMS/stores.
+  </p>
+  <div class="upload-box" id="box-ho-excel" style="border:2px dashed var(--border);border-radius:10px;padding:30px;text-align:center;cursor:pointer">
+    <div style="font-size:32px;margin-bottom:8px">📊</div>
+    <div style="font-weight:600;color:var(--ink)">Click or drag .xlsx file</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:4px">State HO sheet downloaded from official email</div>
+    <input type="file" id="file-ho-excel" accept=".xlsx,.xls" style="display:none">
+  </div>
+  <div id="ho-file-info" style="margin-top:10px;font-size:13px;color:var(--muted)"></div>
+</div>
+
+<div class="panel" id="ho-config-panel" style="display:none">
+  <h2><span class="dot"></span> 🔧 Step 2: Configure Replacement</h2>
+
+  <div style="margin-bottom:14px">
+    <label style="font-size:13px;color:var(--muted);font-weight:600">Select sheet tab to process (if multiple):</label>
+    <select id="ho-sheet-select"
+      style="width:100%;background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:9px 12px;border-radius:6px;font-size:13px;margin-top:4px"></select>
+  </div>
+
+  <div style="margin-bottom:14px">
+    <label style="font-size:13px;color:var(--muted);font-weight:600">District column (auto-detected, override if wrong):</label>
+    <select id="ho-district-col"
+      style="width:100%;background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:9px 12px;border-radius:6px;font-size:13px;margin-top:4px"></select>
+    <div id="ho-detect-info" style="font-size:12px;color:#34d399;margin-top:4px"></div>
+  </div>
+
+  <h3 style="font-size:14px;margin:14px 0 8px;color:var(--ink)">Replace 38 district rows with these groups:</h3>
+
+  <!-- 4 group categories -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+    <label class="group-card" style="padding:12px;background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px;cursor:pointer;display:flex;align-items:start;gap:8px">
+      <input type="checkbox" id="grp-blocks" checked style="margin-top:3px">
+      <div style="flex:1">
+        <div style="font-weight:600;color:var(--ink)">🏘️ Blocks (21)</div>
+        <div style="font-size:11px;color:var(--muted)">21 PDS taluks of Thiruvannamalai</div>
+        <details style="margin-top:6px">
+          <summary style="font-size:11px;color:var(--muted);cursor:pointer">View / customize</summary>
+          <div id="grp-blocks-list" style="margin-top:6px;font-size:11px;display:flex;flex-wrap:wrap;gap:4px"></div>
+        </details>
+      </div>
+    </label>
+    <label class="group-card" style="padding:12px;background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px;cursor:pointer;display:flex;align-items:start;gap:8px">
+      <input type="checkbox" id="grp-cms" style="margin-top:3px">
+      <div style="flex:1">
+        <div style="font-weight:600;color:var(--ink)">🏢 CMS (7)</div>
+        <div style="font-size:11px;color:var(--muted)">Co-operative Marketing Societies</div>
+        <details style="margin-top:6px">
+          <summary style="font-size:11px;color:var(--muted);cursor:pointer">View / customize</summary>
+          <div id="grp-cms-list" style="margin-top:6px;font-size:11px;display:flex;flex-wrap:wrap;gap:4px"></div>
+        </details>
+      </div>
+    </label>
+    <label class="group-card" style="padding:12px;background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px;cursor:pointer;display:flex;align-items:start;gap:8px">
+      <input type="checkbox" id="grp-stores" style="margin-top:3px">
+      <div style="flex:1">
+        <div style="font-weight:600;color:var(--ink)">📦 Stores (4)</div>
+        <div style="font-size:11px;color:var(--muted)">Primary stores</div>
+        <details style="margin-top:6px">
+          <summary style="font-size:11px;color:var(--muted);cursor:pointer">View / customize</summary>
+          <div id="grp-stores-list" style="margin-top:6px;font-size:11px;display:flex;flex-wrap:wrap;gap:4px"></div>
+        </details>
+      </div>
+    </label>
+    <label class="group-card" style="padding:12px;background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px;cursor:pointer;display:flex;align-items:start;gap:8px">
+      <input type="checkbox" id="grp-lamp" style="margin-top:3px">
+      <div style="flex:1">
+        <div style="font-weight:600;color:var(--ink)">🏪 LAMP (2)</div>
+        <div style="font-size:11px;color:var(--muted)">LAMP societies</div>
+        <details style="margin-top:6px">
+          <summary style="font-size:11px;color:var(--muted);cursor:pointer">View / customize</summary>
+          <div id="grp-lamp-list" style="margin-top:6px;font-size:11px;display:flex;flex-wrap:wrap;gap:4px"></div>
+        </details>
+      </div>
+    </label>
+  </div>
+
+  <div style="font-size:12px;color:var(--muted);margin-bottom:14px" id="ho-total-info">
+    Total entities selected: <b id="ho-total-count" style="color:var(--ink)">21</b>
+  </div>
+
+  <h3 style="font-size:14px;margin:14px 0 8px;color:var(--ink)">Output mode:</h3>
+  <div style="display:flex;gap:14px;font-size:13px;margin-bottom:14px;flex-wrap:wrap">
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+      <input type="radio" name="ho-mode" value="combined" checked> 📄 <b>Combined</b> — Single file with all selected entities as rows
+    </label>
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+      <input type="radio" name="ho-mode" value="separate"> 📚 <b>Separate</b> — One file per entity (download as ZIP)
+    </label>
+  </div>
+
+  <div class="action-bar">
+    <button class="btn success" id="btn-generate-sheets">⚡ Generate Sheets</button>
+    <button class="btn secondary" id="btn-reset-create">↻ Reset</button>
+  </div>
+  <div id="ho-status" style="margin-top:10px;font-size:12px;color:var(--muted)"></div>
+</div>
+
+<div id="ho-output-area"></div>
+
+</div>
+
+<!-- ====================================================================== -->
 
 <div class="tab-content" id="tab-future">
   <div class="panel">
@@ -1239,6 +1351,8 @@ function processReports(){
   }
 
   let unmatchedPhones = 0;
+  // Count occurrences of each YYYY-MM to find the predominant month
+  const monthCounts = {};
   dataRows.forEach((r,i)=>{
     const phone = r[colPhone];
     if(!phone) return;
@@ -1259,8 +1373,13 @@ function processReports(){
       if(isoDate){
         if(!blockStaffByDate[desig]) blockStaffByDate[desig]={};
         blockStaffByDate[desig][isoDate] = (blockStaffByDate[desig][isoDate]||0)+1;
+        // Track month
+        const ym = isoDate.slice(0,7);
+        monthCounts[ym] = (monthCounts[ym]||0)+1;
       }
     } else if(lookup.role==='Deputy Registrar'){
+      const isoDate = toIsoDate(date);
+      if(isoDate){ const ym = isoDate.slice(0,7); monthCounts[ym] = (monthCounts[ym]||0)+1; }
       drInspections.push({
         sl: drInspections.length+1,
         fpsCode: shopCode,
@@ -1270,6 +1389,8 @@ function processReports(){
         designation: lookup.designation
       });
     } else if(lookup.role==='Joint Registrar'){
+      const isoDate = toIsoDate(date);
+      if(isoDate){ const ym = isoDate.slice(0,7); monthCounts[ym] = (monthCounts[ym]||0)+1; }
       jrInspections.push({
         sl: jrInspections.length+1,
         fpsCode: shopCode,
@@ -1280,6 +1401,19 @@ function processReports(){
       });
     }
   });
+
+  // Auto-detect predominant month and set in UI
+  let predominantMonth = null;
+  let maxCount = 0;
+  for(const ym in monthCounts){
+    if(monthCounts[ym] > maxCount){
+      maxCount = monthCounts[ym];
+      predominantMonth = ym;
+    }
+  }
+  if(predominantMonth){
+    document.getElementById('reportMonth').value = predominantMonth;
+  }
 
   // 5. Sort block staff least->highest, then by name
   const blockStaffList = Object.entries(blockStaffInspections)
@@ -1625,6 +1759,8 @@ function renderConsistencyReport(r){
         <div style="margin-left:auto;display:flex;gap:6px">
           <button class="btn-tiny" onclick="downloadConsistencyExcel()">📥 Excel</button>
           <button class="btn-tiny" onclick="downloadConsistencyPDF()">📄 PDF</button>
+          <button class="btn-tiny" onclick="copyConsistencyImage()">📸 Copy image</button>
+          <button class="btn-tiny" onclick="downloadConsistencyImage()">💾 Save PNG</button>
         </div>
       </div>
 
@@ -1838,6 +1974,50 @@ function resetDefaultHolidays(){
   if(!consistency.data) return;
   consistency.holidays = defaultShopHolidays(consistency.data.year, consistency.data.month);
   refreshConsistencyTable();
+}
+
+// Screenshot the consistency table — capture full table including off-screen columns
+async function captureConsistencyCanvas(){
+  const wrap = document.getElementById('consistency-table-wrap');
+  if(!wrap) return null;
+  // Use html2canvas with full width to capture overflow content
+  const table = wrap.querySelector('table');
+  if(!table) return null;
+  return await html2canvas(table, {
+    backgroundColor:'#ffffff',
+    scale:2,
+    windowWidth: table.scrollWidth + 50,
+    width: table.scrollWidth,
+    height: table.scrollHeight
+  });
+}
+
+async function copyConsistencyImage(){
+  try{
+    const canvas = await captureConsistencyCanvas();
+    if(!canvas){toast('Nothing to capture',true);return}
+    canvas.toBlob(async blob=>{
+      try{
+        await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
+        toast('✓ Consistency report image copied');
+      }catch(e){
+        // Fallback: download instead
+        saveAs(blob, `Consistency_${(consistency.data?.monthLabel||'').replace(' ','_')}.png`);
+        toast('Clipboard blocked — downloaded as PNG instead');
+      }
+    });
+  }catch(e){toast('Screenshot failed: '+e.message,true)}
+}
+
+async function downloadConsistencyImage(){
+  try{
+    const canvas = await captureConsistencyCanvas();
+    if(!canvas){toast('Nothing to capture',true);return}
+    canvas.toBlob(blob=>{
+      saveAs(blob, `Consistency_${(consistency.data?.monthLabel||'').replace(' ','_')}.png`);
+      toast('✓ PNG saved');
+    });
+  }catch(e){toast('Download failed: '+e.message,true)}
 }
 
 function downloadConsistencyExcel(){
@@ -4474,6 +4654,384 @@ async function copyReminderMsg(){
 
 // Init
 initReminder();
+
+// ============================================================================
+// =================  CREATE DISTRICT SHEETS MODULE  ==========================
+// ============================================================================
+
+// Default lists for Thiruvannamalai district
+const DIST_BLOCKS = [
+  'திருவண்ணாமலை HQ','திருவண்ணாமலை 1','திருவண்ணாமலை 2',
+  'துரிஞ்சாபுரம்','கீழ்ப்பென்னாத்துர்','செங்கம்','புதுப்பாளையம்',
+  'தண்டராம்பட்டு','கலசபாக்கம்','போளுர்','ஜமுனாமரத்துர்','சேத்துப்பட்டு',
+  'ஆரணி கிழக்கு','ஆரணி மேற்கு','செய்யார்','அனக்காவூர்',
+  'வெம்பாக்கம் 1','வெம்பாக்கம் 2','வந்தவாசி','பெரணமல்லூர்','தெள்ளார்'
+];
+const DIST_CMS = [
+  'திருவண்ணாமலை CMS','போளுர் CMS','செங்கம் CMS','ஆரணி CMS',
+  'செய்யாறு CMS','வந்தவாசி CMS','கலசபாக்கம் CMS'
+];
+const DIST_STORES = [
+  'திருவண்ணாமலை மொத்த விற்பனை கிடங்கு',
+  'போளுர் முதன்மை கிடங்கு',
+  'ஆரணி முதன்மை கிடங்கு',
+  'வந்தவாசி முதன்மை கிடங்கு'
+];
+const DIST_LAMP = [
+  'LAMP 1','LAMP 2'
+];
+
+// Known TN districts (used for auto-detection of district column in HO sheet)
+const TN_DISTRICTS = [
+  'Ariyalur','Chengalpattu','Chennai','Coimbatore','Cuddalore','Dharmapuri',
+  'Dindigul','Erode','Kallakurichi','Kanchipuram','Kanyakumari','Karur',
+  'Krishnagiri','Madurai','Mayiladuthurai','Nagapattinam','Namakkal','Nilgiris',
+  'Perambalur','Pudukkottai','Ramanathapuram','Ranipet','Salem','Sivaganga',
+  'Tenkasi','Thanjavur','Theni','Thoothukudi','Tiruchirappalli','Tirunelveli',
+  'Tirupathur','Tiruppur','Tiruvallur','Tiruvannamalai','Tiruvarur','Vellore',
+  'Viluppuram','Virudhunagar'
+];
+
+const createSheet = {
+  workbook: null,
+  filename: '',
+  selectedSheetName: '',
+  detectedCol: -1,
+  detectedHeaderRow: -1,
+  blocks: [...DIST_BLOCKS],
+  cms: [...DIST_CMS],
+  stores: [...DIST_STORES],
+  lamp: [...DIST_LAMP]
+};
+
+// Setup upload handler
+function setupCreateSheetUpload(){
+  const box = document.getElementById('box-ho-excel');
+  const file = document.getElementById('file-ho-excel');
+  if(!box || !file) return;
+  box.addEventListener('click', ()=>file.click());
+  box.addEventListener('dragover', e=>{e.preventDefault();box.style.borderColor='#3b82f6'});
+  box.addEventListener('dragleave', ()=>box.style.borderColor='var(--border)');
+  box.addEventListener('drop', e=>{
+    e.preventDefault();
+    box.style.borderColor='var(--border)';
+    if(e.dataTransfer.files[0]) handleHOExcel(e.dataTransfer.files[0]);
+  });
+  file.addEventListener('change', e=>{
+    if(e.target.files[0]) handleHOExcel(e.target.files[0]);
+  });
+  // Render group lists initially
+  renderGroupLists();
+  // Bind group checkbox events
+  ['grp-blocks','grp-cms','grp-stores','grp-lamp'].forEach(id=>{
+    const cb = document.getElementById(id);
+    if(cb) cb.addEventListener('change', updateTotalCount);
+  });
+  // Bind generate / reset buttons
+  const gen = document.getElementById('btn-generate-sheets');
+  if(gen) gen.addEventListener('click', generateDistrictSheets);
+  const reset = document.getElementById('btn-reset-create');
+  if(reset) reset.addEventListener('click', resetCreateSheet);
+  updateTotalCount();
+}
+
+function renderGroupLists(){
+  function chips(arr, groupKey){
+    return arr.map((name,i)=>`<span style="background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);color:var(--ink);padding:2px 8px;border-radius:10px;font-size:11px">${name}</span>`).join('');
+  }
+  const a = document.getElementById('grp-blocks-list');
+  const b = document.getElementById('grp-cms-list');
+  const c = document.getElementById('grp-stores-list');
+  const d = document.getElementById('grp-lamp-list');
+  if(a) a.innerHTML = chips(createSheet.blocks);
+  if(b) b.innerHTML = chips(createSheet.cms);
+  if(c) c.innerHTML = chips(createSheet.stores);
+  if(d) d.innerHTML = chips(createSheet.lamp);
+}
+
+function getSelectedEntities(){
+  const list = [];
+  if(document.getElementById('grp-blocks').checked) list.push(...createSheet.blocks);
+  if(document.getElementById('grp-cms').checked)    list.push(...createSheet.cms);
+  if(document.getElementById('grp-stores').checked) list.push(...createSheet.stores);
+  if(document.getElementById('grp-lamp').checked)   list.push(...createSheet.lamp);
+  return list;
+}
+
+function updateTotalCount(){
+  const el = document.getElementById('ho-total-count');
+  if(el) el.textContent = getSelectedEntities().length;
+}
+
+async function handleHOExcel(file){
+  const info = document.getElementById('ho-file-info');
+  info.textContent = '⏳ Reading '+file.name+'...';
+  try{
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, {type:'array', cellDates:true});
+    createSheet.workbook = wb;
+    createSheet.filename = file.name.replace(/\.xlsx?$/i,'');
+
+    // Populate sheet select
+    const sel = document.getElementById('ho-sheet-select');
+    sel.innerHTML = wb.SheetNames.map(n=>`<option value="${n}">${n}</option>`).join('');
+    sel.addEventListener('change', ()=>analyzeSheet(sel.value));
+
+    // Show config panel
+    document.getElementById('ho-config-panel').style.display='';
+    info.innerHTML = `✓ Loaded: <b>${file.name}</b> — ${wb.SheetNames.length} sheet(s)`;
+
+    analyzeSheet(wb.SheetNames[0]);
+  }catch(err){
+    info.innerHTML = '✗ Error: '+err.message;
+    toast('Failed to read file: '+err.message, true);
+  }
+}
+
+function analyzeSheet(sheetName){
+  createSheet.selectedSheetName = sheetName;
+  const ws = createSheet.workbook.Sheets[sheetName];
+  const data = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+  if(data.length===0){
+    document.getElementById('ho-detect-info').innerHTML = '⚠️ Sheet appears empty';
+    return;
+  }
+
+  // Find the column with TN district names — try each column in first 20 cols
+  let bestCol = -1, bestHeaderRow = -1, bestScore = 0;
+  for(let c=0; c<Math.min(20, (data[0]||[]).length); c++){
+    // For each column, try header rows 0-5 and check rows after for district matches
+    for(let hr=0; hr<Math.min(6, data.length); hr++){
+      let matches = 0;
+      for(let r=hr+1; r<Math.min(hr+50, data.length); r++){
+        const v = String(data[r][c]||'').trim();
+        if(TN_DISTRICTS.some(d=>v.toLowerCase().includes(d.toLowerCase()) || d.toLowerCase().includes(v.toLowerCase()))){
+          matches++;
+        }
+      }
+      if(matches > bestScore){
+        bestScore = matches;
+        bestCol = c;
+        bestHeaderRow = hr;
+      }
+    }
+  }
+
+  // Populate column select with all columns
+  const colSel = document.getElementById('ho-district-col');
+  const firstRow = data[bestHeaderRow] || data[0] || [];
+  colSel.innerHTML = firstRow.map((h,i)=>{
+    const letter = XLSX.utils.encode_col(i);
+    return `<option value="${i}" ${i===bestCol?'selected':''}>Col ${letter}: ${String(h||'(empty)').slice(0,40)}</option>`;
+  }).join('');
+
+  createSheet.detectedCol = bestCol;
+  createSheet.detectedHeaderRow = bestHeaderRow;
+
+  const info = document.getElementById('ho-detect-info');
+  if(bestScore >= 10){
+    info.style.color = '#34d399';
+    info.innerHTML = `✓ Detected district column with ${bestScore} TN districts matched (header row ${bestHeaderRow+1})`;
+  } else if(bestScore > 0){
+    info.style.color = '#fcd34d';
+    info.innerHTML = `⚠️ Only ${bestScore} districts matched. You may need to override the column manually.`;
+  } else {
+    info.style.color = '#fca5a5';
+    info.innerHTML = `✗ No TN district names found. Please pick the column manually.`;
+  }
+}
+
+function generateDistrictSheets(){
+  if(!createSheet.workbook){toast('Upload an HO Excel file first',true);return}
+  const entities = getSelectedEntities();
+  if(entities.length===0){toast('Select at least one group',true);return}
+
+  const sheetName = createSheet.selectedSheetName;
+  const districtCol = parseInt(document.getElementById('ho-district-col').value);
+  if(isNaN(districtCol)||districtCol<0){toast('Invalid district column',true);return}
+
+  const headerRow = createSheet.detectedHeaderRow;
+  const mode = document.querySelector('input[name="ho-mode"]:checked').value;
+  const statusEl = document.getElementById('ho-status');
+  statusEl.textContent = '⏳ Generating sheets...';
+
+  try{
+    if(mode==='combined'){
+      const outWb = buildOutputWorkbook(entities, sheetName, districtCol, headerRow);
+      const fname = `${createSheet.filename}_Tiruvannamalai_${new Date().toISOString().slice(0,10)}.xlsx`;
+      XLSX.writeFile(outWb, fname);
+      statusEl.innerHTML = `✓ Generated combined sheet with <b>${entities.length}</b> entities → <b>${fname}</b>`;
+      showGenerationOutput(entities, mode, fname);
+    } else {
+      // Separate: one workbook per entity, zip them
+      const zip = new JSZip();
+      entities.forEach(entity=>{
+        const wb = buildOutputWorkbook([entity], sheetName, districtCol, headerRow);
+        const safeName = entity.replace(/[^a-zA-Z0-9\u0B80-\u0BFF\s]/g,'').replace(/\s+/g,'_').slice(0,40);
+        const buf = XLSX.write(wb, {bookType:'xlsx', type:'array'});
+        zip.file(`${safeName}.xlsx`, buf);
+      });
+      zip.generateAsync({type:'blob'}).then(blob=>{
+        const zipName = `${createSheet.filename}_Tiruvannamalai_Separate_${new Date().toISOString().slice(0,10)}.zip`;
+        saveAs(blob, zipName);
+        statusEl.innerHTML = `✓ Generated <b>${entities.length}</b> separate files → <b>${zipName}</b>`;
+        showGenerationOutput(entities, mode, zipName);
+      });
+    }
+  }catch(err){
+    console.error(err);
+    statusEl.innerHTML = '✗ Generation failed: '+err.message;
+    toast('Generation failed: '+err.message, true);
+  }
+}
+
+// Build a workbook that copies the entire HO file BUT replaces the 38 district rows
+// with the given entity list. All sheets in the workbook are processed.
+function buildOutputWorkbook(entities, primarySheet, districtCol, headerRow){
+  const srcWb = createSheet.workbook;
+  // Create a fresh workbook
+  const outWb = XLSX.utils.book_new();
+
+  srcWb.SheetNames.forEach(sn=>{
+    const ws = srcWb.Sheets[sn];
+    // Convert to 2D array (preserves all cells)
+    const aoa = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+
+    // Only replace district rows in the primary sheet (or sheets with matching structure)
+    let processed = aoa;
+    if(sn === primarySheet){
+      processed = replaceDistrictRows(aoa, districtCol, headerRow, entities);
+    } else {
+      // For other sheets: try to detect if it has district names in same column and replace there too
+      processed = tryReplaceIfDistrictSheet(aoa, entities);
+    }
+
+    const newWs = XLSX.utils.aoa_to_sheet(processed);
+    // Try to preserve column widths from source
+    if(ws['!cols']) newWs['!cols'] = ws['!cols'];
+    if(ws['!merges']) newWs['!merges'] = ws['!merges'].filter(m=>{
+      // Drop merges that span the data area to avoid stale merges
+      return m.s.r < headerRow + 1;
+    });
+    XLSX.utils.book_append_sheet(outWb, newWs, sn);
+  });
+  return outWb;
+}
+
+function replaceDistrictRows(aoa, col, headerRow, entities){
+  const result = [];
+  // Copy header rows as-is
+  for(let r=0; r<=headerRow; r++){
+    result.push(aoa[r] || []);
+  }
+  // Get template row (first data row) to clone styles/formulas for each entity
+  const templateRow = aoa[headerRow+1] || [];
+
+  // Find where the 38 district rows END (first row after headerRow where col is empty or not a district)
+  let lastDataRow = headerRow;
+  for(let r=headerRow+1; r<aoa.length; r++){
+    const v = String((aoa[r]||[])[col]||'').trim();
+    if(!v) break;
+    if(TN_DISTRICTS.some(d=>v.toLowerCase().includes(d.toLowerCase()))) {
+      lastDataRow = r;
+    } else if(r === headerRow+1) {
+      // First data row didn't match a district — accept anyway as template
+      lastDataRow = r;
+    } else {
+      break;
+    }
+  }
+
+  // Replace data rows with entity list
+  entities.forEach((entity, idx)=>{
+    const newRow = (templateRow || []).slice();
+    // Replace district name in detected column
+    newRow[col] = entity;
+    // Set serial number in column A if it's likely an S.No column
+    if(col > 0){
+      // Check if column A in template is a number
+      const aVal = templateRow[0];
+      if(typeof aVal === 'number' || /^\d+$/.test(String(aVal||''))){
+        newRow[0] = idx + 1;
+      }
+    }
+    // Clear other data cells (keep only S.No and entity name)
+    for(let c=0; c<newRow.length; c++){
+      if(c === col) continue;        // entity name col
+      if(c === 0 && col !== 0) continue;  // S.No col
+      // Keep if it looks like a formula or static label, clear if it's numeric/data
+      const v = newRow[c];
+      if(typeof v === 'number') newRow[c] = '';
+      else if(typeof v === 'string' && !v.startsWith('=') && /^[\d.,]+$/.test(v)) newRow[c] = '';
+      // Leave strings, formulas, dates etc as-is (they're labels/formulas)
+    }
+    result.push(newRow);
+  });
+
+  // Append any rows after the district data (totals, notes etc.)
+  for(let r=lastDataRow+1; r<aoa.length; r++){
+    result.push(aoa[r] || []);
+  }
+
+  return result;
+}
+
+function tryReplaceIfDistrictSheet(aoa, entities){
+  // Heuristic: look for any column with multiple TN district names in first 50 rows
+  for(let c=0; c<Math.min(8, (aoa[0]||[]).length); c++){
+    let matches = 0, firstMatchRow = -1;
+    for(let r=0; r<Math.min(50, aoa.length); r++){
+      const v = String((aoa[r]||[])[c]||'').trim();
+      if(TN_DISTRICTS.some(d=>v.toLowerCase().includes(d.toLowerCase()))){
+        matches++;
+        if(firstMatchRow<0) firstMatchRow = r;
+      }
+    }
+    if(matches >= 10){
+      // Replace this column's district rows
+      return replaceDistrictRows(aoa, c, firstMatchRow-1, entities);
+    }
+  }
+  return aoa; // No district column found, return as-is
+}
+
+function showGenerationOutput(entities, mode, filename){
+  const wrap = document.getElementById('ho-output-area');
+  wrap.innerHTML = `
+    <div class="panel">
+      <h2><span class="dot"></span> ✅ Step 3: Generated Output</h2>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">
+        Downloaded: <b style="color:var(--ink)">${filename}</b>
+      </p>
+      <div style="background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px;padding:14px">
+        <div style="font-size:13px;font-weight:600;margin-bottom:8px">Entities (${entities.length}):</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          ${entities.map((e,i)=>`<span style="background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.3);padding:3px 10px;border-radius:12px;font-size:12px">${i+1}. ${e}</span>`).join('')}
+        </div>
+      </div>
+      <div style="margin-top:14px;font-size:12px;color:var(--muted);line-height:1.6">
+        <b>Next steps:</b><br>
+        1. Open the downloaded file to verify the replacement<br>
+        2. Upload to Google Drive<br>
+        3. Convert to Google Sheets (File → Save as Google Sheets)<br>
+        4. Share with your block officers (Anyone with link can edit)<br>
+        5. Post the link to your WhatsApp groups
+      </div>
+    </div>`;
+}
+
+function resetCreateSheet(){
+  createSheet.workbook = null;
+  createSheet.filename = '';
+  document.getElementById('ho-file-info').innerHTML = '';
+  document.getElementById('ho-config-panel').style.display = 'none';
+  document.getElementById('ho-output-area').innerHTML = '';
+  document.getElementById('ho-status').innerHTML = '';
+  document.getElementById('file-ho-excel').value = '';
+}
+
+setupCreateSheetUpload();
+
 
 
 </script>
