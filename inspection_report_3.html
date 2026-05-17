@@ -6,7 +6,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/file-saver/2.0.5/FileSaver.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 :root{
   --bg:#0f172a; --panel:#1e293b; --panel-2:#334155;
@@ -591,7 +590,6 @@ document.addEventListener('keydown', e=>{
   <div class="tab" data-tab="squad">🚓 Squad Duty Order</div>
   <div class="tab" data-tab="pdl">📋 Head Office PDL</div>
   <div class="tab" data-tab="reminder">📲 WhatsApp Reminder</div>
-  <div class="tab" data-tab="createsheet">🏗️ Create District Sheets</div>
   <div class="tab" data-tab="future" style="opacity:.5">➕ Future Modules</div>
 </div>
 
@@ -629,10 +627,77 @@ document.addEventListener('keydown', e=>{
     <button class="btn" id="btn-process">⚡ Generate Reports</button>
     <button class="btn secondary" id="btn-reset">🔄 Reset</button>
   </div>
+
+  <!-- Squad Shop Deduction -->
+  <div style="margin-top:14px;padding:14px;background:rgba(124,58,237,.08);border:1px solid rgba(124,58,237,.3);border-radius:8px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <span style="font-size:13px;font-weight:600;color:#a78bfa">🚓 Squad Shop Deduction (optional)</span>
+      <span style="font-size:11px;color:var(--muted)">Shops inspected under Squad Duty will be subtracted from all role counts</span>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px">
+      <div>
+        <label style="font-size:12px;color:var(--muted);font-weight:600">📅 Squad Date</label>
+        <input type="date" id="insp-squad-date"
+          style="width:100%;background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:8px 12px;border-radius:6px;font-size:13px;margin-top:4px">
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--muted);font-weight:600">Tolerance (delay allowed)</label>
+        <select id="insp-squad-tolerance"
+          style="width:100%;background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:8px 12px;border-radius:6px;font-size:13px;margin-top:4px">
+          <option value="0">Exact date only</option>
+          <option value="1">+1 day</option>
+          <option value="2" selected>+2 days (recommended)</option>
+          <option value="3">+3 days</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:14px;margin-bottom:8px;font-size:13px;flex-wrap:wrap">
+      <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+        <input type="radio" name="insp-squad-src" value="none" checked id="insp-sq-none"> No squad this month
+      </label>
+      <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+        <input type="radio" name="insp-squad-src" value="paste" id="insp-sq-paste"> Paste shop codes
+      </label>
+      <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+        <input type="radio" name="insp-squad-src" value="gsheet" id="insp-sq-gsheet"> Fetch from Google Sheet
+      </label>
+    </div>
+
+    <div id="insp-sq-paste-area" style="display:none">
+      <textarea id="insp-squad-codes" rows="4"
+        placeholder="Paste shop codes one per line or comma separated&#10;05EP021PN&#10;05EP022P1&#10;..."
+        style="width:100%;background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:10px;border-radius:6px;font-size:13px;font-family:monospace"></textarea>
+      <div id="insp-sq-code-count" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
+    </div>
+
+    <div id="insp-sq-gsheet-area" style="display:none">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:6px">
+        Google Sheet with tabs named like <code style="background:rgba(0,0,0,.3);padding:1px 5px;border-radius:3px">April-2026</code>, <code style="background:rgba(0,0,0,.3);padding:1px 5px;border-radius:3px">May-2026</code> — each tab has shop codes in column A
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <input type="text" id="insp-sq-gsheet-url"
+          placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=csv"
+          style="flex:1;min-width:240px;background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:8px 12px;border-radius:6px;font-size:12px">
+        <button class="btn secondary" id="btn-fetch-squad-sheet" style="font-size:12px;padding:8px 14px">🔄 Fetch</button>
+      </div>
+      <div id="insp-sq-gsheet-status" style="font-size:11px;margin-top:4px;color:var(--muted)"></div>
+    </div>
+  </div>
 </div>
 
 <div id="results-area"></div>
 
+</div>
+
+<!-- Squad Checklist Modal -->
+<div class="modal-overlay" id="squad-checklist-modal" style="display:none">
+  <div class="modal-card" style="max-width:680px;max-height:85vh;overflow-y:auto">
+    <button class="modal-close" id="squad-checklist-close">×</button>
+    <h2>🚓 Squad Duty Checklist</h2>
+    <div id="squad-checklist-content" style="margin-top:14px"></div>
+  </div>
 </div>
 
 <!-- ================================================================ -->
@@ -1010,117 +1075,6 @@ document.addEventListener('keydown', e=>{
   </div>
 </div>
 
-<!-- ====================================================================== -->
-<!-- CREATE DISTRICT SHEETS TAB -->
-<!-- ====================================================================== -->
-<div class="tab-content" id="tab-createsheet">
-
-<div class="panel">
-  <h2><span class="dot"></span> 📂 Step 1: Upload HO Excel File</h2>
-  <p style="font-size:13px;color:var(--muted);margin-bottom:12px">
-    Download the State Head Office sheet as Excel (.xlsx) and upload here. The app will detect the 38 district rows and let you replace them with your blocks/CMS/stores.
-  </p>
-  <div class="upload-box" id="box-ho-excel" style="border:2px dashed var(--border);border-radius:10px;padding:30px;text-align:center;cursor:pointer">
-    <div style="font-size:32px;margin-bottom:8px">📊</div>
-    <div style="font-weight:600;color:var(--ink)">Click or drag .xlsx file</div>
-    <div style="font-size:12px;color:var(--muted);margin-top:4px">State HO sheet downloaded from official email</div>
-    <input type="file" id="file-ho-excel" accept=".xlsx,.xls" style="display:none">
-  </div>
-  <div id="ho-file-info" style="margin-top:10px;font-size:13px;color:var(--muted)"></div>
-</div>
-
-<div class="panel" id="ho-config-panel" style="display:none">
-  <h2><span class="dot"></span> 🔧 Step 2: Configure Replacement</h2>
-
-  <div style="margin-bottom:14px">
-    <label style="font-size:13px;color:var(--muted);font-weight:600">Select sheet tab to process (if multiple):</label>
-    <select id="ho-sheet-select"
-      style="width:100%;background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:9px 12px;border-radius:6px;font-size:13px;margin-top:4px"></select>
-  </div>
-
-  <div style="margin-bottom:14px">
-    <label style="font-size:13px;color:var(--muted);font-weight:600">District column (auto-detected, override if wrong):</label>
-    <select id="ho-district-col"
-      style="width:100%;background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:9px 12px;border-radius:6px;font-size:13px;margin-top:4px"></select>
-    <div id="ho-detect-info" style="font-size:12px;color:#34d399;margin-top:4px"></div>
-  </div>
-
-  <h3 style="font-size:14px;margin:14px 0 8px;color:var(--ink)">Replace 38 district rows with these groups:</h3>
-
-  <!-- 4 group categories -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
-    <label class="group-card" style="padding:12px;background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px;cursor:pointer;display:flex;align-items:start;gap:8px">
-      <input type="checkbox" id="grp-blocks" checked style="margin-top:3px">
-      <div style="flex:1">
-        <div style="font-weight:600;color:var(--ink)">🏘️ Blocks (21)</div>
-        <div style="font-size:11px;color:var(--muted)">21 PDS taluks of Thiruvannamalai</div>
-        <details style="margin-top:6px">
-          <summary style="font-size:11px;color:var(--muted);cursor:pointer">View / customize</summary>
-          <div id="grp-blocks-list" style="margin-top:6px;font-size:11px;display:flex;flex-wrap:wrap;gap:4px"></div>
-        </details>
-      </div>
-    </label>
-    <label class="group-card" style="padding:12px;background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px;cursor:pointer;display:flex;align-items:start;gap:8px">
-      <input type="checkbox" id="grp-cms" style="margin-top:3px">
-      <div style="flex:1">
-        <div style="font-weight:600;color:var(--ink)">🏢 CMS (7)</div>
-        <div style="font-size:11px;color:var(--muted)">Co-operative Marketing Societies</div>
-        <details style="margin-top:6px">
-          <summary style="font-size:11px;color:var(--muted);cursor:pointer">View / customize</summary>
-          <div id="grp-cms-list" style="margin-top:6px;font-size:11px;display:flex;flex-wrap:wrap;gap:4px"></div>
-        </details>
-      </div>
-    </label>
-    <label class="group-card" style="padding:12px;background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px;cursor:pointer;display:flex;align-items:start;gap:8px">
-      <input type="checkbox" id="grp-stores" style="margin-top:3px">
-      <div style="flex:1">
-        <div style="font-weight:600;color:var(--ink)">📦 Stores (4)</div>
-        <div style="font-size:11px;color:var(--muted)">Primary stores</div>
-        <details style="margin-top:6px">
-          <summary style="font-size:11px;color:var(--muted);cursor:pointer">View / customize</summary>
-          <div id="grp-stores-list" style="margin-top:6px;font-size:11px;display:flex;flex-wrap:wrap;gap:4px"></div>
-        </details>
-      </div>
-    </label>
-    <label class="group-card" style="padding:12px;background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px;cursor:pointer;display:flex;align-items:start;gap:8px">
-      <input type="checkbox" id="grp-lamp" style="margin-top:3px">
-      <div style="flex:1">
-        <div style="font-weight:600;color:var(--ink)">🏪 LAMP (2)</div>
-        <div style="font-size:11px;color:var(--muted)">LAMP societies</div>
-        <details style="margin-top:6px">
-          <summary style="font-size:11px;color:var(--muted);cursor:pointer">View / customize</summary>
-          <div id="grp-lamp-list" style="margin-top:6px;font-size:11px;display:flex;flex-wrap:wrap;gap:4px"></div>
-        </details>
-      </div>
-    </label>
-  </div>
-
-  <div style="font-size:12px;color:var(--muted);margin-bottom:14px" id="ho-total-info">
-    Total entities selected: <b id="ho-total-count" style="color:var(--ink)">21</b>
-  </div>
-
-  <h3 style="font-size:14px;margin:14px 0 8px;color:var(--ink)">Output mode:</h3>
-  <div style="display:flex;gap:14px;font-size:13px;margin-bottom:14px;flex-wrap:wrap">
-    <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-      <input type="radio" name="ho-mode" value="combined" checked> 📄 <b>Combined</b> — Single file with all selected entities as rows
-    </label>
-    <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-      <input type="radio" name="ho-mode" value="separate"> 📚 <b>Separate</b> — One file per entity (download as ZIP)
-    </label>
-  </div>
-
-  <div class="action-bar">
-    <button class="btn success" id="btn-generate-sheets">⚡ Generate Sheets</button>
-    <button class="btn secondary" id="btn-reset-create">↻ Reset</button>
-  </div>
-  <div id="ho-status" style="margin-top:10px;font-size:12px;color:var(--muted)"></div>
-</div>
-
-<div id="ho-output-area"></div>
-
-</div>
-
-<!-- ====================================================================== -->
 
 <div class="tab-content" id="tab-future">
   <div class="panel">
@@ -1176,7 +1130,8 @@ const state = {
   misData: null, misName: null,
   phoneMap: BUILT_IN_PHONE_MAP, phoneName: null,
   shopMap: null, shopName: null,
-  results: null
+  results: null,
+  squadCodes: null  // Set of shop codes fetched from GSheet
 };
 
 // Inspector role classification helper
@@ -1415,6 +1370,87 @@ function processReports(){
     document.getElementById('reportMonth').value = predominantMonth;
   }
 
+  // ── SQUAD DEDUCTION ────────────────────────────────────────────────────
+  // Get squad shop codes from UI
+  const squadSrc = document.querySelector('input[name="insp-squad-src"]:checked')?.value || 'none';
+  const squadDate = document.getElementById('insp-squad-date').value; // YYYY-MM-DD
+  const squadTol  = parseInt(document.getElementById('insp-squad-tolerance').value)||0;
+  let squadCodes = new Set(); // shop codes from squad list
+
+  if(squadSrc === 'paste'){
+    const raw = document.getElementById('insp-squad-codes').value;
+    raw.split(/[\n,\s]+/).map(s=>s.trim().toUpperCase()).filter(Boolean).forEach(c=>squadCodes.add(c));
+  } else if(squadSrc === 'gsheet'){
+    // Already fetched into state.squadCodes
+    if(state.squadCodes) state.squadCodes.forEach(c=>squadCodes.add(c));
+  }
+
+  // Build lookup: which squad codes were actually found in MIS within date window
+  // squadCheckList: {code: {found: bool, inspDate: str, onTime: bool, daysDiff: int}}
+  const squadCheckList = {};
+  squadCodes.forEach(code=>{
+    squadCheckList[code] = {code, found:false, inspDate:null, onTime:false, daysDiff:null};
+  });
+
+  // Track which rows are squad rows (to subtract from counts)
+  // A row is a squad row if: its shop code is in squadCodes AND date within tolerance
+  const squadInspectedCodes = new Set(); // shop codes confirmed as squad-inspected in MIS
+
+  if(squadSrc !== 'none' && squadCodes.size > 0 && squadDate){
+    const anchorMs = new Date(squadDate).getTime();
+    // Re-scan dataRows
+    dataRows.forEach(r=>{
+      const shopCode = (r[colFps]||'').toString().trim().toUpperCase();
+      if(!squadCodes.has(shopCode)) return;
+      const isoDate = toIsoDate(r[colDate]);
+      if(!isoDate) return;
+      const rowMs = new Date(isoDate).getTime();
+      const daysDiff = Math.round((rowMs - anchorMs)/86400000);
+      // Only consider on or after squad date (not before), within tolerance
+      if(daysDiff >= 0 && daysDiff <= squadTol){
+        if(!squadCheckList[shopCode].found || daysDiff < squadCheckList[shopCode].daysDiff){
+          squadCheckList[shopCode] = {code:shopCode, found:true, inspDate:isoDate, onTime:true, daysDiff};
+        }
+        squadInspectedCodes.add(shopCode);
+      } else if(daysDiff > squadTol){
+        // Late — found but after tolerance window
+        if(!squadCheckList[shopCode].found){
+          squadCheckList[shopCode] = {code:shopCode, found:true, inspDate:isoDate, onTime:false, daysDiff};
+        }
+      }
+    });
+  }
+
+  // Now subtract squad-inspected shops from each role's count
+  // For Block Staff: rebuild counts excluding squad shop codes inspected on time
+  if(squadInspectedCodes.size > 0){
+    // Reset block staff counts
+    Object.keys(blockStaffInspections).forEach(k=>blockStaffInspections[k]=0);
+    dataRows.forEach(r=>{
+      const phone = r[colPhone];
+      if(!phone) return;
+      const phoneStr = String(Math.round(Number(phone)));
+      const lookup = phoneLookup[phoneStr];
+      if(!lookup) return;
+      const shopCode = (r[colFps]||'').toString().trim().toUpperCase();
+      if(squadInspectedCodes.has(shopCode)) return; // exclude squad shops
+      if(lookup.role==='Block Staff'){
+        blockStaffInspections[lookup.designation] = (blockStaffInspections[lookup.designation]||0)+1;
+      }
+    });
+    // Also filter DR and JR
+    const drFiltered = drInspections.filter(d=>!squadInspectedCodes.has(d.fpsCode.toUpperCase()));
+    drInspections.length=0; drFiltered.forEach(d=>drInspections.push(d));
+    const jrFiltered = jrInspections.filter(d=>!squadInspectedCodes.has(d.fpsCode.toUpperCase()));
+    jrInspections.length=0; jrFiltered.forEach(d=>jrInspections.push(d));
+  }
+
+  // Renumber DR and JR after deduction
+  drInspections.forEach((d,i)=>d.sl=i+1);
+  jrInspections.forEach((d,i)=>d.sl=i+1);
+
+  // ── END SQUAD DEDUCTION ────────────────────────────────────────────────
+
   // 5. Sort block staff least->highest, then by name
   const blockStaffList = Object.entries(blockStaffInspections)
     .map(([name,count])=>({name:name.trim(),count,target:45,pending:Math.max(0,45-count)}))
@@ -1428,7 +1464,12 @@ function processReports(){
     totalRows: dataRows.length,
     unmatchedPhones,
     targetDR: 50,
-    targetJR: 10
+    targetJR: 10,
+    squadCheckList: Object.values(squadCheckList),
+    squadCount: squadInspectedCodes.size,
+    squadTotal: squadCodes.size,
+    squadDate,
+    squadTol
   };
 
   renderResults();
@@ -1503,7 +1544,16 @@ function renderResults(){
     </div>
     <div class="action-bar">
       <button class="btn success" id="btn-download-excel">📥 Download Excel (3 sheets)</button>
+      ${r.squadCheckList && r.squadCheckList.length > 0 ? `
+        <button class="btn" id="btn-squad-checklist" style="background:#7c3aed">
+          🚓 Squad Checklist (${r.squadCount}/${r.squadTotal} done)
+        </button>` : ''}
     </div>
+    ${r.squadCheckList && r.squadCheckList.length > 0 ? `
+    <div style="font-size:12px;padding:8px 14px;background:rgba(124,58,237,.1);border-radius:6px;margin-top:8px;color:#a78bfa">
+      🚓 Squad deduction applied: <b>${r.squadCount}</b> shop${r.squadCount!==1?'s':''} inspected on time deducted from all role counts.
+      ${r.squadTotal - r.squadCount > 0 ? `<b style="color:#fca5a5">${r.squadTotal - r.squadCount} shops pending/late.</b>` : '<b style="color:#6ee7b7">All squad shops done ✓</b>'}
+    </div>` : ''}
   </div>
   `;
 
@@ -1614,6 +1664,181 @@ function renderResults(){
   document.getElementById('results-area').innerHTML = html;
   document.getElementById('btn-download-excel').addEventListener('click', downloadExcel);
   bindConsistencyEvents();
+
+  // Squad checklist button
+  const sqBtn = document.getElementById('btn-squad-checklist');
+  if(sqBtn) sqBtn.addEventListener('click', openSquadChecklist);
+
+  // Squad checklist modal close
+  const sqClose = document.getElementById('squad-checklist-close');
+  if(sqClose) sqClose.addEventListener('click', ()=>{
+    document.getElementById('squad-checklist-modal').style.display='none';
+  });
+  document.getElementById('squad-checklist-modal').addEventListener('click', e=>{
+    if(e.target.id==='squad-checklist-modal') e.target.style.display='none';
+  });
+}
+
+// ── SQUAD CHECKLIST MODAL ──────────────────────────────────────────────────
+function openSquadChecklist(){
+  const r = state.results;
+  if(!r || !r.squadCheckList || r.squadCheckList.length===0){
+    toast('No squad shops configured',true);return;
+  }
+  const onTime  = r.squadCheckList.filter(x=>x.found && x.onTime);
+  const late    = r.squadCheckList.filter(x=>x.found && !x.onTime);
+  const notDone = r.squadCheckList.filter(x=>!x.found);
+  const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  function fmtD(isoDate){if(!isoDate)return '';const d=new Date(isoDate);return `${d.getDate()}-${months[d.getMonth()]}-${d.getFullYear()}`;}
+
+  let html = `
+    <div style="font-size:13px;color:var(--gray);margin-bottom:14px">
+      Squad Date: <b>${fmtD(r.squadDate)}</b> &nbsp;|&nbsp;
+      Tolerance: <b>+${r.squadTol} day${r.squadTol!==1?'s':''}</b> &nbsp;|&nbsp;
+      Total shops: <b>${r.squadCheckList.length}</b>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
+      <div style="background:#d1fae5;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:22px;font-weight:700;color:#065f46">${onTime.length}</div>
+        <div style="font-size:11px;color:#047857;font-weight:600">✅ Done on time</div>
+      </div>
+      <div style="background:#fef3c7;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:22px;font-weight:700;color:#92400e">${late.length}</div>
+        <div style="font-size:11px;color:#b45309;font-weight:600">🕐 Done late</div>
+      </div>
+      <div style="background:#fee2e2;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:22px;font-weight:700;color:#b91c1c">${notDone.length}</div>
+        <div style="font-size:11px;color:#dc2626;font-weight:600">❌ Not done</div>
+      </div>
+    </div>`;
+
+  // Table
+  html += `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead>
+      <tr style="background:#1e3a8a;color:white">
+        <th style="padding:8px 10px;text-align:center">#</th>
+        <th style="padding:8px 10px;text-align:left">Shop Code</th>
+        <th style="padding:8px 10px;text-align:center">Status</th>
+        <th style="padding:8px 10px;text-align:center">Inspected On</th>
+        <th style="padding:8px 10px;text-align:center">Days after</th>
+      </tr>
+    </thead><tbody>`;
+
+  // Sort: not done first, then late, then on time
+  const sorted = [...notDone, ...late, ...onTime];
+  sorted.forEach((item,i)=>{
+    const bg = i%2===0?'#f8fafc':'#fff';
+    const statusCell = item.found
+      ? (item.onTime
+          ? '<span style="color:#059669;font-weight:600">✅ On time</span>'
+          : `<span style="color:#d97706;font-weight:600">🕐 Late (+${item.daysDiff}d)</span>`)
+      : '<span style="color:#dc2626;font-weight:600">❌ Not done</span>';
+    html += `<tr style="background:${bg}">
+      <td style="padding:7px 10px;text-align:center;color:#64748b">${i+1}</td>
+      <td style="padding:7px 10px;font-family:monospace;font-weight:600">${item.code}</td>
+      <td style="padding:7px 10px;text-align:center">${statusCell}</td>
+      <td style="padding:7px 10px;text-align:center;color:#475569">${item.inspDate?fmtD(item.inspDate):'—'}</td>
+      <td style="padding:7px 10px;text-align:center;color:#475569">${item.daysDiff!==null?'+'+item.daysDiff+'d':'—'}</td>
+    </tr>`;
+  });
+  html += `</tbody></table></div>`;
+
+  document.getElementById('squad-checklist-content').innerHTML = html;
+  document.getElementById('squad-checklist-modal').style.display = 'flex';
+}
+
+// ── SQUAD SOURCE UI EVENTS ─────────────────────────────────────────────────
+function setupSquadSourceUI(){
+  // Radio toggle
+  document.querySelectorAll('input[name="insp-squad-src"]').forEach(r=>{
+    r.addEventListener('change', e=>{
+      document.getElementById('insp-sq-paste-area').style.display = e.target.value==='paste' ? '' : 'none';
+      document.getElementById('insp-sq-gsheet-area').style.display = e.target.value==='gsheet' ? '' : 'none';
+    });
+  });
+
+  // Code count live display
+  const codesTA = document.getElementById('insp-squad-codes');
+  if(codesTA) codesTA.addEventListener('input', ()=>{
+    const codes = codesTA.value.split(/[\n,\s]+/).map(s=>s.trim()).filter(Boolean);
+    document.getElementById('insp-sq-code-count').textContent =
+      codes.length > 0 ? `${codes.length} shop code${codes.length!==1?'s':''} entered` : '';
+  });
+
+  // Fetch from Google Sheet
+  const fetchBtn = document.getElementById('btn-fetch-squad-sheet');
+  if(fetchBtn) fetchBtn.addEventListener('click', fetchSquadGSheet);
+}
+
+async function fetchSquadGSheet(){
+  const url = document.getElementById('insp-sq-gsheet-url').value.trim();
+  const statusEl = document.getElementById('insp-sq-gsheet-status');
+  if(!url){ toast('Paste the Google Sheet URL first',true); return; }
+
+  // Detect current month from reportMonth input or today
+  const monthInput = document.getElementById('reportMonth').value; // YYYY-MM
+  let tabName = '';
+  if(monthInput){
+    const [y,m] = monthInput.split('-');
+    const monthNames = ['January','February','March','April','May','June',
+                        'July','August','September','October','November','December'];
+    tabName = monthNames[parseInt(m)-1]+'-'+y; // e.g. April-2026
+  } else {
+    const now = new Date();
+    const monthNames = ['January','February','March','April','May','June',
+                        'July','August','September','October','November','December'];
+    tabName = monthNames[now.getMonth()]+'-'+now.getFullYear();
+  }
+
+  statusEl.textContent = `🔄 Fetching tab "${tabName}"...`;
+  statusEl.style.color = 'var(--muted)';
+
+  try{
+    // Build tab-specific CSV URL
+    const baseUrl = url.split('?')[0];
+    // Try to find the right gid by fetching whole doc and guessing tab
+    // Simpler: user published the specific sheet, or we try gid 0-5
+    let found = false;
+    for(let gid=0; gid<=6; gid++){
+      try{
+        const csvUrl = `${baseUrl}?gid=${gid}&single=true&output=csv&_=${Date.now()}`;
+        const resp = await safeFetch(csvUrl);
+        if(!resp.ok) continue;
+        const txt = await resp.text();
+        if(txt.startsWith('<!DOCTYPE')||txt.startsWith('<html')) continue;
+        const rows = parseCSV(txt);
+        if(rows.length < 1) continue;
+        // Check if header contains the month name or first data looks like shop codes
+        const headerStr = (rows[0]||[]).join(' ').toLowerCase();
+        const monthLower = tabName.toLowerCase();
+        const isMonthTab = headerStr.includes(monthLower.split('-')[0].toLowerCase())
+                         || (rows[1]&&rows[1][0]&&/^0[0-9A-Z]/i.test(String(rows[1][0]).trim()));
+        if(!isMonthTab && gid < 5) continue;
+        // Parse shop codes from column A (skip header row if it looks like a header)
+        const startRow = /^0[0-9A-Z]/i.test(String(rows[0][0]||'').trim()) ? 0 : 1;
+        const codes = [];
+        for(let r=startRow; r<rows.length; r++){
+          const c = String(rows[r][0]||'').trim().toUpperCase();
+          if(c && /^[A-Z0-9]{5,}/.test(c)) codes.push(c);
+        }
+        if(codes.length > 0){
+          state.squadCodes = new Set(codes);
+          statusEl.textContent = `✓ Loaded ${codes.length} shop codes from "${tabName}"`;
+          statusEl.style.color = '#34d399';
+          found = true;
+          break;
+        }
+      }catch(e){ continue; }
+    }
+    if(!found){
+      statusEl.textContent = `⚠️ Could not find "${tabName}" tab. Check URL or tab name.`;
+      statusEl.style.color = '#fca5a5';
+    }
+  }catch(err){
+    statusEl.textContent = '✗ Fetch failed: '+err.message;
+    statusEl.style.color = '#fca5a5';
+  }
 }
 
 function renderDetail(title, list, cardId, bg1, bg2){
@@ -4042,6 +4267,7 @@ function downloadPdlExcel(){
 }
 
 setupPdlMisUpload();
+setupSquadSourceUI();
 
 // ============================================================================
 // =================  WHATSAPP REMINDER MODULE  ===============================
@@ -4655,382 +4881,6 @@ async function copyReminderMsg(){
 // Init
 initReminder();
 
-// ============================================================================
-// =================  CREATE DISTRICT SHEETS MODULE  ==========================
-// ============================================================================
-
-// Default lists for Thiruvannamalai district
-const DIST_BLOCKS = [
-  'திருவண்ணாமலை HQ','திருவண்ணாமலை 1','திருவண்ணாமலை 2',
-  'துரிஞ்சாபுரம்','கீழ்ப்பென்னாத்துர்','செங்கம்','புதுப்பாளையம்',
-  'தண்டராம்பட்டு','கலசபாக்கம்','போளுர்','ஜமுனாமரத்துர்','சேத்துப்பட்டு',
-  'ஆரணி கிழக்கு','ஆரணி மேற்கு','செய்யார்','அனக்காவூர்',
-  'வெம்பாக்கம் 1','வெம்பாக்கம் 2','வந்தவாசி','பெரணமல்லூர்','தெள்ளார்'
-];
-const DIST_CMS = [
-  'திருவண்ணாமலை CMS','போளுர் CMS','செங்கம் CMS','ஆரணி CMS',
-  'செய்யாறு CMS','வந்தவாசி CMS','கலசபாக்கம் CMS'
-];
-const DIST_STORES = [
-  'திருவண்ணாமலை மொத்த விற்பனை கிடங்கு',
-  'போளுர் முதன்மை கிடங்கு',
-  'ஆரணி முதன்மை கிடங்கு',
-  'வந்தவாசி முதன்மை கிடங்கு'
-];
-const DIST_LAMP = [
-  'LAMP 1','LAMP 2'
-];
-
-// Known TN districts (used for auto-detection of district column in HO sheet)
-const TN_DISTRICTS = [
-  'Ariyalur','Chengalpattu','Chennai','Coimbatore','Cuddalore','Dharmapuri',
-  'Dindigul','Erode','Kallakurichi','Kanchipuram','Kanyakumari','Karur',
-  'Krishnagiri','Madurai','Mayiladuthurai','Nagapattinam','Namakkal','Nilgiris',
-  'Perambalur','Pudukkottai','Ramanathapuram','Ranipet','Salem','Sivaganga',
-  'Tenkasi','Thanjavur','Theni','Thoothukudi','Tiruchirappalli','Tirunelveli',
-  'Tirupathur','Tiruppur','Tiruvallur','Tiruvannamalai','Tiruvarur','Vellore',
-  'Viluppuram','Virudhunagar'
-];
-
-const createSheet = {
-  workbook: null,
-  filename: '',
-  selectedSheetName: '',
-  detectedCol: -1,
-  detectedHeaderRow: -1,
-  blocks: [...DIST_BLOCKS],
-  cms: [...DIST_CMS],
-  stores: [...DIST_STORES],
-  lamp: [...DIST_LAMP]
-};
-
-// Setup upload handler
-function setupCreateSheetUpload(){
-  const box = document.getElementById('box-ho-excel');
-  const file = document.getElementById('file-ho-excel');
-  if(!box || !file) return;
-  box.addEventListener('click', ()=>file.click());
-  box.addEventListener('dragover', e=>{e.preventDefault();box.style.borderColor='#3b82f6'});
-  box.addEventListener('dragleave', ()=>box.style.borderColor='var(--border)');
-  box.addEventListener('drop', e=>{
-    e.preventDefault();
-    box.style.borderColor='var(--border)';
-    if(e.dataTransfer.files[0]) handleHOExcel(e.dataTransfer.files[0]);
-  });
-  file.addEventListener('change', e=>{
-    if(e.target.files[0]) handleHOExcel(e.target.files[0]);
-  });
-  // Render group lists initially
-  renderGroupLists();
-  // Bind group checkbox events
-  ['grp-blocks','grp-cms','grp-stores','grp-lamp'].forEach(id=>{
-    const cb = document.getElementById(id);
-    if(cb) cb.addEventListener('change', updateTotalCount);
-  });
-  // Bind generate / reset buttons
-  const gen = document.getElementById('btn-generate-sheets');
-  if(gen) gen.addEventListener('click', generateDistrictSheets);
-  const reset = document.getElementById('btn-reset-create');
-  if(reset) reset.addEventListener('click', resetCreateSheet);
-  updateTotalCount();
-}
-
-function renderGroupLists(){
-  function chips(arr, groupKey){
-    return arr.map((name,i)=>`<span style="background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);color:var(--ink);padding:2px 8px;border-radius:10px;font-size:11px">${name}</span>`).join('');
-  }
-  const a = document.getElementById('grp-blocks-list');
-  const b = document.getElementById('grp-cms-list');
-  const c = document.getElementById('grp-stores-list');
-  const d = document.getElementById('grp-lamp-list');
-  if(a) a.innerHTML = chips(createSheet.blocks);
-  if(b) b.innerHTML = chips(createSheet.cms);
-  if(c) c.innerHTML = chips(createSheet.stores);
-  if(d) d.innerHTML = chips(createSheet.lamp);
-}
-
-function getSelectedEntities(){
-  const list = [];
-  if(document.getElementById('grp-blocks').checked) list.push(...createSheet.blocks);
-  if(document.getElementById('grp-cms').checked)    list.push(...createSheet.cms);
-  if(document.getElementById('grp-stores').checked) list.push(...createSheet.stores);
-  if(document.getElementById('grp-lamp').checked)   list.push(...createSheet.lamp);
-  return list;
-}
-
-function updateTotalCount(){
-  const el = document.getElementById('ho-total-count');
-  if(el) el.textContent = getSelectedEntities().length;
-}
-
-async function handleHOExcel(file){
-  const info = document.getElementById('ho-file-info');
-  info.textContent = '⏳ Reading '+file.name+'...';
-  try{
-    const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf, {type:'array', cellDates:true});
-    createSheet.workbook = wb;
-    createSheet.filename = file.name.replace(/\.xlsx?$/i,'');
-
-    // Populate sheet select
-    const sel = document.getElementById('ho-sheet-select');
-    sel.innerHTML = wb.SheetNames.map(n=>`<option value="${n}">${n}</option>`).join('');
-    sel.addEventListener('change', ()=>analyzeSheet(sel.value));
-
-    // Show config panel
-    document.getElementById('ho-config-panel').style.display='';
-    info.innerHTML = `✓ Loaded: <b>${file.name}</b> — ${wb.SheetNames.length} sheet(s)`;
-
-    analyzeSheet(wb.SheetNames[0]);
-  }catch(err){
-    info.innerHTML = '✗ Error: '+err.message;
-    toast('Failed to read file: '+err.message, true);
-  }
-}
-
-function analyzeSheet(sheetName){
-  createSheet.selectedSheetName = sheetName;
-  const ws = createSheet.workbook.Sheets[sheetName];
-  const data = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
-  if(data.length===0){
-    document.getElementById('ho-detect-info').innerHTML = '⚠️ Sheet appears empty';
-    return;
-  }
-
-  // Find the column with TN district names — try each column in first 20 cols
-  let bestCol = -1, bestHeaderRow = -1, bestScore = 0;
-  for(let c=0; c<Math.min(20, (data[0]||[]).length); c++){
-    // For each column, try header rows 0-5 and check rows after for district matches
-    for(let hr=0; hr<Math.min(6, data.length); hr++){
-      let matches = 0;
-      for(let r=hr+1; r<Math.min(hr+50, data.length); r++){
-        const v = String(data[r][c]||'').trim();
-        if(TN_DISTRICTS.some(d=>v.toLowerCase().includes(d.toLowerCase()) || d.toLowerCase().includes(v.toLowerCase()))){
-          matches++;
-        }
-      }
-      if(matches > bestScore){
-        bestScore = matches;
-        bestCol = c;
-        bestHeaderRow = hr;
-      }
-    }
-  }
-
-  // Populate column select with all columns
-  const colSel = document.getElementById('ho-district-col');
-  const firstRow = data[bestHeaderRow] || data[0] || [];
-  colSel.innerHTML = firstRow.map((h,i)=>{
-    const letter = XLSX.utils.encode_col(i);
-    return `<option value="${i}" ${i===bestCol?'selected':''}>Col ${letter}: ${String(h||'(empty)').slice(0,40)}</option>`;
-  }).join('');
-
-  createSheet.detectedCol = bestCol;
-  createSheet.detectedHeaderRow = bestHeaderRow;
-
-  const info = document.getElementById('ho-detect-info');
-  if(bestScore >= 10){
-    info.style.color = '#34d399';
-    info.innerHTML = `✓ Detected district column with ${bestScore} TN districts matched (header row ${bestHeaderRow+1})`;
-  } else if(bestScore > 0){
-    info.style.color = '#fcd34d';
-    info.innerHTML = `⚠️ Only ${bestScore} districts matched. You may need to override the column manually.`;
-  } else {
-    info.style.color = '#fca5a5';
-    info.innerHTML = `✗ No TN district names found. Please pick the column manually.`;
-  }
-}
-
-function generateDistrictSheets(){
-  if(!createSheet.workbook){toast('Upload an HO Excel file first',true);return}
-  const entities = getSelectedEntities();
-  if(entities.length===0){toast('Select at least one group',true);return}
-
-  const sheetName = createSheet.selectedSheetName;
-  const districtCol = parseInt(document.getElementById('ho-district-col').value);
-  if(isNaN(districtCol)||districtCol<0){toast('Invalid district column',true);return}
-
-  const headerRow = createSheet.detectedHeaderRow;
-  const mode = document.querySelector('input[name="ho-mode"]:checked').value;
-  const statusEl = document.getElementById('ho-status');
-  statusEl.textContent = '⏳ Generating sheets...';
-
-  try{
-    if(mode==='combined'){
-      const outWb = buildOutputWorkbook(entities, sheetName, districtCol, headerRow);
-      const fname = `${createSheet.filename}_Tiruvannamalai_${new Date().toISOString().slice(0,10)}.xlsx`;
-      XLSX.writeFile(outWb, fname);
-      statusEl.innerHTML = `✓ Generated combined sheet with <b>${entities.length}</b> entities → <b>${fname}</b>`;
-      showGenerationOutput(entities, mode, fname);
-    } else {
-      // Separate: one workbook per entity, zip them
-      const zip = new JSZip();
-      entities.forEach(entity=>{
-        const wb = buildOutputWorkbook([entity], sheetName, districtCol, headerRow);
-        const safeName = entity.replace(/[^a-zA-Z0-9\u0B80-\u0BFF\s]/g,'').replace(/\s+/g,'_').slice(0,40);
-        const buf = XLSX.write(wb, {bookType:'xlsx', type:'array'});
-        zip.file(`${safeName}.xlsx`, buf);
-      });
-      zip.generateAsync({type:'blob'}).then(blob=>{
-        const zipName = `${createSheet.filename}_Tiruvannamalai_Separate_${new Date().toISOString().slice(0,10)}.zip`;
-        saveAs(blob, zipName);
-        statusEl.innerHTML = `✓ Generated <b>${entities.length}</b> separate files → <b>${zipName}</b>`;
-        showGenerationOutput(entities, mode, zipName);
-      });
-    }
-  }catch(err){
-    console.error(err);
-    statusEl.innerHTML = '✗ Generation failed: '+err.message;
-    toast('Generation failed: '+err.message, true);
-  }
-}
-
-// Build a workbook that copies the entire HO file BUT replaces the 38 district rows
-// with the given entity list. All sheets in the workbook are processed.
-function buildOutputWorkbook(entities, primarySheet, districtCol, headerRow){
-  const srcWb = createSheet.workbook;
-  // Create a fresh workbook
-  const outWb = XLSX.utils.book_new();
-
-  srcWb.SheetNames.forEach(sn=>{
-    const ws = srcWb.Sheets[sn];
-    // Convert to 2D array (preserves all cells)
-    const aoa = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
-
-    // Only replace district rows in the primary sheet (or sheets with matching structure)
-    let processed = aoa;
-    if(sn === primarySheet){
-      processed = replaceDistrictRows(aoa, districtCol, headerRow, entities);
-    } else {
-      // For other sheets: try to detect if it has district names in same column and replace there too
-      processed = tryReplaceIfDistrictSheet(aoa, entities);
-    }
-
-    const newWs = XLSX.utils.aoa_to_sheet(processed);
-    // Try to preserve column widths from source
-    if(ws['!cols']) newWs['!cols'] = ws['!cols'];
-    if(ws['!merges']) newWs['!merges'] = ws['!merges'].filter(m=>{
-      // Drop merges that span the data area to avoid stale merges
-      return m.s.r < headerRow + 1;
-    });
-    XLSX.utils.book_append_sheet(outWb, newWs, sn);
-  });
-  return outWb;
-}
-
-function replaceDistrictRows(aoa, col, headerRow, entities){
-  const result = [];
-  // Copy header rows as-is
-  for(let r=0; r<=headerRow; r++){
-    result.push(aoa[r] || []);
-  }
-  // Get template row (first data row) to clone styles/formulas for each entity
-  const templateRow = aoa[headerRow+1] || [];
-
-  // Find where the 38 district rows END (first row after headerRow where col is empty or not a district)
-  let lastDataRow = headerRow;
-  for(let r=headerRow+1; r<aoa.length; r++){
-    const v = String((aoa[r]||[])[col]||'').trim();
-    if(!v) break;
-    if(TN_DISTRICTS.some(d=>v.toLowerCase().includes(d.toLowerCase()))) {
-      lastDataRow = r;
-    } else if(r === headerRow+1) {
-      // First data row didn't match a district — accept anyway as template
-      lastDataRow = r;
-    } else {
-      break;
-    }
-  }
-
-  // Replace data rows with entity list
-  entities.forEach((entity, idx)=>{
-    const newRow = (templateRow || []).slice();
-    // Replace district name in detected column
-    newRow[col] = entity;
-    // Set serial number in column A if it's likely an S.No column
-    if(col > 0){
-      // Check if column A in template is a number
-      const aVal = templateRow[0];
-      if(typeof aVal === 'number' || /^\d+$/.test(String(aVal||''))){
-        newRow[0] = idx + 1;
-      }
-    }
-    // Clear other data cells (keep only S.No and entity name)
-    for(let c=0; c<newRow.length; c++){
-      if(c === col) continue;        // entity name col
-      if(c === 0 && col !== 0) continue;  // S.No col
-      // Keep if it looks like a formula or static label, clear if it's numeric/data
-      const v = newRow[c];
-      if(typeof v === 'number') newRow[c] = '';
-      else if(typeof v === 'string' && !v.startsWith('=') && /^[\d.,]+$/.test(v)) newRow[c] = '';
-      // Leave strings, formulas, dates etc as-is (they're labels/formulas)
-    }
-    result.push(newRow);
-  });
-
-  // Append any rows after the district data (totals, notes etc.)
-  for(let r=lastDataRow+1; r<aoa.length; r++){
-    result.push(aoa[r] || []);
-  }
-
-  return result;
-}
-
-function tryReplaceIfDistrictSheet(aoa, entities){
-  // Heuristic: look for any column with multiple TN district names in first 50 rows
-  for(let c=0; c<Math.min(8, (aoa[0]||[]).length); c++){
-    let matches = 0, firstMatchRow = -1;
-    for(let r=0; r<Math.min(50, aoa.length); r++){
-      const v = String((aoa[r]||[])[c]||'').trim();
-      if(TN_DISTRICTS.some(d=>v.toLowerCase().includes(d.toLowerCase()))){
-        matches++;
-        if(firstMatchRow<0) firstMatchRow = r;
-      }
-    }
-    if(matches >= 10){
-      // Replace this column's district rows
-      return replaceDistrictRows(aoa, c, firstMatchRow-1, entities);
-    }
-  }
-  return aoa; // No district column found, return as-is
-}
-
-function showGenerationOutput(entities, mode, filename){
-  const wrap = document.getElementById('ho-output-area');
-  wrap.innerHTML = `
-    <div class="panel">
-      <h2><span class="dot"></span> ✅ Step 3: Generated Output</h2>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">
-        Downloaded: <b style="color:var(--ink)">${filename}</b>
-      </p>
-      <div style="background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px;padding:14px">
-        <div style="font-size:13px;font-weight:600;margin-bottom:8px">Entities (${entities.length}):</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px">
-          ${entities.map((e,i)=>`<span style="background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.3);padding:3px 10px;border-radius:12px;font-size:12px">${i+1}. ${e}</span>`).join('')}
-        </div>
-      </div>
-      <div style="margin-top:14px;font-size:12px;color:var(--muted);line-height:1.6">
-        <b>Next steps:</b><br>
-        1. Open the downloaded file to verify the replacement<br>
-        2. Upload to Google Drive<br>
-        3. Convert to Google Sheets (File → Save as Google Sheets)<br>
-        4. Share with your block officers (Anyone with link can edit)<br>
-        5. Post the link to your WhatsApp groups
-      </div>
-    </div>`;
-}
-
-function resetCreateSheet(){
-  createSheet.workbook = null;
-  createSheet.filename = '';
-  document.getElementById('ho-file-info').innerHTML = '';
-  document.getElementById('ho-config-panel').style.display = 'none';
-  document.getElementById('ho-output-area').innerHTML = '';
-  document.getElementById('ho-status').innerHTML = '';
-  document.getElementById('file-ho-excel').value = '';
-}
-
-setupCreateSheetUpload();
 
 
 
