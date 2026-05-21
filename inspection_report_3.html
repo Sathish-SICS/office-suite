@@ -590,6 +590,7 @@ document.addEventListener('keydown', e=>{
   <div class="tab" data-tab="squad">🚓 Squad Duty Order</div>
   <div class="tab" data-tab="pdl">📋 Head Office PDL</div>
   <div class="tab" data-tab="reminder">📲 WhatsApp Reminder</div>
+  <div class="tab" data-tab="ekyc">🔑 e-KYC Report</div>
   <div class="tab" data-tab="future" style="opacity:.5">➕ Future Modules</div>
 </div>
 
@@ -1075,6 +1076,35 @@ document.addEventListener('keydown', e=>{
   </div>
 </div>
 
+
+<!-- ================================================================ -->
+<!-- e-KYC REPORT MODULE -->
+<!-- ================================================================ -->
+<div class="tab-content" id="tab-ekyc">
+
+<div class="panel">
+  <h2><span class="dot"></span> Step 1: Upload State e-KYC Excel File</h2>
+  <p style="font-size:13px;color:var(--muted);margin-bottom:12px">
+    Upload the state-wide excel received from TNPDS portal (contains "Shop Wise" tab with all districts). The app automatically filters Thiruvannamalai, maps blocks, and generates block-wise and shop-wise reports.
+  </p>
+  <div class="upload-box" id="box-ekyc" style="max-width:480px">
+    <label for="file-ekyc">
+      <div class="title">📊 State e-KYC Excel</div>
+      <div class="filename" id="name-ekyc">Click or drag to upload</div>
+      <div class="hint">TNPDS Unique Authentication file (.xlsx)</div>
+    </label>
+    <input type="file" id="file-ekyc" accept=".xlsx,.xls">
+  </div>
+  <div id="ekyc-load-status" style="font-size:12px;color:var(--muted);margin-top:8px"></div>
+  <div class="action-bar" id="ekyc-action-bar" style="display:none">
+    <button class="btn success" id="btn-ekyc-generate">⚡ Generate e-KYC Report</button>
+    <button class="btn secondary" id="btn-ekyc-reset">🔄 Reset</button>
+  </div>
+</div>
+
+<div id="ekyc-results-area"></div>
+
+</div>
 
 <div class="tab-content" id="tab-future">
   <div class="panel">
@@ -4268,6 +4298,481 @@ function downloadPdlExcel(){
 
 setupPdlMisUpload();
 setupSquadSourceUI();
+
+// ============================================================================
+// =================  e-KYC REPORT MODULE  ====================================
+// ============================================================================
+
+const ekyc = { data: null, date: '' };
+
+// Built-in shop-code → block mapping (all 1627 TVM shops)
+// Populated from the built-in shopMap (already in state.shopMap after upload)
+// If shopMap not loaded, we derive block from Shopcode prefix patterns
+
+function ekycSetup(){
+  const box = document.getElementById('box-ekyc');
+  const file = document.getElementById('file-ekyc');
+  if(!box || !file) return;
+  box.addEventListener('click', ()=>file.click());
+  box.addEventListener('dragover', e=>{e.preventDefault();box.style.borderColor='#3b82f6'});
+  box.addEventListener('dragleave', ()=>box.style.borderColor='var(--border)');
+  box.addEventListener('drop', e=>{
+    e.preventDefault(); box.style.borderColor='var(--border)';
+    if(e.dataTransfer.files[0]) handleEkycFile(e.dataTransfer.files[0]);
+  });
+  file.addEventListener('change', e=>{ if(e.target.files[0]) handleEkycFile(e.target.files[0]); });
+  document.getElementById('btn-ekyc-generate').addEventListener('click', generateEkycReport);
+  document.getElementById('btn-ekyc-reset').addEventListener('click', ()=>{
+    ekyc.data = null; ekyc.date = '';
+    document.getElementById('name-ekyc').textContent = 'Click or drag to upload';
+    document.getElementById('ekyc-load-status').textContent = '';
+    document.getElementById('ekyc-action-bar').style.display = 'none';
+    document.getElementById('ekyc-results-area').innerHTML = '';
+    document.getElementById('file-ekyc').value = '';
+  });
+}
+
+async function handleEkycFile(file){
+  const statusEl = document.getElementById('ekyc-load-status');
+  document.getElementById('name-ekyc').textContent = file.name;
+  statusEl.textContent = '⏳ Reading file...';
+  try{
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, {type:'array'});
+    const sheetNames = wb.SheetNames;
+    const shopWiseSheet = sheetNames.find(s => s.toLowerCase().includes('shop') && s.toLowerCase().includes('wise'));
+    if(!shopWiseSheet) throw new Error('"Shop Wise" sheet not found. Available sheets: '+sheetNames.join(', '));
+    const ws = wb.Sheets[shopWiseSheet];
+    const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+    const tvmRows = rows.filter(r => String(r['District']||'').toLowerCase().includes('thiruvannamalai'));
+    if(tvmRows.length === 0) throw new Error('No Thiruvannamalai rows found in "Shop Wise" sheet');
+
+    // Try to extract date from filename
+    const dateMatch = file.name.match(/(\d{2})[_\-](\d{2})[_\-](\d{4})/);
+    ekyc.date = dateMatch ? `${dateMatch[1]}.${dateMatch[2]}.${dateMatch[3]}` : new Date().toLocaleDateString('en-GB').replace(/\//g,'.');
+    ekyc.data = tvmRows;
+
+    statusEl.innerHTML = `✓ Loaded <b>${tvmRows.length}</b> Thiruvannamalai shops from "${shopWiseSheet}" (as on ${ekyc.date})`;
+    statusEl.style.color = '#34d399';
+    document.getElementById('ekyc-action-bar').style.display = '';
+    toast(`✓ ${tvmRows.length} TVM shops loaded`);
+  }catch(err){
+    statusEl.textContent = '✗ '+err.message;
+    statusEl.style.color = '#fca5a5';
+    toast('Error: '+err.message, true);
+  }
+}
+
+// Column name normalizer (handles newlines and suffixes from pandas-style dedup)
+function ekycCol(row, ...candidates){
+  for(const k of Object.keys(row)){
+    for(const c of candidates){
+      if(k.replace(/[\n\r]/g,' ').replace(/\s+/g,' ').trim().toLowerCase().includes(c.toLowerCase())) return row[k];
+    }
+  }
+  return 0;
+}
+
+function processEkycRow(row, shopBlockMap){
+  const shopcode = String(row['Shopcode']||row['Shop_Code']||'').trim();
+  const block = shopBlockMap[shopcode] || ekycBlockFromCode(shopcode);
+  // AAY
+  const aay_cons = +(ekycCol(row,'Considered for eKYC')||0);
+  const aay_comp = +(ekycCol(row,'AAY EKYC Completed')||0);
+  const aay_pend = +(ekycCol(row,'Pending')||0);
+  // PHH — second occurrence of 'Considered for eKYC'
+  const keys = Object.keys(row);
+  const phh_cons_key = keys.find((k,i)=>k.includes('Considered')&&keys.slice(0,i).some(x=>x.includes('Considered')));
+  const phh_cons = phh_cons_key ? +(row[phh_cons_key]||0) : 0;
+  const phh_comp = +(ekycCol(row,'PHH EKYC Completed')||0);
+  // PHH Pending — second 'Pending'
+  const phh_pend_key = keys.find((k,i)=>k.replace(/\.\d+/,'').trim()==='Pending'&&keys.slice(0,i).some(x=>x.replace(/\.\d+/,'').trim()==='Pending'));
+  const phh_pend = phh_pend_key ? +(row[phh_pend_key]||0) : 0;
+  // NPHH — third occurrence
+  const nph_cons_key = keys.filter(k=>k.includes('Considered'))[2];
+  const nph_cons = nph_cons_key ? +(row[nph_cons_key]||0) : 0;
+  const nph_comp = +(ekycCol(row,'NPHH EKYC Completed')||0);
+  const nph_pend_key = keys.filter(k=>k.replace(/\.\d+/,'').trim()==='Pending')[2];
+  const nph_pend = nph_pend_key ? +(row[nph_pend_key]||0) : 0;
+
+  const total_cons = aay_cons + phh_cons + nph_cons;
+  const total_comp = aay_comp + phh_comp + nph_comp;
+  const total_pend = aay_pend + phh_pend + nph_pend;
+  return {
+    shopcode, block,
+    shop_name: row['Shop_Name']||'',
+    aay_cons, aay_comp, aay_pend,
+    phh_cons, phh_comp, phh_pend,
+    nph_cons, nph_comp, nph_pend,
+    total_cons, total_comp, total_pend,
+    total_pct: total_cons > 0 ? total_comp/total_cons : 0
+  };
+}
+
+// Fallback block detection from shopcode (not needed if shopMap is loaded)
+function ekycBlockFromCode(code){
+  // Use the built-in shopLookup from state if available
+  if(state.shopMap && state.shopMap[code]) return state.shopMap[code];
+  return 'Unknown';
+}
+
+function groupByBlock(rows){
+  const map = {};
+  rows.forEach(r=>{
+    const b = r.block || 'Unknown';
+    if(!map[b]) map[b] = {block:b, aay_cons:0, aay_comp:0, phh_cons:0, phh_comp:0, nph_cons:0, nph_comp:0, total_cons:0, total_comp:0, total_pend:0, shops:[]};
+    const m = map[b];
+    m.aay_cons+=r.aay_cons; m.aay_comp+=r.aay_comp;
+    m.phh_cons+=r.phh_cons; m.phh_comp+=r.phh_comp;
+    m.nph_cons+=r.nph_cons; m.nph_comp+=r.nph_comp;
+    m.total_cons+=r.total_cons; m.total_comp+=r.total_comp; m.total_pend+=r.total_pend;
+    m.shops.push(r);
+  });
+  return Object.values(map).map(m=>({...m, pct: m.total_cons>0?m.total_comp/m.total_cons:0}))
+    .sort((a,b)=>a.pct-b.pct);
+}
+
+function generateEkycReport(){
+  if(!ekyc.data){ toast('Upload the file first',true); return; }
+  // Build block map from built-in shopMap
+  const shopBlockMap = state.shopMap || {};
+  const rows = ekyc.data.map(r=>processEkycRow(r, shopBlockMap));
+  const blocks = groupByBlock(rows);
+  renderEkycResults(rows, blocks);
+}
+
+function pctColor(p){
+  if(p >= 0.95) return '#064432';
+  if(p >= 0.90) return '#92400e';
+  return '#b91c1c';
+}
+function pctBg(p){
+  if(p >= 0.95) return '#d1fae5';
+  if(p >= 0.90) return '#fef3c7';
+  return '#fee2e2';
+}
+function fmtPct(p){ return (p*100).toFixed(2)+'%'; }
+function fmtN(n){ return n.toLocaleString('en-IN'); }
+
+function renderEkycResults(rows, blocks){
+  const d = ekyc.date;
+  const totalCons = blocks.reduce((s,b)=>s+b.total_cons,0);
+  const totalComp = blocks.reduce((s,b)=>s+b.total_comp,0);
+  const totalPend = blocks.reduce((s,b)=>s+b.total_pend,0);
+  const overallPct = totalCons>0?totalComp/totalCons:0;
+
+  const html = `
+    <div class="panel">
+      <h2><span class="dot"></span> 🔑 e-KYC Progress — திருவண்ணாமலை மாவட்டம்
+        <span style="margin-left:auto;font-size:12px;color:var(--muted);font-weight:400">As on ${d}</span>
+      </h2>
+
+      <!-- Summary stats -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
+        <div class="stat-card" style="background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase">Total Considered</div>
+          <div style="font-size:22px;font-weight:700;color:#93c5fd">${fmtN(totalCons)}</div>
+        </div>
+        <div class="stat-card" style="background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase">Completed</div>
+          <div style="font-size:22px;font-weight:700;color:#6ee7b7">${fmtN(totalComp)}</div>
+        </div>
+        <div class="stat-card" style="background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase">Pending</div>
+          <div style="font-size:22px;font-weight:700;color:#fca5a5">${fmtN(totalPend)}</div>
+        </div>
+        <div class="stat-card" style="background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase">% Completed</div>
+          <div style="font-size:22px;font-weight:700;color:${overallPct>=0.95?'#6ee7b7':overallPct>=0.90?'#fcd34d':'#fca5a5'}">${fmtPct(overallPct)}</div>
+        </div>
+      </div>
+
+      <!-- Block Abstract Table -->
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+        <h3 style="font-size:14px;margin:0">📊 Block Abstract (AAY + PHH + NPHH)</h3>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn-tiny" onclick="copyEkycTable('ekyc-block-table')">📸 Copy image</button>
+          <button class="btn-tiny" onclick="downloadEkycExcel()">📥 Download Excel</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto;background:white;border-radius:8px;border:1px solid #cbd5e1;color:#1e293b;margin-bottom:16px" id="ekyc-block-table-wrap">
+        <table id="ekyc-block-table" style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead>
+            <tr style="background:#1e3a8a;color:white">
+              <th style="padding:8px;border:1px solid #1e40af;text-align:center">#</th>
+              <th style="padding:8px;border:1px solid #1e40af;text-align:left;min-width:150px">Block</th>
+              <th style="padding:8px;border:1px solid #1e40af;text-align:center" colspan="3">AAY</th>
+              <th style="padding:8px;border:1px solid #1e40af;text-align:center" colspan="3">PHH</th>
+              <th style="padding:8px;border:1px solid #1e40af;text-align:center" colspan="3">NPHH</th>
+              <th style="padding:8px;border:1px solid #1e40af;text-align:center">Total</th>
+              <th style="padding:8px;border:1px solid #1e40af;text-align:center">Done</th>
+              <th style="padding:8px;border:1px solid #1e40af;text-align:center">Pending</th>
+              <th style="padding:8px;border:1px solid #1e40af;text-align:center">%</th>
+            </tr>
+            <tr style="background:#3b82f6;color:white">
+              <th style="padding:6px 4px;border:1px solid #1e40af"></th>
+              <th style="padding:6px 4px;border:1px solid #1e40af"></th>
+              ${['Cons','Done','Pend','Cons','Done','Pend','Cons','Done','Pend','','','',''].map(h=>`<th style="padding:5px 4px;border:1px solid #1e40af;font-size:10px;text-align:center">${h}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${blocks.map((b,i)=>{
+              const bg = pctBg(b.pct);
+              const fc = pctColor(b.pct);
+              return `<tr style="background:${bg}">
+                <td style="padding:6px 4px;border:1px solid #cbd5e1;text-align:center;color:#64748b;font-size:11px">${i+1}</td>
+                <td style="padding:6px 8px;border:1px solid #cbd5e1;font-weight:600">${b.block}</td>
+                <td style="padding:6px 4px;border:1px solid #cbd5e1;text-align:center">${fmtN(b.aay_cons)}</td>
+                <td style="padding:6px 4px;border:1px solid #cbd5e1;text-align:center">${fmtN(b.aay_comp)}</td>
+                <td style="padding:6px 4px;border:1px solid #cbd5e1;text-align:center">${fmtN(b.aay_cons-b.aay_comp)}</td>
+                <td style="padding:6px 4px;border:1px solid #cbd5e1;text-align:center">${fmtN(b.phh_cons)}</td>
+                <td style="padding:6px 4px;border:1px solid #cbd5e1;text-align:center">${fmtN(b.phh_comp)}</td>
+                <td style="padding:6px 4px;border:1px solid #cbd5e1;text-align:center">${fmtN(b.phh_cons-b.phh_comp)}</td>
+                <td style="padding:6px 4px;border:1px solid #cbd5e1;text-align:center">${fmtN(b.nph_cons)}</td>
+                <td style="padding:6px 4px;border:1px solid #cbd5e1;text-align:center">${fmtN(b.nph_comp)}</td>
+                <td style="padding:6px 4px;border:1px solid #cbd5e1;text-align:center">${fmtN(b.nph_cons-b.nph_comp)}</td>
+                <td style="padding:6px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:600">${fmtN(b.total_cons)}</td>
+                <td style="padding:6px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:600">${fmtN(b.total_comp)}</td>
+                <td style="padding:6px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:600;color:#dc2626">${fmtN(b.total_pend)}</td>
+                <td style="padding:6px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:700;color:${fc}">${fmtPct(b.pct)}</td>
+              </tr>`;
+            }).join('')}
+            <tr style="background:#e2e8f0;font-weight:700">
+              <td colspan="2" style="padding:7px 8px;border:1px solid #94a3b8;text-align:center">TOTAL</td>
+              ${(()=>{
+                const ta=blocks.reduce((s,b)=>s+b.aay_cons,0),td=blocks.reduce((s,b)=>s+b.aay_comp,0);
+                const tp=blocks.reduce((s,b)=>s+b.phh_cons,0),pd=blocks.reduce((s,b)=>s+b.phh_comp,0);
+                const tn=blocks.reduce((s,b)=>s+b.nph_cons,0),nd=blocks.reduce((s,b)=>s+b.nph_comp,0);
+                return [ta,td,ta-td,tp,pd,tp-pd,tn,nd,tn-nd,totalCons,totalComp,totalPend].map(v=>`<td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center">${fmtN(v)}</td>`).join('')
+                +'<td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center;color:'+pctColor(overallPct)+'">'+fmtPct(overallPct)+'</td>';
+              })()}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Shop-wise section -->
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+        <h3 style="font-size:14px;margin:0">🏪 Shop-wise Detail</h3>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <select id="ekyc-block-filter" style="background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:5px 10px;border-radius:5px;font-size:12px" onchange="filterEkycShops()">
+            <option value="">All Blocks</option>
+            ${blocks.map(b=>`<option value="${b.block}">${b.block}</option>`).join('')}
+          </select>
+          <button class="btn-tiny" onclick="copyEkycTable('ekyc-shop-table')">📸 Copy image</button>
+          <button class="btn-tiny" onclick="printEkycShopwise()">📄 Print / PDF</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto;background:white;border-radius:8px;border:1px solid #cbd5e1;color:#1e293b;max-height:500px;overflow-y:auto" id="ekyc-shop-wrap">
+        <table id="ekyc-shop-table" style="width:100%;border-collapse:collapse;font-size:11px">
+          <thead style="position:sticky;top:0;z-index:2">
+            <tr style="background:#1e3a8a;color:white">
+              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">#</th>
+              <th style="padding:7px 8px;border:1px solid #1e40af;text-align:left;min-width:130px">Block</th>
+              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:left">Shop Code</th>
+              <th style="padding:7px 8px;border:1px solid #1e40af;text-align:left;min-width:160px">Shop Name</th>
+              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">Considered</th>
+              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">Completed</th>
+              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">Pending</th>
+              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">%</th>
+            </tr>
+          </thead>
+          <tbody id="ekyc-shop-tbody"></tbody>
+        </table>
+      </div>
+
+      <div style="margin-top:8px;font-size:11px;color:var(--muted)">
+        🟢 ≥95% &nbsp; 🟡 90–95% &nbsp; 🔴 &lt;90%
+      </div>
+    </div>`;
+
+  document.getElementById('ekyc-results-area').innerHTML = html;
+
+  // Store rows for filtering
+  ekyc.processedRows = rows;
+  ekyc.blocks = blocks;
+  renderEkycShopTable(rows);
+}
+
+function renderEkycShopTable(rows){
+  const sorted = rows.slice().sort((a,b)=>{
+    if(a.block < b.block) return -1;
+    if(a.block > b.block) return 1;
+    return a.total_pct - b.total_pct;
+  });
+  let html = ''; let si = 1; let prevBlock = null;
+  sorted.forEach(r=>{
+    const bg = pctBg(r.total_pct);
+    const fc = pctColor(r.total_pct);
+    const isNewBlock = r.block !== prevBlock;
+    if(isNewBlock && prevBlock !== null) html += '<tr><td colspan="8" style="padding:2px;background:#f1f5f9"></td></tr>';
+    if(isNewBlock){
+      const bb = ekyc.blocks.find(b=>b.block===r.block)||{};
+      html += `<tr style="background:#dbeafe">
+        <td style="padding:5px 4px;border:1px solid #cbd5e1;text-align:center;font-size:10px;color:#64748b">${si++}</td>
+        <td colspan="3" style="padding:5px 8px;border:1px solid #cbd5e1;font-weight:700;font-size:12px;color:#1e3a8a">${r.block}</td>
+        <td style="padding:5px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:700">${fmtN(bb.total_cons||0)}</td>
+        <td style="padding:5px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:700">${fmtN(bb.total_comp||0)}</td>
+        <td style="padding:5px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:700">${fmtN(bb.total_pend||0)}</td>
+        <td style="padding:5px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:700;color:${pctColor(bb.pct||0)}">${fmtPct(bb.pct||0)}</td>
+      </tr>`;
+      prevBlock = r.block;
+    }
+    html += `<tr style="background:${bg}">
+      <td style="padding:4px;border:1px solid #e2e8f0;text-align:center;color:#94a3b8;font-size:10px">${si++}</td>
+      <td style="padding:4px 6px;border:1px solid #e2e8f0;color:#64748b;font-size:10px"></td>
+      <td style="padding:4px 6px;border:1px solid #e2e8f0;font-family:monospace;font-size:10px">${r.shopcode}</td>
+      <td style="padding:4px 6px;border:1px solid #e2e8f0;font-size:11px">${r.shop_name}</td>
+      <td style="padding:4px;border:1px solid #e2e8f0;text-align:center">${fmtN(r.total_cons)}</td>
+      <td style="padding:4px;border:1px solid #e2e8f0;text-align:center">${fmtN(r.total_comp)}</td>
+      <td style="padding:4px;border:1px solid #e2e8f0;text-align:center;color:#dc2626">${fmtN(r.total_pend)}</td>
+      <td style="padding:4px;border:1px solid #e2e8f0;text-align:center;font-weight:600;color:${fc}">${fmtPct(r.total_pct)}</td>
+    </tr>`;
+  });
+  const tbody = document.getElementById('ekyc-shop-tbody');
+  if(tbody) tbody.innerHTML = html;
+}
+
+function filterEkycShops(){
+  const sel = document.getElementById('ekyc-block-filter').value;
+  const rows = sel ? ekyc.processedRows.filter(r=>r.block===sel) : ekyc.processedRows;
+  renderEkycShopTable(rows);
+}
+
+async function copyEkycTable(tableId){
+  const el = document.getElementById(tableId+''+'-wrap') || document.getElementById(tableId);
+  if(!el){toast('Table not found',true);return;}
+  try{
+    const canvas = await html2canvas(el,{backgroundColor:'#ffffff',scale:2});
+    canvas.toBlob(async blob=>{
+      try{
+        await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
+        toast('✓ Table copied as image');
+      }catch(e){
+        saveAs(blob, `ekyc_table_${ekyc.date.replace(/\./g,'')}.png`);
+        toast('Clipboard blocked — downloaded as PNG');
+      }
+    });
+  }catch(e){toast('Screenshot failed: '+e.message,true);}
+}
+
+function printEkycShopwise(){
+  const filter = document.getElementById('ekyc-block-filter')?.value || '';
+  const rows = filter ? ekyc.processedRows.filter(r=>r.block===filter) : ekyc.processedRows;
+  const sorted = rows.slice().sort((a,b)=>a.block.localeCompare(b.block)||a.total_pct-b.total_pct);
+  let tbody = ''; let si=1; let prevBlock=null;
+  sorted.forEach(r=>{
+    const isNew = r.block!==prevBlock;
+    if(isNew&&prevBlock) tbody+='<tr><td colspan="8" style="padding:2px;background:#eee"></td></tr>';
+    if(isNew){
+      const bb=ekyc.blocks.find(b=>b.block===r.block)||{};
+      tbody+=`<tr style="background:#dbeafe;font-weight:700">
+        <td>${si++}</td><td colspan="3">${r.block}</td>
+        <td style="text-align:center">${fmtN(bb.total_cons||0)}</td>
+        <td style="text-align:center">${fmtN(bb.total_comp||0)}</td>
+        <td style="text-align:center">${fmtN(bb.total_pend||0)}</td>
+        <td style="text-align:center">${fmtPct(bb.pct||0)}</td>
+      </tr>`;
+      prevBlock=r.block;
+    }
+    const bg=r.total_pct>=0.95?'#d1fae5':r.total_pct>=0.90?'#fef3c7':'#fee2e2';
+    tbody+=`<tr style="background:${bg}">
+      <td>${si++}</td><td></td>
+      <td style="font-family:monospace;font-size:10px">${r.shopcode}</td>
+      <td>${r.shop_name}</td>
+      <td style="text-align:center">${fmtN(r.total_cons)}</td>
+      <td style="text-align:center">${fmtN(r.total_comp)}</td>
+      <td style="text-align:center;color:#dc2626">${fmtN(r.total_pend)}</td>
+      <td style="text-align:center;font-weight:600">${fmtPct(r.total_pct)}</td>
+    </tr>`;
+  });
+  const title = filter ? `Shop-wise e-KYC — ${filter}` : 'Shop-wise e-KYC — All Blocks';
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title>
+    <style>
+      body{font-family:Arial,sans-serif;padding:15px;font-size:10pt}
+      h2{font-size:13pt;margin:0 0 3px}
+      .sub{font-size:9pt;color:#555;margin-bottom:12px}
+      table{width:100%;border-collapse:collapse;font-size:9pt}
+      th{background:#1e3a8a;color:white;padding:6px 5px;border:1px solid #1e40af;text-align:center}
+      td{padding:4px 5px;border:1px solid #cbd5e1}
+      @page{size:A4 landscape;margin:12mm}
+      @media print{body{padding:5px}}
+    </style></head><body>
+    <h2>e-KYC Progress Status — ${title}</h2>
+    <div class="sub">திருவண்ணாமலை மாவட்டம் &nbsp;|&nbsp; As on ${ekyc.date} &nbsp;|&nbsp; 🟢 ≥95% 🟡 90-95% 🔴 &lt;90%</div>
+    <table>
+      <thead><tr>
+        <th>#</th><th style="text-align:left">Block</th><th>Shop Code</th><th style="text-align:left">Shop Name</th>
+        <th>Considered</th><th>Completed</th><th>Pending</th><th>%</th>
+      </tr></thead>
+      <tbody>${tbody}</tbody>
+    </table>
+    </body></html>`;
+  const w = window.open('','_blank');
+  w.document.write(html);
+  w.document.close();
+  setTimeout(()=>{ try{ w.print(); }catch(e){} }, 500);
+  toast('✓ Print dialog opened — choose "Save as PDF"');
+}
+
+function downloadEkycExcel(){
+  if(!ekyc.blocks || !ekyc.processedRows){ toast('Generate report first',true); return; }
+  const wb = XLSX.utils.book_new();
+  const d = ekyc.date;
+
+  // Sheet 1: Block Abstract ALL
+  const ba = [
+    ['e-KYC Progress Status — திருவண்ணாமலை மாவட்டம் (AAY + PHH + NPHH)'],
+    ['As on '+d,'','','','','','','',''],
+    ['#','Block','AAY Considered','PHH Considered','NPHH Considered','Total Considered','Total Completed','Total Pending','% Completed']
+  ];
+  ekyc.blocks.forEach((b,i)=>{
+    ba.push([i+1, b.block, b.aay_cons, b.phh_cons, b.nph_cons, b.total_cons, b.total_comp, b.total_pend, parseFloat((b.pct*100).toFixed(2))+'%']);
+  });
+  const tot=ekyc.blocks.reduce((s,b)=>({aay:s.aay+b.aay_cons,phh:s.phh+b.phh_cons,nph:s.nph+b.nph_cons,cons:s.cons+b.total_cons,comp:s.comp+b.total_comp,pend:s.pend+b.total_pend}),{aay:0,phh:0,nph:0,cons:0,comp:0,pend:0});
+  ba.push(['','TOTAL',tot.aay,tot.phh,tot.nph,tot.cons,tot.comp,tot.pend,parseFloat((tot.comp/tot.cons*100).toFixed(2))+'%']);
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(ba), 'Block Abstract');
+
+  // Sheet 2: Category Abstracts (AAY, PHH, NPHH in one sheet with sections)
+  const cats = [
+    {label:'AAY', ck:'aay'}, {label:'PHH', ck:'phh'}, {label:'NPHH', ck:'nph'}
+  ];
+  cats.forEach(cat=>{
+    const agg = {};
+    ekyc.processedRows.forEach(r=>{
+      const b=r.block;
+      if(!agg[b])agg[b]={block:b,cons:0,comp:0,pend:0};
+      agg[b].cons+=r[cat.ck+'_cons']; agg[b].comp+=r[cat.ck+'_comp']; agg[b].pend+=r[cat.ck+'_pend'];
+    });
+    const rows_arr = Object.values(agg).map(a=>({...a,pct:a.cons>0?a.comp/a.cons:0})).sort((a,b)=>a.pct-b.pct);
+    const sheet_data = [
+      [`e-KYC Progress Status — ${cat.label} (திருவண்ணாமலை)`],
+      ['As on '+d],
+      ['#','Block','Considered','Completed','Pending','% Completed']
+    ];
+    rows_arr.forEach((r,i)=>sheet_data.push([i+1,r.block,r.cons,r.comp,r.pend,parseFloat((r.pct*100).toFixed(2))+'%']));
+    const tc=rows_arr.reduce((s,r)=>s+r.cons,0),td=rows_arr.reduce((s,r)=>s+r.comp,0);
+    sheet_data.push(['','TOTAL',tc,td,tc-td,parseFloat((td/tc*100).toFixed(2))+'%']);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sheet_data), cat.label+' Block Abstract');
+  });
+
+  // Sheet 3: Shop-wise
+  const sw = [
+    ['e-KYC Progress Status — Shop-wise Detail (AAY + PHH + NPHH)'],
+    ['As on '+d],
+    ['#','Block','Shop Code','Shop Name','Considered','Completed','Pending','% Completed']
+  ];
+  const sorted = ekyc.processedRows.slice().sort((a,b)=>a.block.localeCompare(b.block)||a.total_pct-b.total_pct);
+  sorted.forEach((r,i)=>sw.push([i+1,r.block,r.shopcode,r.shop_name,r.total_cons,r.total_comp,r.total_pend,parseFloat((r.total_pct*100).toFixed(2))+'%']));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sw), 'Shop-Wise Detail');
+
+  const fname = `eKYC_Tiruvannamalai_${d.replace(/\./g,'')}.xlsx`;
+  XLSX.writeFile(wb, fname);
+  toast('✓ Excel downloaded: '+fname);
+}
+
+ekycSetup();
+
 
 // ============================================================================
 // =================  WHATSAPP REMINDER MODULE  ===============================
