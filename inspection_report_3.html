@@ -1083,21 +1083,48 @@ document.addEventListener('keydown', e=>{
 <div class="tab-content" id="tab-ekyc">
 
 <div class="panel">
-  <h2><span class="dot"></span> Step 1: Upload State e-KYC Excel File</h2>
-  <p style="font-size:13px;color:var(--muted);margin-bottom:12px">
-    Upload the state-wide excel received from TNPDS portal (contains "Shop Wise" tab with all districts). The app automatically filters Thiruvannamalai, maps blocks, and generates block-wise and shop-wise reports.
-  </p>
-  <div class="upload-box" id="box-ekyc" style="max-width:480px">
-    <label for="file-ekyc">
-      <div class="title">📊 State e-KYC Excel</div>
-      <div class="filename" id="name-ekyc">Click or drag to upload</div>
-      <div class="hint">TNPDS Unique Authentication file (.xlsx)</div>
-    </label>
-    <input type="file" id="file-ekyc" accept=".xlsx,.xls">
+  <h2><span class="dot"></span> e-KYC Report — Upload Files</h2>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:12px">
+    <!-- Current file -->
+    <div>
+      <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px">📊 Current File (required)</div>
+      <div class="upload-box" id="box-ekyc" style="margin:0">
+        <label for="file-ekyc">
+          <div class="title">TNPDS State e-KYC Excel</div>
+          <div class="filename" id="name-ekyc">Click or drag to upload</div>
+          <div class="hint">File with "Shop Wise" tab — all districts</div>
+        </label>
+        <input type="file" id="file-ekyc" accept=".xlsx,.xls">
+      </div>
+      <div id="ekyc-load-status" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
+    </div>
+    <!-- Comparison file (optional) -->
+    <div>
+      <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px">📊 Older File for Comparison <span style="font-weight:400;color:#64748b">(optional)</span></div>
+      <div class="upload-box" id="box-ekyc-old" style="margin:0;border-color:rgba(245,158,11,.4)">
+        <label for="file-ekyc-old">
+          <div class="title" style="color:#fcd34d">Older e-KYC Excel</div>
+          <div class="filename" id="name-ekyc-old">Click or drag to upload</div>
+          <div class="hint">Previous file for progress comparison</div>
+        </label>
+        <input type="file" id="file-ekyc-old" accept=".xlsx,.xls">
+      </div>
+      <div id="ekyc-old-status" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
+    </div>
   </div>
-  <div id="ekyc-load-status" style="font-size:12px;color:var(--muted);margin-top:8px"></div>
+  <!-- Shop mapping upload (optional override) -->
+  <div style="padding:10px 14px;background:rgba(15,23,42,.4);border:1px solid var(--border);border-radius:8px;margin-bottom:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <span style="font-size:12px;color:var(--muted)">🏪 Shop→Block mapping:</span>
+    <span id="ekyc-map-status" style="font-size:12px;color:#34d399">✓ Built-in (1627 TVM shops)</span>
+    <div class="upload-box" id="box-ekyc-map" style="margin:0;padding:6px 12px;min-height:unset;border-style:dashed;max-width:300px">
+      <label for="file-ekyc-map" style="cursor:pointer">
+        <span style="font-size:11px;color:var(--muted)">Click to override with custom mapping file</span>
+      </label>
+      <input type="file" id="file-ekyc-map" accept=".xlsx,.xls">
+    </div>
+  </div>
   <div class="action-bar" id="ekyc-action-bar" style="display:none">
-    <button class="btn success" id="btn-ekyc-generate">⚡ Generate e-KYC Report</button>
+    <button class="btn success" id="btn-ekyc-generate">⚡ Generate Report</button>
     <button class="btn secondary" id="btn-ekyc-reset">🔄 Reset</button>
   </div>
 </div>
@@ -4303,476 +4330,2072 @@ setupSquadSourceUI();
 // =================  e-KYC REPORT MODULE  ====================================
 // ============================================================================
 
-const ekyc = { data: null, date: '' };
+// Built-in shop-code → block lookup (1627 TVM shops)
+const BUILT_IN_SHOP_BLOCK = {
+"05AB001PN":"Tiruvannamalai HQ",
+"05AB002PN":"Tiruvannamalai HQ",
+"05AB003PN":"Tiruvannamalai HQ",
+"05AB004PN":"Tiruvannamalai HQ",
+"05AB005PN":"Tiruvannamalai HQ",
+"05AB006PN":"Tiruvannamalai HQ",
+"05AB007PN":"Tiruvannamalai HQ",
+"05AB008PN":"Tiruvannamalai HQ",
+"05AB009PN":"Tiruvannamalai HQ",
+"05AB010PN":"Tiruvannamalai HQ",
+"05AB011PN":"Tiruvannamalai HQ",
+"05AB012PN":"Tiruvannamalai HQ",
+"05AB013PN":"Tiruvannamalai HQ",
+"05AB014PN":"Tiruvannamalai HQ",
+"05AB015PN":"Tiruvannamalai HQ",
+"05AB016PN":"Tiruvannamalai HQ",
+"05AB017PN":"Tiruvannamalai HQ",
+"05AB018PN":"Tiruvannamalai HQ",
+"05AB019PN":"Tiruvannamalai HQ",
+"05AB020PN":"Tiruvannamalai HQ",
+"05AB021PN":"Tiruvannamalai HQ",
+"05AB022PN":"Tiruvannamalai HQ",
+"05AB023PN":"Tiruvannamalai HQ",
+"05AB024PN":"Tiruvannamalai HQ",
+"05AB025PN":"Tiruvannamalai HQ",
+"05AB026PN":"Tiruvannamalai HQ",
+"05AB027PN":"Tiruvannamalai HQ",
+"05AB028PN":"Tiruvannamalai HQ",
+"05AB029PN":"Tiruvannamalai HQ",
+"05AB030PN":"Tiruvannamalai HQ",
+"05AB033PN":"Tiruvannamalai HQ",
+"05AB034PN":"Tiruvannamalai HQ",
+"05AB035PN":"Tiruvannamalai HQ",
+"05AB036PN":"Tiruvannamalai HQ",
+"05AB037PN":"Tiruvannamalai HQ",
+"05AB038PN":"Tiruvannamalai HQ",
+"05AB039PN":"Tiruvannamalai HQ",
+"05AB040PN":"Tiruvannamalai HQ",
+"05AB041PN":"Tiruvannamalai HQ",
+"05AB042PN":"Tiruvannamalai HQ",
+"05AB043PN":"Tiruvannamalai HQ",
+"05AB044PN":"Tiruvannamalai HQ",
+"05AB045PN":"Tiruvannamalai HQ",
+"05AC001PN":"Tiruvannamalai HQ",
+"05AC002PN":"Tiruvannamalai HQ",
+"05AC003PN":"Tiruvannamalai HQ",
+"05AC004PN":"Tiruvannamalai HQ",
+"05AC005PN":"Tiruvannamalai HQ",
+"05AC006PN":"Tiruvannamalai HQ",
+"05AC007PN":"Tiruvannamalai HQ",
+"05AP005P1":"Thurinjapuram",
+"05AP005PY":"Thurinjapuram",
+"05AP010PN":"Thurinjapuram",
+"05AP011P1":"Thurinjapuram",
+"05AP011PY":"Thurinjapuram",
+"05AP012PN":"Thurinjapuram",
+"05AP013PN":"Thurinjapuram",
+"05AP014PN":"Thurinjapuram",
+"05AP015PN":"Thurinjapuram",
+"05AP016PN":"Thurinjapuram",
+"05AP017PN":"Thurinjapuram",
+"05AP018P1":"Thurinjapuram",
+"05AP018PY":"Thurinjapuram",
+"05AP019P1":"Thurinjapuram",
+"05AP019PY":"Thurinjapuram",
+"05AP020PN":"Thurinjapuram",
+"05AP021PN":"Thurinjapuram",
+"05AP022PN":"Thurinjapuram",
+"05AP023PN":"Thurinjapuram",
+"05AP024PN":"Thurinjapuram",
+"05AP025PN":"Thurinjapuram",
+"05AP026P1":"Thurinjapuram",
+"05AP026PY":"Thurinjapuram",
+"05AP027PN":"Thurinjapuram",
+"05AP028PN":"Thurinjapuram",
+"05AP029PN":"Thurinjapuram",
+"05AP030P1":"Thurinjapuram",
+"05AP030PY":"Thurinjapuram",
+"05AP031PN":"Thurinjapuram",
+"05AP032P1":"Thurinjapuram",
+"05AP032P2":"Thurinjapuram",
+"05AP032PY":"Thurinjapuram",
+"05AP033PN":"Thurinjapuram",
+"05AP034PN":"Thurinjapuram",
+"05AP035PN":"Thurinjapuram",
+"05AP036P1":"Thurinjapuram",
+"05AP036PY":"Thurinjapuram",
+"05AP037PN":"Thurinjapuram",
+"05AP038PN":"Thurinjapuram",
+"05AP039PN":"Thurinjapuram",
+"05AP040P1":"Thurinjapuram",
+"05AP040P2":"Thurinjapuram",
+"05AP040PY":"Thurinjapuram",
+"05AP041P1":"Thurinjapuram",
+"05AP041PY":"Thurinjapuram",
+"05AP042P1":"Thurinjapuram",
+"05AP042PY":"Thurinjapuram",
+"05AP043PN":"Thurinjapuram",
+"05AP044P1":"Thurinjapuram",
+"05AP044P2":"Thurinjapuram",
+"05AP044PY":"Thurinjapuram",
+"05AP045PN":"Thurinjapuram",
+"05AP046PN":"Thurinjapuram",
+"05AP047PN":"Thurinjapuram",
+"05AP048P1":"Thurinjapuram",
+"05AP048PY":"Thurinjapuram",
+"05AP049P1":"Thurinjapuram",
+"05AP049PY":"Thurinjapuram",
+"05AP050PN":"Thurinjapuram",
+"05AP051PN":"Thurinjapuram",
+"05AP052P1":"Thurinjapuram",
+"05AP052PY":"Thurinjapuram",
+"05AP053P1":"Thurinjapuram",
+"05AP053PY":"Thurinjapuram",
+"05AP054P1":"Thurinjapuram",
+"05AP054PY":"Thurinjapuram",
+"05AP055PN":"Thurinjapuram",
+"05AP068PN":"Tiruvannamalai-2",
+"05AP069PN":"Tiruvannamalai-1",
+"05AP070PN":"Tiruvannamalai-1",
+"05AP071PN":"Tiruvannamalai-1",
+"05AP072PN":"Tiruvannamalai-1",
+"05AP073P1":"Tiruvannamalai-1",
+"05AP073P2":"Tiruvannamalai-1",
+"05AP073PY":"Tiruvannamalai-1",
+"05AP074P1":"Tiruvannamalai-1",
+"05AP074P2":"Tiruvannamalai-1",
+"05AP074PY":"Tiruvannamalai-1",
+"05AP075PN":"Tiruvannamalai-1",
+"05AP076PN":"Tiruvannamalai-1",
+"05AP077PN":"Tiruvannamalai-1",
+"05AP078P1":"Tiruvannamalai-1",
+"05AP078PY":"Tiruvannamalai-1",
+"05AP079PN":"Tiruvannamalai-1",
+"05AP080P1":"Tiruvannamalai-1",
+"05AP080P2":"Tiruvannamalai-1",
+"05AP080P3":"Tiruvannamalai-1",
+"05AP080PY":"Tiruvannamalai-1",
+"05AP081P1":"Tiruvannamalai-1",
+"05AP081PY":"Tiruvannamalai-1",
+"05AP082PN":"Tiruvannamalai-1",
+"05AP083PN":"Tiruvannamalai-1",
+"05AP084PN":"Tiruvannamalai-1",
+"05AP085P1":"Tiruvannamalai-1",
+"05AP085PY":"Tiruvannamalai-1",
+"05AP087PN":"Tiruvannamalai-2",
+"05AP091P1":"Tiruvannamalai-1",
+"05AP091PY":"Tiruvannamalai-1",
+"05AP092PN":"Tiruvannamalai-1",
+"05AP093PN":"Tiruvannamalai-1",
+"05AP094PN":"Tiruvannamalai-1",
+"05AP095PN":"Tiruvannamalai-1",
+"05AP096P1":"Tiruvannamalai-1",
+"05AP096P2":"Tiruvannamalai-1",
+"05AP096PY":"Tiruvannamalai-1",
+"05AP097PN":"Tiruvannamalai-1",
+"05AP098PN":"Tiruvannamalai-1",
+"05AP099PN":"Tiruvannamalai-1",
+"05AP100PN":"Tiruvannamalai-1",
+"05AP101PN":"Tiruvannamalai-1",
+"05AP102PN":"Tiruvannamalai-1",
+"05AP103PN":"Tiruvannamalai-1",
+"05AP104P1":"Tiruvannamalai-1",
+"05AP104PY":"Tiruvannamalai-1",
+"05AP105P1":"Tiruvannamalai-1",
+"05AP105PY":"Tiruvannamalai-1",
+"05AP106PN":"Tiruvannamalai-1",
+"05AP107PN":"Tiruvannamalai-1",
+"05AP108PN":"Tiruvannamalai-1",
+"05AP109PN":"Tiruvannamalai-1",
+"05AP110P1":"Tiruvannamalai-1",
+"05AP110PY":"Tiruvannamalai-1",
+"05AP111P1":"Tiruvannamalai-2",
+"05AP111PY":"Tiruvannamalai-2",
+"05AP112P1":"Tiruvannamalai-2",
+"05AP112PY":"Tiruvannamalai-2",
+"05AP113P1":"Tiruvannamalai-2",
+"05AP113PY":"Tiruvannamalai-2",
+"05AP114PN":"Tiruvannamalai-2",
+"05AP115PN":"Tiruvannamalai-2",
+"05AP116PN":"Tiruvannamalai-2",
+"05AP117P1":"Tiruvannamalai-2",
+"05AP117PY":"Tiruvannamalai-2",
+"05AP118PN":"Tiruvannamalai-2",
+"05AP119PN":"Tiruvannamalai-2",
+"05AP120PN":"Tiruvannamalai-2",
+"05AP121PN":"Tiruvannamalai-2",
+"05AP122PN":"Tiruvannamalai-2",
+"05AP123P1":"Tiruvannamalai-2",
+"05AP123PY":"Tiruvannamalai-2",
+"05AP124PN":"Tiruvannamalai-2",
+"05AP125PN":"Tiruvannamalai-2",
+"05AP126P1":"Tiruvannamalai-2",
+"05AP126P2":"Tiruvannamalai-2",
+"05AP126P3":"Tiruvannamalai-2",
+"05AP126PY":"Tiruvannamalai-2",
+"05AP127PN":"Tiruvannamalai-2",
+"05AP128PN":"Tiruvannamalai-2",
+"05AP129PN":"Tiruvannamalai-2",
+"05AP130PN":"Tiruvannamalai-2",
+"05AP131P1":"Tiruvannamalai-2",
+"05AP131PY":"Tiruvannamalai-2",
+"05AP132PN":"Tiruvannamalai-2",
+"05AP133PN":"Tiruvannamalai-2",
+"05AP134PN":"Tiruvannamalai-2",
+"05AP135PN":"Tiruvannamalai-2",
+"05AP136PN":"Tiruvannamalai-1",
+"05AP137P1":"Tiruvannamalai-1",
+"05AP137PY":"Tiruvannamalai-1",
+"05AP138PN":"Tiruvannamalai-1",
+"05AP139P1":"Tiruvannamalai-1",
+"05AP139PY":"Tiruvannamalai-1",
+"05AP140P1":"Tiruvannamalai-1",
+"05AP140PY":"Tiruvannamalai-1",
+"05AP141P1":"Tiruvannamalai-1",
+"05AP141P2":"Tiruvannamalai-1",
+"05AP141PY":"Tiruvannamalai-1",
+"05AP142P1":"Tiruvannamalai-1",
+"05AP142PY":"Tiruvannamalai-1",
+"05AP143PN":"Tiruvannamalai-1",
+"05AP193PN":"Tiruvannamalai-2",
+"05AP194PN":"Tiruvannamalai-1",
+"05AP196P1":"Thurinjapuram",
+"05AP196PY":"Thurinjapuram",
+"05AP197PN":"Tiruvannamalai-2",
+"05AP198PN":"Tiruvannamalai-2",
+"05BB001PN":"Polur",
+"05BB002PN":"Polur",
+"05BB006P1":"Polur",
+"05BB006PY":"Polur",
+"05BB007P1":"Polur",
+"05BB007P2":"Polur",
+"05BB007PY":"Polur",
+"05BB008PN":"Polur",
+"05BC001PN":"Polur",
+"05BC002PN":"Polur",
+"05BC003PN":"Polur",
+"05BC004P1":"Polur",
+"05BC004PY":"Polur",
+"05BC005PN":"Polur",
+"05BC006PN":"Polur",
+"05BC007PN":"Polur",
+"05BC009PN":"Polur",
+"05BC010PN":"Polur",
+"05BO004P1":"Jamunamarathur",
+"05BO004PY":"Jamunamarathur",
+"05BO005P1":"Jamunamarathur",
+"05BO005PY":"Jamunamarathur",
+"05BO006P1":"Jamunamarathur",
+"05BO006PY":"Jamunamarathur",
+"05BO008P1":"Jamunamarathur",
+"05BO008P2":"Jamunamarathur",
+"05BO008P3":"Jamunamarathur",
+"05BO008PY":"Jamunamarathur",
+"05BP001PN":"Polur",
+"05BP002PN":"Polur",
+"05BP005PN":"Polur",
+"05BP006P1":"Polur",
+"05BP006PY":"Polur",
+"05BP007P1":"Polur",
+"05BP007PY":"Polur",
+"05BP008P1":"Polur",
+"05BP008PY":"Polur",
+"05BP009PN":"Polur",
+"05BP010PN":"Polur",
+"05BP011PN":"Polur",
+"05BP012PN":"Polur",
+"05BP013P1":"Polur",
+"05BP013PY":"Polur",
+"05BP014PN":"Polur",
+"05BP015P1":"Polur",
+"05BP015PY":"Polur",
+"05BP016P1":"Polur",
+"05BP016PY":"Polur",
+"05BP017PN":"Polur",
+"05BP018PN":"Polur",
+"05BP019P1":"Polur",
+"05BP019PY":"Polur",
+"05BP020P1":"Polur",
+"05BP020PY":"Polur",
+"05BP021PN":"Polur",
+"05BP022PN":"Polur",
+"05BP023PN":"Polur",
+"05BP024PN":"Polur",
+"05BP025PN":"Polur",
+"05BP026P1":"Polur",
+"05BP026PY":"Polur",
+"05BP027PN":"Polur",
+"05BP028P1":"Polur",
+"05BP028PY":"Polur",
+"05BP029PN":"Polur",
+"05BP030P1":"Polur",
+"05BP030PY":"Polur",
+"05BP031PN":"Polur",
+"05BP032P1":"Polur",
+"05BP032PY":"Polur",
+"05BP033PN":"Polur",
+"05BP034PN":"Polur",
+"05BP035PN":"Polur",
+"05BP036PN":"Polur",
+"05BP037P1":"Polur",
+"05BP037PY":"Polur",
+"05BP038PN":"Polur",
+"05BP039P1":"Polur",
+"05BP039PY":"Polur",
+"05BP040PN":"Polur",
+"05BP041PN":"Polur",
+"05BP042PY":"Polur",
+"05BP043PN":"Polur",
+"05BP044PN":"Polur",
+"05BP045P1":"Polur",
+"05BP045PY":"Polur",
+"05BP046P1":"Polur",
+"05BP046PY":"Polur",
+"05BP047P1":"Polur",
+"05BP047PY":"Polur",
+"05BP048PN":"Polur",
+"05BP049PN":"Polur",
+"05BP050P1":"Polur",
+"05BP050PY":"Polur",
+"05BP051PN":"Polur",
+"05BP052P1":"Polur",
+"05BP052PY":"Polur",
+"05BP053P1":"Polur",
+"05BP053PY":"Polur",
+"05BP054PN":"Polur",
+"05BP055P1":"Polur",
+"05BP055PY":"Polur",
+"05BP056P1":"Polur",
+"05BP056PY":"Polur",
+"05BP057PN":"Polur",
+"05BP058P1":"Polur",
+"05BP058PY":"Polur",
+"05BP059PN":"Polur",
+"05BP060PN":"Polur",
+"05BP076PN":"Kalasapakkam",
+"05BP081PN":"Kalasapakkam",
+"05BP121PN":"Chetpet",
+"05BP123PN":"Chetpet",
+"05BP124P1":"Chetpet",
+"05BP124PY":"Chetpet",
+"05BP125PN":"Chetpet",
+"05BP126PN":"Chetpet",
+"05BP127PN":"Chetpet",
+"05BP128PN":"Chetpet",
+"05BP129PN":"Chetpet",
+"05BP130PN":"Chetpet",
+"05BP131PN":"Chetpet",
+"05BP132PN":"Chetpet",
+"05BP133PN":"Chetpet",
+"05BP134PN":"Chetpet",
+"05BP135PN":"Chetpet",
+"05BP136PN":"Chetpet",
+"05BP137PN":"Chetpet",
+"05BP150P1":"Chetpet",
+"05BP150PY":"Chetpet",
+"05BP151PN":"Chetpet",
+"05BP152PN":"Chetpet",
+"05BP153P1":"Chetpet",
+"05BP153PY":"Chetpet",
+"05BP154PN":"Chetpet",
+"05BP155PN":"Chetpet",
+"05BP156PN":"Chetpet",
+"05BP157PN":"Chetpet",
+"05BP158PN":"Chetpet",
+"05BP159PN":"Chetpet",
+"05BP160PN":"Chetpet",
+"05BP161PN":"Chetpet",
+"05BP162P1":"Polur",
+"05BP162PY":"Polur",
+"05BP166PN":"Chetpet",
+"05BP167PN":"Chetpet",
+"05BP168PN":"Polur",
+"05BP169P1":"Polur",
+"05BP169PY":"Polur",
+"05BP173P1":"Polur",
+"05BP173PY":"Polur",
+"05BP175PN":"Polur",
+"05BP176PN":"Polur",
+"05BP238P1":"Jamunamarathur",
+"05BP238PY":"Jamunamarathur",
+"05CB001PN":"Chengam",
+"05CB002PN":"Pudhupalayam",
+"05CB003PN":"Chengam",
+"05CC001PN":"Chengam",
+"05CC002P1":"Chengam",
+"05CC002PY":"Chengam",
+"05CC003P1":"Chengam",
+"05CC003PY":"Chengam",
+"05CC004PN":"Pudhupalayam",
+"05CC005PN":"Pudhupalayam",
+"05CC006P1":"Pudhupalayam",
+"05CC006PY":"Pudhupalayam",
+"05CC007PN":"Pudhupalayam",
+"05CC008P1":"Chengam",
+"05CC008PY":"Chengam",
+"05CC011PN":"Pudhupalayam",
+"05CO001P1":"Jamunamarathur",
+"05CO001PY":"Jamunamarathur",
+"05CO002P1":"Jamunamarathur",
+"05CO002PY":"Jamunamarathur",
+"05CO003P1":"Jamunamarathur",
+"05CO003P2":"Jamunamarathur",
+"05CO003PY":"Jamunamarathur",
+"05CO004PN":"Jamunamarathur",
+"05CP001P1":"Chengam",
+"05CP001PY":"Chengam",
+"05CP002P1":"Chengam",
+"05CP002PY":"Chengam",
+"05CP003P1":"Chengam",
+"05CP003PY":"Chengam",
+"05CP004P1":"Chengam",
+"05CP004PY":"Chengam",
+"05CP005P1":"Chengam",
+"05CP005PY":"Chengam",
+"05CP006P1":"Chengam",
+"05CP006PY":"Chengam",
+"05CP007PN":"Chengam",
+"05CP008P1":"Chengam",
+"05CP008PY":"Chengam",
+"05CP009PN":"Chengam",
+"05CP010P1":"Chengam",
+"05CP010PY":"Chengam",
+"05CP011PN":"Chengam",
+"05CP012PN":"Chengam",
+"05CP013PN":"Chengam",
+"05CP014P1":"Chengam",
+"05CP014PY":"Chengam",
+"05CP015PN":"Chengam",
+"05CP016PN":"Chengam",
+"05CP017PN":"Chengam",
+"05CP018P1":"Chengam",
+"05CP018PY":"Chengam",
+"05CP019P1":"Chengam",
+"05CP019PY":"Chengam",
+"05CP020P1":"Chengam",
+"05CP020PY":"Chengam",
+"05CP021P1":"Chengam",
+"05CP021P2":"Chengam",
+"05CP021PY":"Chengam",
+"05CP022P1":"Chengam",
+"05CP022PY":"Chengam",
+"05CP023PN":"Chengam",
+"05CP024PN":"Chengam",
+"05CP025PN":"Chengam",
+"05CP026P1":"Chengam",
+"05CP026P2":"Chengam",
+"05CP026PY":"Chengam",
+"05CP027P1":"Chengam",
+"05CP027PY":"Chengam",
+"05CP028P1":"Chengam",
+"05CP028PY":"Chengam",
+"05CP029P1":"Chengam",
+"05CP029P2":"Chengam",
+"05CP029PY":"Chengam",
+"05CP030P1":"Chengam",
+"05CP030P2":"Chengam",
+"05CP030PY":"Chengam",
+"05CP031P1":"Chengam",
+"05CP031PY":"Chengam",
+"05CP032PN":"Chengam",
+"05CP033PN":"Chengam",
+"05CP034PN":"Chengam",
+"05CP035PN":"Chengam",
+"05CP036P1":"Chengam",
+"05CP036PY":"Chengam",
+"05CP037PN":"Chengam",
+"05CP038P1":"Chengam",
+"05CP038P2":"Chengam",
+"05CP038P3":"Chengam",
+"05CP038PY":"Chengam",
+"05CP039P1":"Chengam",
+"05CP039PY":"Chengam",
+"05CP040P1":"Chengam",
+"05CP040PY":"Chengam",
+"05CP041P1":"Chengam",
+"05CP041PY":"Chengam",
+"05CP042P1":"Chengam",
+"05CP042PY":"Chengam",
+"05CP043P1":"Chengam",
+"05CP043PY":"Chengam",
+"05CP044P1":"Chengam",
+"05CP044PY":"Chengam",
+"05CP045PN":"Chengam",
+"05CP046PN":"Chengam",
+"05CP047PN":"Chengam",
+"05CP048PN":"Chengam",
+"05CP049PN":"Chengam",
+"05CP051PN":"Chengam",
+"05CP052PN":"Chengam",
+"05CP053PN":"Chengam",
+"05CP054PN":"Chengam",
+"05CP055PN":"Chengam",
+"05CP056PN":"Chengam",
+"05CP057PN":"Chengam",
+"05CP058PN":"Pudhupalayam",
+"05CP059PN":"Pudhupalayam",
+"05CP060PN":"Pudhupalayam",
+"05CP061P1":"Pudhupalayam",
+"05CP061P2":"Pudhupalayam",
+"05CP061PY":"Pudhupalayam",
+"05CP062PN":"Pudhupalayam",
+"05CP063P1":"Pudhupalayam",
+"05CP063PY":"Pudhupalayam",
+"05CP064PN":"Pudhupalayam",
+"05CP065P1":"Pudhupalayam",
+"05CP065P2":"Pudhupalayam",
+"05CP065PY":"Pudhupalayam",
+"05CP066P1":"Pudhupalayam",
+"05CP066PY":"Pudhupalayam",
+"05CP067PN":"Pudhupalayam",
+"05CP068PN":"Pudhupalayam",
+"05CP069PN":"Pudhupalayam",
+"05CP070PN":"Pudhupalayam",
+"05CP071P1":"Pudhupalayam",
+"05CP071PY":"Pudhupalayam",
+"05CP072PN":"Pudhupalayam",
+"05CP073PN":"Pudhupalayam",
+"05CP074PN":"Pudhupalayam",
+"05CP075PN":"Pudhupalayam",
+"05CP076PN":"Pudhupalayam",
+"05CP077P1":"Pudhupalayam",
+"05CP077PY":"Pudhupalayam",
+"05CP078P1":"Pudhupalayam",
+"05CP078PY":"Pudhupalayam",
+"05CP079P1":"Pudhupalayam",
+"05CP079PY":"Pudhupalayam",
+"05CP080PN":"Pudhupalayam",
+"05CP081P1":"Pudhupalayam",
+"05CP081PY":"Pudhupalayam",
+"05CP082P1":"Pudhupalayam",
+"05CP082PY":"Pudhupalayam",
+"05CP083PN":"Pudhupalayam",
+"05CP084P1":"Pudhupalayam",
+"05CP084PY":"Pudhupalayam",
+"05CP085P1":"Pudhupalayam",
+"05CP085PY":"Pudhupalayam",
+"05CP086PN":"Pudhupalayam",
+"05CP087PN":"Pudhupalayam",
+"05CP088PN":"Pudhupalayam",
+"05CP089PN":"Pudhupalayam",
+"05CP090P1":"Pudhupalayam",
+"05CP090PY":"Pudhupalayam",
+"05CP091PN":"Pudhupalayam",
+"05CP092PN":"Pudhupalayam",
+"05CP093PN":"Pudhupalayam",
+"05CP094PN":"Pudhupalayam",
+"05CP164PN":"Pudhupalayam",
+"05CP165P1":"Pudhupalayam",
+"05CP165PY":"Pudhupalayam",
+"05CP168PN":"Chengam",
+"05CP175P1":"Chengam",
+"05CP175PY":"Chengam",
+"05CP178PN":"Chengam",
+"05CP189PN":"Pudhupalayam",
+"05CP192PN":"Pudhupalayam",
+"05DB001PN":"Vandavasi",
+"05DB002P1":"Vandavasi",
+"05DB002PY":"Vandavasi",
+"05DB003P1":"Thellar",
+"05DB003PY":"Thellar",
+"05DB004PN":"Pernamallur",
+"05DB005PN":"Thellar",
+"05DB006PN":"Vandavasi",
+"05DC001PN":"Vandavasi",
+"05DC002PN":"Vandavasi",
+"05DC003PN":"Vandavasi",
+"05DC004PN":"Thellar",
+"05DC005PN":"Vandavasi",
+"05DC006PN":"Vandavasi",
+"05DO001PN":"Vandavasi",
+"05DO002PN":"Vandavasi",
+"05DP001PN":"Vandavasi",
+"05DP002PN":"Vandavasi",
+"05DP003PN":"Vandavasi",
+"05DP004PN":"Vandavasi",
+"05DP005PN":"Vandavasi",
+"05DP006P1":"Vandavasi",
+"05DP006PY":"Vandavasi",
+"05DP007P1":"Vandavasi",
+"05DP007PY":"Vandavasi",
+"05DP008P1":"Vandavasi",
+"05DP008P2":"Vandavasi",
+"05DP008PY":"Vandavasi",
+"05DP009P1":"Vandavasi",
+"05DP009PY":"Vandavasi",
+"05DP010PN":"Vandavasi",
+"05DP011PN":"Vandavasi",
+"05DP012PN":"Vandavasi",
+"05DP013PN":"Vandavasi",
+"05DP014PN":"Vandavasi",
+"05DP015PN":"Vandavasi",
+"05DP016P1":"Vandavasi",
+"05DP016PY":"Vandavasi",
+"05DP017PN":"Vandavasi",
+"05DP018P1":"Vandavasi",
+"05DP018PY":"Vandavasi",
+"05DP019PN":"Vandavasi",
+"05DP020PN":"Vandavasi",
+"05DP021PN":"Vandavasi",
+"05DP022P1":"Vandavasi",
+"05DP022PY":"Vandavasi",
+"05DP023P1":"Vandavasi",
+"05DP023P2":"Vandavasi",
+"05DP023PY":"Vandavasi",
+"05DP024PN":"Vandavasi",
+"05DP025PN":"Vandavasi",
+"05DP026P1":"Vandavasi",
+"05DP026PY":"Vandavasi",
+"05DP027PN":"Vandavasi",
+"05DP028PN":"Vandavasi",
+"05DP029PN":"Vandavasi",
+"05DP030PN":"Vandavasi",
+"05DP031PN":"Vandavasi",
+"05DP032P1":"Vandavasi",
+"05DP032PY":"Vandavasi",
+"05DP033P1":"Vandavasi",
+"05DP033P2":"Vandavasi",
+"05DP033PY":"Vandavasi",
+"05DP034PN":"Vandavasi",
+"05DP035PN":"Vandavasi",
+"05DP036PN":"Vandavasi",
+"05DP037PN":"Vandavasi",
+"05DP038PN":"Vandavasi",
+"05DP039P1":"Vandavasi",
+"05DP039PY":"Vandavasi",
+"05DP040PN":"Vandavasi",
+"05DP041P1":"Vandavasi",
+"05DP041PY":"Vandavasi",
+"05DP042PN":"Vandavasi",
+"05DP043PN":"Vandavasi",
+"05DP044P1":"Vandavasi",
+"05DP044PY":"Vandavasi",
+"05DP045P1":"Vandavasi",
+"05DP045PY":"Vandavasi",
+"05DP046P1":"Vandavasi",
+"05DP046PY":"Vandavasi",
+"05DP047P1":"Vandavasi",
+"05DP047P2":"Vandavasi",
+"05DP047PY":"Vandavasi",
+"05DP048PN":"Vandavasi",
+"05DP049PN":"Vandavasi",
+"05DP050P1":"Vandavasi",
+"05DP050PY":"Vandavasi",
+"05DP051P1":"Vandavasi",
+"05DP051P2":"Vandavasi",
+"05DP051PY":"Vandavasi",
+"05DP052PN":"Vandavasi",
+"05DP053PN":"Vandavasi",
+"05DP054PN":"Vandavasi",
+"05DP055PN":"Vandavasi",
+"05DP056PN":"Vandavasi",
+"05DP057PN":"Vandavasi",
+"05DP058P1":"Vandavasi",
+"05DP058PY":"Vandavasi",
+"05DP059P1":"Vandavasi",
+"05DP059PY":"Vandavasi",
+"05DP060PN":"Vandavasi",
+"05DP061P1":"Vandavasi",
+"05DP061PY":"Vandavasi",
+"05DP062P1":"Vandavasi",
+"05DP062P2":"Vandavasi",
+"05DP062PY":"Vandavasi",
+"05DP063PN":"Vandavasi",
+"05DP064PN":"Thellar",
+"05DP065PN":"Thellar",
+"05DP066P1":"Thellar",
+"05DP066PY":"Thellar",
+"05DP067PN":"Thellar",
+"05DP068PN":"Thellar",
+"05DP069PN":"Thellar",
+"05DP070PN":"Thellar",
+"05DP071P1":"Thellar",
+"05DP071PY":"Thellar",
+"05DP072PN":"Thellar",
+"05DP073P1":"Thellar",
+"05DP073PY":"Thellar",
+"05DP074PN":"Thellar",
+"05DP075PN":"Thellar",
+"05DP077PN":"Thellar",
+"05DP078PN":"Thellar",
+"05DP079P1":"Thellar",
+"05DP079PY":"Thellar",
+"05DP080PN":"Thellar",
+"05DP081PN":"Thellar",
+"05DP082PN":"Thellar",
+"05DP083PN":"Thellar",
+"05DP084P1":"Thellar",
+"05DP084PY":"Thellar",
+"05DP085PN":"Thellar",
+"05DP086PN":"Thellar",
+"05DP088P1":"Thellar",
+"05DP088P2":"Thellar",
+"05DP088P3":"Thellar",
+"05DP088PY":"Thellar",
+"05DP089P1":"Thellar",
+"05DP089PY":"Thellar",
+"05DP090PN":"Thellar",
+"05DP091PN":"Thellar",
+"05DP092P1":"Thellar",
+"05DP092PY":"Thellar",
+"05DP093P1":"Thellar",
+"05DP093PY":"Thellar",
+"05DP094PN":"Thellar",
+"05DP095P1":"Thellar",
+"05DP095PY":"Thellar",
+"05DP096PN":"Thellar",
+"05DP097PN":"Thellar",
+"05DP098PN":"Thellar",
+"05DP099PN":"Thellar",
+"05DP100PN":"Thellar",
+"05DP101PN":"Thellar",
+"05DP102P1":"Thellar",
+"05DP102PY":"Thellar",
+"05DP103PN":"Thellar",
+"05DP104PN":"Thellar",
+"05DP105P1":"Thellar",
+"05DP105PY":"Thellar",
+"05DP106P1":"Thellar",
+"05DP106P2":"Thellar",
+"05DP106P3":"Thellar",
+"05DP106PY":"Thellar",
+"05DP107P1":"Thellar",
+"05DP107PY":"Thellar",
+"05DP108P1":"Thellar",
+"05DP108PY":"Thellar",
+"05DP109PN":"Thellar",
+"05DP110P1":"Thellar",
+"05DP110PY":"Thellar",
+"05DP111PN":"Thellar",
+"05DP112PN":"Thellar",
+"05DP113P1":"Thellar",
+"05DP113PY":"Thellar",
+"05DP114PN":"Thellar",
+"05DP115PN":"Thellar",
+"05DP116PN":"Thellar",
+"05DP117PN":"Thellar",
+"05DP118P1":"Thellar",
+"05DP118PY":"Thellar",
+"05DP119PN":"Thellar",
+"05DP120PN":"Thellar",
+"05DP121PN":"Thellar",
+"05DP122PN":"Thellar",
+"05DP123PN":"Thellar",
+"05DP126P1":"Pernamallur",
+"05DP126PY":"Pernamallur",
+"05DP146PN":"Pernamallur",
+"05DP147PN":"Pernamallur",
+"05DP148P1":"Pernamallur",
+"05DP148PY":"Pernamallur",
+"05DP149PN":"Pernamallur",
+"05DP150P1":"Pernamallur",
+"05DP150PY":"Pernamallur",
+"05DP151P1":"Pernamallur",
+"05DP151PY":"Pernamallur",
+"05DP152PN":"Pernamallur",
+"05DP153PN":"Pernamallur",
+"05DP154PN":"Pernamallur",
+"05DP159P1":"Pernamallur",
+"05DP159PY":"Pernamallur",
+"05DP160P1":"Pernamallur",
+"05DP160PY":"Pernamallur",
+"05DP161PY":"Pernamallur",
+"05DP162PN":"Pernamallur",
+"05DP164P1":"Pernamallur",
+"05DP164PY":"Pernamallur",
+"05DP165PN":"Pernamallur",
+"05DP166P1":"Pernamallur",
+"05DP166PY":"Pernamallur",
+"05DP182PN":"Thellar",
+"05DP189P1":"Vandavasi",
+"05DP189PY":"Vandavasi",
+"05DP190PN":"Vandavasi",
+"05DP197PN":"Thellar",
+"05DP198P1":"Thellar",
+"05DP198PY":"Thellar",
+"05DP199P1":"Thellar",
+"05DP199PY":"Thellar",
+"05DV002P1":"Thellar",
+"05DV002P2":"Thellar",
+"05DV002PY":"Thellar",
+"05DV008P1":"Thellar",
+"05DV008PY":"Thellar",
+"05DV023P1":"Pernamallur",
+"05DV023PY":"Pernamallur",
+"05EB001PN":"Arani East",
+"05EB002PN":"Arani East",
+"05EB003PN":"Arani East",
+"05EB004PN":"Arani East",
+"05EB005PN":"Arani East",
+"05EB006PN":"Arani West",
+"05EB007P1":"Arani West",
+"05EB007PY":"Arani West",
+"05EB008PN":"Arani West",
+"05EB009PN":"Arani East",
+"05EC001PN":"Arani East",
+"05EC002PN":"Arani East",
+"05EO001PN":"Arani East",
+"05EO002PN":"Arani East",
+"05EO003PN":"Arani East",
+"05EO004PN":"Arani East",
+"05EO005PN":"Arani East",
+"05EO006PN":"Arani East",
+"05EO007PN":"Arani East",
+"05EO008PN":"Arani East",
+"05EO009PN":"Arani East",
+"05EP001P1":"Arani East",
+"05EP001P2":"Arani East",
+"05EP001PY":"Arani East",
+"05EP002PN":"Arani East",
+"05EP003P1":"Arani East",
+"05EP003PY":"Arani East",
+"05EP004P1":"Arani East",
+"05EP004PY":"Arani East",
+"05EP005P1":"Arani East",
+"05EP005PY":"Arani East",
+"05EP006PN":"Arani East",
+"05EP007P1":"Arani East",
+"05EP007PY":"Arani East",
+"05EP008P1":"Arani East",
+"05EP008P2":"Arani East",
+"05EP008PY":"Arani East",
+"05EP009P1":"Arani East",
+"05EP009PY":"Arani East",
+"05EP010P1":"Arani East",
+"05EP010P2":"Arani East",
+"05EP010PY":"Arani East",
+"05EP011P1":"Arani East",
+"05EP011P2":"Arani East",
+"05EP011PY":"Arani East",
+"05EP012P1":"Arani East",
+"05EP012PY":"Arani East",
+"05EP013PN":"Arani East",
+"05EP014P1":"Arani East",
+"05EP014P2":"Arani East",
+"05EP014PY":"Arani East",
+"05EP015P1":"Arani East",
+"05EP015PY":"Arani East",
+"05EP016P1":"Arani East",
+"05EP016PY":"Arani East",
+"05EP017P1":"Arani East",
+"05EP017PY":"Arani East",
+"05EP018P1":"Arani East",
+"05EP018P2":"Arani East",
+"05EP018P3":"Arani East",
+"05EP018PY":"Arani East",
+"05EP019P1":"Arani East",
+"05EP019PY":"Arani East",
+"05EP020P1":"Arani East",
+"05EP020P2":"Arani East",
+"05EP020PY":"Arani East",
+"05EP021PN":"Arani East",
+"05EP022P1":"Arani East",
+"05EP022P2":"Arani East",
+"05EP022PY":"Arani East",
+"05EP023P1":"Arani East",
+"05EP023P2":"Arani East",
+"05EP023PY":"Arani East",
+"05EP024P1":"Arani East",
+"05EP024PY":"Arani East",
+"05EP025P1":"Arani East",
+"05EP025P2":"Arani East",
+"05EP025PY":"Arani East",
+"05EP027P1":"Arani East",
+"05EP027P2":"Arani East",
+"05EP027P3":"Arani East",
+"05EP027PY":"Arani East",
+"05EP028P1":"Arani East",
+"05EP028PY":"Arani East",
+"05EP029P1":"Arani East",
+"05EP029P2":"Arani East",
+"05EP029PY":"Arani East",
+"05EP030P1":"Arani East",
+"05EP030PY":"Arani East",
+"05EP031PN":"Arani West",
+"05EP032PN":"Arani West",
+"05EP033PN":"Arani West",
+"05EP034P1":"Arani West",
+"05EP034PY":"Arani West",
+"05EP035P1":"Arani West",
+"05EP035P2":"Arani West",
+"05EP035PY":"Arani West",
+"05EP036P1":"Arani West",
+"05EP036P2":"Arani West",
+"05EP036PY":"Arani West",
+"05EP037PN":"Arani West",
+"05EP038P1":"Arani West",
+"05EP038PY":"Arani West",
+"05EP042PN":"Arani West",
+"05EP043P1":"Arani West",
+"05EP043PY":"Arani West",
+"05EP044P1":"Arani West",
+"05EP044PY":"Arani West",
+"05EP045P1":"Arani West",
+"05EP045PY":"Arani West",
+"05EP046P1":"Arani West",
+"05EP046PY":"Arani West",
+"05EP047PN":"Arani West",
+"05EP048PN":"Arani West",
+"05EP049P1":"Arani West",
+"05EP049PY":"Arani West",
+"05EP050P1":"Arani West",
+"05EP050PY":"Arani West",
+"05EP051P1":"Arani West",
+"05EP051P2":"Arani West",
+"05EP051PY":"Arani West",
+"05EP052P1":"Arani West",
+"05EP052PY":"Arani West",
+"05EP053P1":"Arani West",
+"05EP053PY":"Arani West",
+"05EP054P1":"Arani West",
+"05EP054PY":"Arani West",
+"05EP064PN":"Arani East",
+"05EP072P1":"Arani East",
+"05EP072PY":"Arani East",
+"05EP077PN":"Arani East",
+"05EP078PN":"Arani West",
+"05EP079PN":"Arani West",
+"05EP080PN":"Arani West",
+"05FA001PN":"Cheyyar",
+"05FA002PN":"Cheyyar",
+"05FA003PN":"Cheyyar",
+"05FB001PN":"Cheyyar",
+"05FB002PN":"Cheyyar",
+"05FB003PN":"Cheyyar",
+"05FB004PN":"Cheyyar",
+"05FB005PN":"Cheyyar",
+"05FB006PN":"Cheyyar",
+"05FB007PN":"Cheyyar",
+"05FC001PN":"Cheyyar",
+"05FC002PN":"Cheyyar",
+"05FP001PN":"Cheyyar",
+"05FP003PN":"Cheyyar",
+"05FP004PN":"Cheyyar",
+"05FP005PN":"Cheyyar",
+"05FP006PN":"Cheyyar",
+"05FP007PN":"Cheyyar",
+"05FP008PN":"Cheyyar",
+"05FP009PN":"Cheyyar",
+"05FP010PN":"Cheyyar",
+"05FP011P1":"Cheyyar",
+"05FP011PY":"Cheyyar",
+"05FP012PN":"Cheyyar",
+"05FP013PN":"Cheyyar",
+"05FP014P1":"Cheyyar",
+"05FP014PY":"Cheyyar",
+"05FP015PN":"Cheyyar",
+"05FP016PN":"Cheyyar",
+"05FP017PN":"Cheyyar",
+"05FP018P1":"Cheyyar",
+"05FP018P2":"Cheyyar",
+"05FP018PY":"Cheyyar",
+"05FP020PN":"Cheyyar",
+"05FP021PN":"Cheyyar",
+"05FP022PN":"Cheyyar",
+"05FP023PN":"Cheyyar",
+"05FP024PN":"Cheyyar",
+"05FP025PN":"Cheyyar",
+"05FP026PN":"Cheyyar",
+"05FP027P1":"Cheyyar",
+"05FP027PY":"Cheyyar",
+"05FP028PN":"Cheyyar",
+"05FP029PN":"Cheyyar",
+"05FP030PN":"Cheyyar",
+"05FP031P1":"Cheyyar",
+"05FP031PY":"Cheyyar",
+"05FP032PN":"Cheyyar",
+"05FP033PN":"Cheyyar",
+"05FP034PN":"Cheyyar",
+"05FP035P1":"Cheyyar",
+"05FP035PY":"Cheyyar",
+"05FP036PN":"Cheyyar",
+"05FP037PN":"Cheyyar",
+"05FP038P1":"Cheyyar",
+"05FP038PY":"Cheyyar",
+"05FP039P1":"Cheyyar",
+"05FP039P2":"Cheyyar",
+"05FP039PY":"Cheyyar",
+"05FP040P1":"Cheyyar",
+"05FP040PY":"Cheyyar",
+"05FP041PN":"Cheyyar",
+"05FP042P1":"Cheyyar",
+"05FP042PY":"Cheyyar",
+"05FP043PN":"Cheyyar",
+"05FP044PN":"Cheyyar",
+"05FP045P1":"Cheyyar",
+"05FP045PY":"Cheyyar",
+"05FP046P1":"Cheyyar",
+"05FP046PY":"Cheyyar",
+"05FP047P1":"Cheyyar",
+"05FP047PY":"Cheyyar",
+"05FP048PN":"Cheyyar",
+"05FP049PN":"Anakavoor",
+"05FP050P1":"Anakavoor",
+"05FP050PY":"Anakavoor",
+"05FP051PN":"Anakavoor",
+"05FP052PN":"Anakavoor",
+"05FP053PN":"Anakavoor",
+"05FP054PN":"Anakavoor",
+"05FP055P1":"Anakavoor",
+"05FP055PY":"Anakavoor",
+"05FP056PN":"Anakavoor",
+"05FP057PN":"Anakavoor",
+"05FP058PN":"Anakavoor",
+"05FP059PN":"Anakavoor",
+"05FP060PN":"Anakavoor",
+"05FP061PN":"Anakavoor",
+"05FP062PN":"Anakavoor",
+"05FP063PN":"Anakavoor",
+"05FP064PN":"Anakavoor",
+"05FP065P1":"Anakavoor",
+"05FP065PY":"Anakavoor",
+"05FP066PN":"Anakavoor",
+"05FP067PN":"Anakavoor",
+"05FP068P1":"Anakavoor",
+"05FP068PY":"Anakavoor",
+"05FP069PN":"Anakavoor",
+"05FP070P1":"Anakavoor",
+"05FP070PY":"Anakavoor",
+"05FP071PN":"Anakavoor",
+"05FP072PN":"Anakavoor",
+"05FP073PN":"Anakavoor",
+"05FP074PN":"Anakavoor",
+"05FP075PN":"Anakavoor",
+"05FP076PN":"Anakavoor",
+"05FP077P1":"Anakavoor",
+"05FP077PY":"Anakavoor",
+"05FP078PN":"Anakavoor",
+"05FP079PN":"Anakavoor",
+"05FP080PN":"Anakavoor",
+"05FP081PN":"Anakavoor",
+"05FP082PN":"Anakavoor",
+"05FP083P1":"Anakavoor",
+"05FP083PY":"Anakavoor",
+"05FP084PN":"Anakavoor",
+"05FP085PN":"Anakavoor",
+"05FP086PN":"Anakavoor",
+"05FP087PN":"Anakavoor",
+"05FP088PN":"Anakavoor",
+"05FP089PN":"Anakavoor",
+"05FP090PN":"Anakavoor",
+"05FP091PN":"Anakavoor",
+"05FP092PN":"Anakavoor",
+"05FP093P1":"Anakavoor",
+"05FP093PY":"Anakavoor",
+"05FP094PN":"Anakavoor",
+"05FP095P1":"Anakavoor",
+"05FP095PY":"Anakavoor",
+"05FP096PN":"Anakavoor",
+"05FP097PN":"Anakavoor",
+"05FP098P1":"Anakavoor",
+"05FP098PY":"Anakavoor",
+"05FP099PN":"Anakavoor",
+"05FP100PN":"Anakavoor",
+"05FP101PN":"Anakavoor",
+"05FP149PN":"Vembakkam 1",
+"05FP155PN":"Vembakkam 1",
+"05FP175P1":"Cheyyar",
+"05FP175P2":"Cheyyar",
+"05FP175PY":"Cheyyar",
+"05FP176P1":"Cheyyar",
+"05FP176PY":"Cheyyar",
+"05FP178P1":"Anakavoor",
+"05FP178PY":"Anakavoor",
+"05FP179PN":"Cheyyar",
+"05FP181P1":"Cheyyar",
+"05FP181PY":"Cheyyar",
+"05FP183PN":"Cheyyar",
+"05FP184P1":"Cheyyar",
+"05FP184P2":"Cheyyar",
+"05FP184PY":"Cheyyar",
+"05FP186P1":"Cheyyar",
+"05FP186PY":"Cheyyar",
+"05FP195PN":"Cheyyar",
+"05FP196PN":"Cheyyar",
+"05FV001P1":"Anakavoor",
+"05FV001PY":"Anakavoor",
+"05FV005PN":"Anakavoor",
+"05FV029P1":"Vembakkam 1",
+"05FV029P2":"Vembakkam 1",
+"05FV029PY":"Vembakkam 1",
+"05FV033P1":"Vembakkam 1",
+"05FV033PY":"Vembakkam 1",
+"05FV036P1":"Anakavoor",
+"05FV036PY":"Anakavoor",
+"05GO005PN":"Thandrampet",
+"05GP050PN":"Chengam",
+"05GP058PN":"Chengam",
+"05GP095PN":"Thandrampet",
+"05GP096PN":"Thandrampet",
+"05GP097P1":"Thandrampet",
+"05GP097P2":"Thandrampet",
+"05GP097P3":"Thandrampet",
+"05GP097PY":"Thandrampet",
+"05GP098P1":"Thandrampet",
+"05GP098PY":"Thandrampet",
+"05GP099PN":"Thandrampet",
+"05GP100P1":"Thandrampet",
+"05GP100P2":"Thandrampet",
+"05GP100PY":"Thandrampet",
+"05GP101P1":"Thandrampet",
+"05GP101PY":"Thandrampet",
+"05GP102P1":"Thandrampet",
+"05GP102PY":"Thandrampet",
+"05GP103P1":"Thandrampet",
+"05GP103PY":"Thandrampet",
+"05GP104PN":"Thandrampet",
+"05GP105P1":"Thandrampet",
+"05GP105P2":"Thandrampet",
+"05GP105P3":"Thandrampet",
+"05GP105PY":"Thandrampet",
+"05GP106PN":"Thandrampet",
+"05GP107PN":"Thandrampet",
+"05GP108PN":"Thandrampet",
+"05GP109PN":"Thandrampet",
+"05GP110P1":"Thandrampet",
+"05GP110PY":"Thandrampet",
+"05GP111PN":"Thandrampet",
+"05GP112P1":"Thandrampet",
+"05GP112PY":"Thandrampet",
+"05GP113P1":"Thandrampet",
+"05GP113PY":"Thandrampet",
+"05GP114P1":"Thandrampet",
+"05GP114P2":"Thandrampet",
+"05GP114PY":"Thandrampet",
+"05GP115P1":"Thandrampet",
+"05GP115PY":"Thandrampet",
+"05GP116PN":"Thandrampet",
+"05GP117PN":"Thandrampet",
+"05GP118PN":"Thandrampet",
+"05GP119P1":"Thandrampet",
+"05GP119PY":"Thandrampet",
+"05GP120P1":"Thandrampet",
+"05GP120PY":"Thandrampet",
+"05GP121PN":"Thandrampet",
+"05GP122PN":"Thandrampet",
+"05GP123P1":"Thandrampet",
+"05GP123PY":"Thandrampet",
+"05GP124P1":"Thandrampet",
+"05GP124PY":"Thandrampet",
+"05GP125P1":"Thandrampet",
+"05GP125PY":"Thandrampet",
+"05GP126P1":"Thandrampet",
+"05GP126PY":"Thandrampet",
+"05GP127P1":"Thandrampet",
+"05GP127P2":"Thandrampet",
+"05GP127P3":"Thandrampet",
+"05GP127PY":"Thandrampet",
+"05GP128P1":"Thandrampet",
+"05GP128PY":"Thandrampet",
+"05GP129PN":"Thandrampet",
+"05GP130P1":"Thandrampet",
+"05GP130PY":"Thandrampet",
+"05GP131P1":"Thandrampet",
+"05GP131PY":"Thandrampet",
+"05GP132PN":"Thandrampet",
+"05GP133P1":"Thandrampet",
+"05GP133P2":"Thandrampet",
+"05GP133PY":"Thandrampet",
+"05GP134P1":"Thandrampet",
+"05GP134PY":"Thandrampet",
+"05GP135PN":"Thandrampet",
+"05GP136PN":"Thandrampet",
+"05GP137P1":"Thandrampet",
+"05GP137P2":"Thandrampet",
+"05GP137PN":"Thandrampet",
+"05GP137PY":"Thandrampet",
+"05GP139PN":"Thandrampet",
+"05GP140P1":"Thandrampet",
+"05GP140PY":"Thandrampet",
+"05GP141PN":"Thandrampet",
+"05GP142PN":"Thandrampet",
+"05GP143PN":"Thandrampet",
+"05GP144PN":"Thandrampet",
+"05GP145PN":"Thandrampet",
+"05GP146PN":"Thandrampet",
+"05GP147PN":"Thandrampet",
+"05GP148PN":"Thandrampet",
+"05GP149PN":"Thandrampet",
+"05GP150PN":"Thandrampet",
+"05GP151PN":"Thandrampet",
+"05GP152PN":"Thandrampet",
+"05GP153PN":"Thandrampet",
+"05GP154PN":"Thandrampet",
+"05GP155PN":"Thandrampet",
+"05GP156PN":"Thandrampet",
+"05GP157PN":"Thandrampet",
+"05GP158PN":"Thandrampet",
+"05GP159P1":"Thandrampet",
+"05GP159P2":"Thandrampet",
+"05GP159PY":"Thandrampet",
+"05GP160P1":"Thandrampet",
+"05GP160PY":"Thandrampet",
+"05GP161P1":"Thandrampet",
+"05GP161PY":"Thandrampet",
+"05GP162P1":"Thandrampet",
+"05GP162PY":"Thandrampet",
+"05GP163PN":"Thandrampet",
+"05HC008PN":"Kalasapakkam",
+"05HO001P1":"Jamunamarathur",
+"05HO001PY":"Jamunamarathur",
+"05HO002P1":"Jamunamarathur",
+"05HO002PY":"Jamunamarathur",
+"05HO003P1":"Jamunamarathur",
+"05HO003PY":"Jamunamarathur",
+"05HO007PN":"Jamunamarathur",
+"05HP061P1":"Kalasapakkam",
+"05HP061PY":"Kalasapakkam",
+"05HP062PN":"Kalasapakkam",
+"05HP063P1":"Kalasapakkam",
+"05HP063PY":"Kalasapakkam",
+"05HP064PN":"Kalasapakkam",
+"05HP065P1":"Kalasapakkam",
+"05HP065P2":"Kalasapakkam",
+"05HP065PY":"Kalasapakkam",
+"05HP066PN":"Kalasapakkam",
+"05HP067PN":"Kalasapakkam",
+"05HP068PN":"Kalasapakkam",
+"05HP069P1":"Kalasapakkam",
+"05HP069PY":"Kalasapakkam",
+"05HP070P1":"Kalasapakkam",
+"05HP070PY":"Kalasapakkam",
+"05HP071PN":"Kalasapakkam",
+"05HP072P1":"Kalasapakkam",
+"05HP072PY":"Kalasapakkam",
+"05HP073P1":"Kalasapakkam",
+"05HP073PY":"Kalasapakkam",
+"05HP074P1":"Kalasapakkam",
+"05HP074P2":"Kalasapakkam",
+"05HP074PY":"Kalasapakkam",
+"05HP075P1":"Kalasapakkam",
+"05HP075PY":"Kalasapakkam",
+"05HP077PN":"Kalasapakkam",
+"05HP078P1":"Kalasapakkam",
+"05HP078PY":"Kalasapakkam",
+"05HP079P1":"Kalasapakkam",
+"05HP079PY":"Kalasapakkam",
+"05HP080P1":"Kalasapakkam",
+"05HP080PY":"Kalasapakkam",
+"05HP082P1":"Kalasapakkam",
+"05HP082PY":"Kalasapakkam",
+"05HP083P1":"Kalasapakkam",
+"05HP083PY":"Kalasapakkam",
+"05HP084P1":"Kalasapakkam",
+"05HP084PY":"Kalasapakkam",
+"05HP085PN":"Kalasapakkam",
+"05HP086PN":"Kalasapakkam",
+"05HP087P1":"Kalasapakkam",
+"05HP087P2":"Kalasapakkam",
+"05HP087PY":"Kalasapakkam",
+"05HP088PN":"Kalasapakkam",
+"05HP089PN":"Kalasapakkam",
+"05HP090P1":"Kalasapakkam",
+"05HP090PY":"Kalasapakkam",
+"05HP091P1":"Kalasapakkam",
+"05HP091P2":"Kalasapakkam",
+"05HP091PY":"Kalasapakkam",
+"05HP092P1":"Kalasapakkam",
+"05HP092PY":"Kalasapakkam",
+"05HP093P1":"Kalasapakkam",
+"05HP093P2":"Kalasapakkam",
+"05HP093P3":"Kalasapakkam",
+"05HP093PY":"Kalasapakkam",
+"05HP094P1":"Kalasapakkam",
+"05HP094PY":"Kalasapakkam",
+"05HP095P1":"Kalasapakkam",
+"05HP095PY":"Kalasapakkam",
+"05HP096P1":"Kalasapakkam",
+"05HP096PY":"Kalasapakkam",
+"05HP097P1":"Kalasapakkam",
+"05HP097P2":"Kalasapakkam",
+"05HP097PY":"Kalasapakkam",
+"05HP098P1":"Kalasapakkam",
+"05HP098PY":"Kalasapakkam",
+"05HP099P1":"Kalasapakkam",
+"05HP099PY":"Kalasapakkam",
+"05HP100PN":"Kalasapakkam",
+"05HP101PN":"Kalasapakkam",
+"05HP102PN":"Kalasapakkam",
+"05HP103PN":"Kalasapakkam",
+"05HP104PN":"Kalasapakkam",
+"05HP105P1":"Kalasapakkam",
+"05HP105PY":"Kalasapakkam",
+"05HP106P1":"Kalasapakkam",
+"05HP106PY":"Kalasapakkam",
+"05HP107P1":"Kalasapakkam",
+"05HP107PY":"Kalasapakkam",
+"05HP108PN":"Kalasapakkam",
+"05HP109PN":"Kalasapakkam",
+"05HP110P1":"Kalasapakkam",
+"05HP110PY":"Kalasapakkam",
+"05HP111PN":"Kalasapakkam",
+"05HP163PN":"Kalasapakkam",
+"05HP164PN":"Kalasapakkam",
+"05HP165PN":"Kalasapakkam",
+"05HP170PN":"Kalasapakkam",
+"05HP171PN":"Kalasapakkam",
+"05HP172PN":"Kalasapakkam",
+"05IB003PN":"Chetpet",
+"05IB004P1":"Chetpet",
+"05IB004PY":"Chetpet",
+"05IB005PN":"Chetpet",
+"05IP003PN":"Chetpet",
+"05IP004PN":"Chetpet",
+"05IP039P1":"Arani West",
+"05IP039PY":"Arani West",
+"05IP040PN":"Arani West",
+"05IP041P1":"Arani West",
+"05IP041PY":"Arani West",
+"05IP055P1":"Arani West",
+"05IP055PY":"Arani West",
+"05IP056P1":"Arani West",
+"05IP056PY":"Arani West",
+"05IP087PN":"Arani West",
+"05IP088PN":"Arani West",
+"05IP111PN":"Chetpet",
+"05IP112P1":"Chetpet",
+"05IP112PY":"Chetpet",
+"05IP113PN":"Chetpet",
+"05IP114PN":"Chetpet",
+"05IP115PN":"Chetpet",
+"05IP116PN":"Chetpet",
+"05IP117P1":"Chetpet",
+"05IP117PY":"Chetpet",
+"05IP118PN":"Chetpet",
+"05IP119PN":"Chetpet",
+"05IP120P1":"Chetpet",
+"05IP120P2":"Chetpet",
+"05IP120PY":"Chetpet",
+"05IP122P1":"Chetpet",
+"05IP122PY":"Chetpet",
+"05IP123PN":"Thellar",
+"05IP124PN":"Pernamallur",
+"05IP125P1":"Pernamallur",
+"05IP125PY":"Pernamallur",
+"05IP127PN":"Pernamallur",
+"05IP128PN":"Pernamallur",
+"05IP129PN":"Pernamallur",
+"05IP130PN":"Pernamallur",
+"05IP131PN":"Pernamallur",
+"05IP132PN":"Pernamallur",
+"05IP133P1":"Pernamallur",
+"05IP133P2":"Pernamallur",
+"05IP133PY":"Pernamallur",
+"05IP134PN":"Pernamallur",
+"05IP135PN":"Pernamallur",
+"05IP136PN":"Pernamallur",
+"05IP137PN":"Pernamallur",
+"05IP138P1":"Pernamallur",
+"05IP138PY":"Pernamallur",
+"05IP139P1":"Pernamallur",
+"05IP139PN":"Chetpet",
+"05IP139PY":"Pernamallur",
+"05IP140P1":"Pernamallur",
+"05IP140PN":"Chetpet",
+"05IP140PY":"Pernamallur",
+"05IP141P1":"Chetpet",
+"05IP141P2":"Chetpet",
+"05IP141PN":"Pernamallur",
+"05IP141PY":"Chetpet",
+"05IP142PN":"Pernamallur",
+"05IP143PN":"Chetpet",
+"05IP143PY":"Pernamallur",
+"05IP144P1":"Pernamallur",
+"05IP144PY":"Pernamallur",
+"05IP145PN":"Pernamallur",
+"05IP146P1":"Chetpet",
+"05IP146P2":"Chetpet",
+"05IP146PY":"Chetpet",
+"05IP147PN":"Chetpet",
+"05IP148PN":"Chetpet",
+"05IP149PN":"Chetpet",
+"05IP155PN":"Pernamallur",
+"05IP156PN":"Pernamallur",
+"05IP157PN":"Pernamallur",
+"05IP158PN":"Pernamallur",
+"05IP167PN":"Pernamallur",
+"05IP168PN":"Pernamallur",
+"05IP169PN":"Pernamallur",
+"05IP170PN":"Pernamallur",
+"05IP171PN":"Pernamallur",
+"05IP172PN":"Pernamallur",
+"05IP173PN":"Pernamallur",
+"05IP174PN":"Pernamallur",
+"05IP175P1":"Pernamallur",
+"05IP175PY":"Pernamallur",
+"05IP176PN":"Pernamallur",
+"05IP177PN":"Pernamallur",
+"05IP178PN":"Pernamallur",
+"05IP179PN":"Pernamallur",
+"05IP180P1":"Pernamallur",
+"05IP180PY":"Pernamallur",
+"05IP181PN":"Pernamallur",
+"05IP202P1":"Chetpet",
+"05IP202P2":"Chetpet",
+"05IP202PY":"Chetpet",
+"05IP203PN":"Chetpet",
+"05IP204P1":"Chetpet",
+"05IP204PY":"Chetpet",
+"05IP205PN":"Chetpet",
+"05IP206PN":"Chetpet",
+"05IP237PN":"Chetpet",
+"05IV017P1":"Pernamallur",
+"05IV017PY":"Pernamallur",
+"05JP002PN":"Cheyyar",
+"05JP102P1":"Vembakkam 2",
+"05JP102PY":"Vembakkam 2",
+"05JP103PN":"Vembakkam 2",
+"05JP104PN":"Vembakkam 2",
+"05JP105PN":"Vembakkam 2",
+"05JP106P1":"Vembakkam 2",
+"05JP106PY":"Vembakkam 2",
+"05JP107PN":"Vembakkam 2",
+"05JP108PN":"Vembakkam 2",
+"05JP109PN":"Vembakkam 2",
+"05JP110P1":"Vembakkam 2",
+"05JP110P2":"Vembakkam 2",
+"05JP110PY":"Vembakkam 2",
+"05JP111PN":"Vembakkam 2",
+"05JP112PN":"Vembakkam 2",
+"05JP113PN":"Vembakkam 2",
+"05JP114P1":"Vembakkam 2",
+"05JP114P2":"Vembakkam 2",
+"05JP114P3":"Vembakkam 2",
+"05JP114PY":"Vembakkam 2",
+"05JP115PN":"Vembakkam 2",
+"05JP116P1":"Vembakkam 2",
+"05JP116PY":"Vembakkam 2",
+"05JP117P1":"Vembakkam 2",
+"05JP117PY":"Vembakkam 2",
+"05JP118PN":"Vembakkam 2",
+"05JP119PN":"Vembakkam 2",
+"05JP120PN":"Vembakkam 2",
+"05JP121P1":"Vembakkam 2",
+"05JP121P2":"Vembakkam 2",
+"05JP121PY":"Vembakkam 2",
+"05JP122PN":"Vembakkam 2",
+"05JP123PN":"Vembakkam 2",
+"05JP124PN":"Vembakkam 1",
+"05JP125P1":"Vembakkam 1",
+"05JP125PY":"Vembakkam 1",
+"05JP126PN":"Vembakkam 1",
+"05JP127P1":"Vembakkam 1",
+"05JP127P2":"Vembakkam 1",
+"05JP127P3":"Vembakkam 1",
+"05JP127PY":"Vembakkam 1",
+"05JP128P1":"Vembakkam 1",
+"05JP128PY":"Vembakkam 1",
+"05JP129P1":"Vembakkam 1",
+"05JP129PY":"Vembakkam 1",
+"05JP130PN":"Vembakkam 1",
+"05JP131P1":"Vembakkam 2",
+"05JP131P2":"Vembakkam 2",
+"05JP131PY":"Vembakkam 2",
+"05JP132P1":"Vembakkam 2",
+"05JP132PY":"Vembakkam 2",
+"05JP133PN":"Vembakkam 2",
+"05JP134PN":"Vembakkam 2",
+"05JP135P1":"Vembakkam 2",
+"05JP135PY":"Vembakkam 2",
+"05JP136P1":"Vembakkam 2",
+"05JP136P2":"Vembakkam 2",
+"05JP136PY":"Vembakkam 2",
+"05JP137PN":"Vembakkam 2",
+"05JP138P1":"Vembakkam 2",
+"05JP138PY":"Vembakkam 2",
+"05JP139P1":"Vembakkam 2",
+"05JP139PY":"Vembakkam 2",
+"05JP140PN":"Vembakkam 2",
+"05JP141PN":"Vembakkam 2",
+"05JP142PN":"Vembakkam 1",
+"05JP143PN":"Vembakkam 1",
+"05JP144PN":"Vembakkam 1",
+"05JP145PN":"Vembakkam 1",
+"05JP146PN":"Vembakkam 1",
+"05JP147PN":"Vembakkam 1",
+"05JP148PN":"Vembakkam 1",
+"05JP150P1":"Vembakkam 1",
+"05JP150PY":"Vembakkam 1",
+"05JP151P1":"Vembakkam 1",
+"05JP151PY":"Vembakkam 1",
+"05JP152P1":"Vembakkam 1",
+"05JP152PY":"Vembakkam 1",
+"05JP153P1":"Vembakkam 1",
+"05JP153PY":"Vembakkam 1",
+"05JP154PN":"Vembakkam 1",
+"05JP156P1":"Vembakkam 1",
+"05JP156PY":"Vembakkam 1",
+"05JP157PN":"Vembakkam 1",
+"05JP158PN":"Vembakkam 1",
+"05JP159PN":"Vembakkam 1",
+"05JP160PN":"Vembakkam 1",
+"05JP161P1":"Vembakkam 1",
+"05JP161PY":"Vembakkam 1",
+"05JP162P1":"Vembakkam 1",
+"05JP162PY":"Vembakkam 1",
+"05JP163PN":"Vembakkam 1",
+"05JP164PN":"Vembakkam 1",
+"05JP165PN":"Vembakkam 1",
+"05JP166PN":"Vembakkam 1",
+"05JP167PN":"Vembakkam 1",
+"05JP168PN":"Vembakkam 1",
+"05JP169PN":"Vembakkam 1",
+"05JP170PN":"Vembakkam 1",
+"05JP171PN":"Vembakkam 1",
+"05JP172PN":"Vembakkam 1",
+"05JP173PN":"Vembakkam 1",
+"05JP174PN":"Vembakkam 1",
+"05JP177P1":"Vembakkam 2",
+"05JP177PY":"Vembakkam 2",
+"05KB031PN":"Kilpennathur",
+"05KB032PN":"Kilpennathur",
+"05KP001PN":"Kilpennathur",
+"05KP002PN":"Kilpennathur",
+"05KP003P1":"Kilpennathur",
+"05KP003P2":"Kilpennathur",
+"05KP003PY":"Kilpennathur",
+"05KP004PN":"Kilpennathur",
+"05KP006P1":"Thurinjapuram",
+"05KP006P2":"Thurinjapuram",
+"05KP006PY":"Thurinjapuram",
+"05KP007P1":"Thurinjapuram",
+"05KP007P2":"Thurinjapuram",
+"05KP007PY":"Thurinjapuram",
+"05KP008PN":"Thurinjapuram",
+"05KP009P1":"Thurinjapuram",
+"05KP009P2":"Thurinjapuram",
+"05KP009P3":"Thurinjapuram",
+"05KP009PY":"Thurinjapuram",
+"05KP056P1":"Thurinjapuram",
+"05KP056P2":"Thurinjapuram",
+"05KP056PY":"Thurinjapuram",
+"05KP057PN":"Thurinjapuram",
+"05KP058P1":"Kilpennathur",
+"05KP058PY":"Kilpennathur",
+"05KP059P1":"Kilpennathur",
+"05KP059P2":"Kilpennathur",
+"05KP059PY":"Kilpennathur",
+"05KP060P1":"Kilpennathur",
+"05KP060PY":"Kilpennathur",
+"05KP061PN":"Kilpennathur",
+"05KP062P1":"Kilpennathur",
+"05KP062P2":"Kilpennathur",
+"05KP062PY":"Kilpennathur",
+"05KP063PN":"Tiruvannamalai-2",
+"05KP064P1":"Tiruvannamalai-2",
+"05KP064PY":"Tiruvannamalai-2",
+"05KP065PN":"Tiruvannamalai-2",
+"05KP066PN":"Tiruvannamalai-2",
+"05KP067P1":"Tiruvannamalai-2",
+"05KP067P2":"Tiruvannamalai-2",
+"05KP067PY":"Tiruvannamalai-2",
+"05KP086PN":"Tiruvannamalai-2",
+"05KP088PN":"Tiruvannamalai-2",
+"05KP089PN":"Tiruvannamalai-2",
+"05KP090PN":"Tiruvannamalai-2",
+"05KP144P1":"Kilpennathur",
+"05KP144PY":"Kilpennathur",
+"05KP145P1":"Kilpennathur",
+"05KP145PY":"Kilpennathur",
+"05KP146P1":"Kilpennathur",
+"05KP146PY":"Kilpennathur",
+"05KP147PN":"Kilpennathur",
+"05KP148P1":"Kilpennathur",
+"05KP148PY":"Kilpennathur",
+"05KP149PN":"Kilpennathur",
+"05KP150P1":"Kilpennathur",
+"05KP150PY":"Kilpennathur",
+"05KP151PN":"Kilpennathur",
+"05KP152PN":"Kilpennathur",
+"05KP153P1":"Kilpennathur",
+"05KP153PY":"Kilpennathur",
+"05KP154PN":"Kilpennathur",
+"05KP155P1":"Kilpennathur",
+"05KP155P2":"Kilpennathur",
+"05KP155PY":"Kilpennathur",
+"05KP156P1":"Kilpennathur",
+"05KP156PY":"Kilpennathur",
+"05KP157PN":"Kilpennathur",
+"05KP158PN":"Kilpennathur",
+"05KP159PN":"Kilpennathur",
+"05KP160PN":"Kilpennathur",
+"05KP161P1":"Kilpennathur",
+"05KP161PY":"Kilpennathur",
+"05KP162P1":"Kilpennathur",
+"05KP162PY":"Kilpennathur",
+"05KP163P1":"Kilpennathur",
+"05KP163PY":"Kilpennathur",
+"05KP164PN":"Kilpennathur",
+"05KP165PN":"Kilpennathur",
+"05KP166P1":"Kilpennathur",
+"05KP166PY":"Kilpennathur",
+"05KP167PN":"Kilpennathur",
+"05KP168P1":"Kilpennathur",
+"05KP168PY":"Kilpennathur",
+"05KP169PN":"Kilpennathur",
+"05KP170PN":"Kilpennathur",
+"05KP171PN":"Kilpennathur",
+"05KP172P1":"Kilpennathur",
+"05KP172P2":"Kilpennathur",
+"05KP172PY":"Kilpennathur",
+"05KP173PN":"Kilpennathur",
+"05KP174P1":"Kilpennathur",
+"05KP174PY":"Kilpennathur",
+"05KP175PN":"Kilpennathur",
+"05KP176P1":"Kilpennathur",
+"05KP176PY":"Kilpennathur",
+"05KP177PN":"Kilpennathur",
+"05KP178P1":"Kilpennathur",
+"05KP178PY":"Kilpennathur",
+"05KP179PN":"Kilpennathur",
+"05KP180PN":"Kilpennathur",
+"05KP181PN":"Kilpennathur",
+"05KP182P1":"Kilpennathur",
+"05KP182P2":"Kilpennathur",
+"05KP182P3":"Kilpennathur",
+"05KP182PY":"Kilpennathur",
+"05KP183PN":"Kilpennathur",
+"05KP184P1":"Kilpennathur",
+"05KP184PY":"Kilpennathur",
+"05KP185P1":"Kilpennathur",
+"05KP185PY":"Kilpennathur",
+"05KP186PN":"Kilpennathur",
+"05KP195PN":"Kilpennathur",
+"05KP196PN":"Tiruvannamalai-2",
+"05KP198P1":"Kilpennathur",
+"05KP198PY":"Kilpennathur"
+};
 
-// Built-in shop-code → block mapping (all 1627 TVM shops)
-// Populated from the built-in shopMap (already in state.shopMap after upload)
-// If shopMap not loaded, we derive block from Shopcode prefix patterns
+const ekyc = { data:null, oldData:null, date:'', oldDate:'', customShopMap:null };
 
-function ekycSetup(){
-  const box = document.getElementById('box-ekyc');
-  const file = document.getElementById('file-ekyc');
-  if(!box || !file) return;
-  box.addEventListener('click', ()=>file.click());
-  box.addEventListener('dragover', e=>{e.preventDefault();box.style.borderColor='#3b82f6'});
-  box.addEventListener('dragleave', ()=>box.style.borderColor='var(--border)');
-  box.addEventListener('drop', e=>{
-    e.preventDefault(); box.style.borderColor='var(--border)';
-    if(e.dataTransfer.files[0]) handleEkycFile(e.dataTransfer.files[0]);
-  });
-  file.addEventListener('change', e=>{ if(e.target.files[0]) handleEkycFile(e.target.files[0]); });
-  document.getElementById('btn-ekyc-generate').addEventListener('click', generateEkycReport);
-  document.getElementById('btn-ekyc-reset').addEventListener('click', ()=>{
-    ekyc.data = null; ekyc.date = '';
-    document.getElementById('name-ekyc').textContent = 'Click or drag to upload';
-    document.getElementById('ekyc-load-status').textContent = '';
-    document.getElementById('ekyc-action-bar').style.display = 'none';
-    document.getElementById('ekyc-results-area').innerHTML = '';
-    document.getElementById('file-ekyc').value = '';
-  });
-}
-
-async function handleEkycFile(file){
-  const statusEl = document.getElementById('ekyc-load-status');
-  document.getElementById('name-ekyc').textContent = file.name;
-  statusEl.textContent = '⏳ Reading file...';
-  try{
-    const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf, {type:'array'});
-    const sheetNames = wb.SheetNames;
-    const shopWiseSheet = sheetNames.find(s => s.toLowerCase().includes('shop') && s.toLowerCase().includes('wise'));
-    if(!shopWiseSheet) throw new Error('"Shop Wise" sheet not found. Available sheets: '+sheetNames.join(', '));
-    const ws = wb.Sheets[shopWiseSheet];
-    const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
-    const tvmRows = rows.filter(r => String(r['District']||'').toLowerCase().includes('thiruvannamalai'));
-    if(tvmRows.length === 0) throw new Error('No Thiruvannamalai rows found in "Shop Wise" sheet');
-
-    // Try to extract date from filename
-    const dateMatch = file.name.match(/(\d{2})[_\-](\d{2})[_\-](\d{4})/);
-    ekyc.date = dateMatch ? `${dateMatch[1]}.${dateMatch[2]}.${dateMatch[3]}` : new Date().toLocaleDateString('en-GB').replace(/\//g,'.');
-    ekyc.data = tvmRows;
-
-    statusEl.innerHTML = `✓ Loaded <b>${tvmRows.length}</b> Thiruvannamalai shops from "${shopWiseSheet}" (as on ${ekyc.date})`;
-    statusEl.style.color = '#34d399';
-    document.getElementById('ekyc-action-bar').style.display = '';
-    toast(`✓ ${tvmRows.length} TVM shops loaded`);
-  }catch(err){
-    statusEl.textContent = '✗ '+err.message;
-    statusEl.style.color = '#fca5a5';
-    toast('Error: '+err.message, true);
+function ekycGetBlock(code){
+  const c = String(code||'').trim();
+  // 1. Custom uploaded map
+  if(ekyc.customShopMap && ekyc.customShopMap[c]) return ekyc.customShopMap[c];
+  // 2. Built-in map
+  if(BUILT_IN_SHOP_BLOCK[c]) return BUILT_IN_SHOP_BLOCK[c];
+  // 3. Inspection module shopMap (if loaded)
+  if(state.shopMap){
+    const found = state.shopMap.find(s=>String(s.Shop_Code||s.shop_code||s['Shop Code']||'').trim()===c);
+    if(found) return (found.Block||found.block||'').toString().trim();
   }
-}
-
-// Column name normalizer (handles newlines and suffixes from pandas-style dedup)
-function ekycCol(row, ...candidates){
-  for(const k of Object.keys(row)){
-    for(const c of candidates){
-      if(k.replace(/[\n\r]/g,' ').replace(/\s+/g,' ').trim().toLowerCase().includes(c.toLowerCase())) return row[k];
-    }
-  }
-  return 0;
-}
-
-function processEkycRow(row, shopBlockMap){
-  const shopcode = String(row['Shopcode']||row['Shop_Code']||'').trim();
-  const block = shopBlockMap[shopcode] || ekycBlockFromCode(shopcode);
-  // AAY
-  const aay_cons = +(ekycCol(row,'Considered for eKYC')||0);
-  const aay_comp = +(ekycCol(row,'AAY EKYC Completed')||0);
-  const aay_pend = +(ekycCol(row,'Pending')||0);
-  // PHH — second occurrence of 'Considered for eKYC'
-  const keys = Object.keys(row);
-  const phh_cons_key = keys.find((k,i)=>k.includes('Considered')&&keys.slice(0,i).some(x=>x.includes('Considered')));
-  const phh_cons = phh_cons_key ? +(row[phh_cons_key]||0) : 0;
-  const phh_comp = +(ekycCol(row,'PHH EKYC Completed')||0);
-  // PHH Pending — second 'Pending'
-  const phh_pend_key = keys.find((k,i)=>k.replace(/\.\d+/,'').trim()==='Pending'&&keys.slice(0,i).some(x=>x.replace(/\.\d+/,'').trim()==='Pending'));
-  const phh_pend = phh_pend_key ? +(row[phh_pend_key]||0) : 0;
-  // NPHH — third occurrence
-  const nph_cons_key = keys.filter(k=>k.includes('Considered'))[2];
-  const nph_cons = nph_cons_key ? +(row[nph_cons_key]||0) : 0;
-  const nph_comp = +(ekycCol(row,'NPHH EKYC Completed')||0);
-  const nph_pend_key = keys.filter(k=>k.replace(/\.\d+/,'').trim()==='Pending')[2];
-  const nph_pend = nph_pend_key ? +(row[nph_pend_key]||0) : 0;
-
-  const total_cons = aay_cons + phh_cons + nph_cons;
-  const total_comp = aay_comp + phh_comp + nph_comp;
-  const total_pend = aay_pend + phh_pend + nph_pend;
-  return {
-    shopcode, block,
-    shop_name: row['Shop_Name']||'',
-    aay_cons, aay_comp, aay_pend,
-    phh_cons, phh_comp, phh_pend,
-    nph_cons, nph_comp, nph_pend,
-    total_cons, total_comp, total_pend,
-    total_pct: total_cons > 0 ? total_comp/total_cons : 0
-  };
-}
-
-// Fallback block detection from shopcode (not needed if shopMap is loaded)
-function ekycBlockFromCode(code){
-  // Use the built-in shopLookup from state if available
-  if(state.shopMap && state.shopMap[code]) return state.shopMap[code];
   return 'Unknown';
 }
 
-function groupByBlock(rows){
-  const map = {};
-  rows.forEach(r=>{
-    const b = r.block || 'Unknown';
-    if(!map[b]) map[b] = {block:b, aay_cons:0, aay_comp:0, phh_cons:0, phh_comp:0, nph_cons:0, nph_comp:0, total_cons:0, total_comp:0, total_pend:0, shops:[]};
-    const m = map[b];
-    m.aay_cons+=r.aay_cons; m.aay_comp+=r.aay_comp;
-    m.phh_cons+=r.phh_cons; m.phh_comp+=r.phh_comp;
-    m.nph_cons+=r.nph_cons; m.nph_comp+=r.nph_comp;
-    m.total_cons+=r.total_cons; m.total_comp+=r.total_comp; m.total_pend+=r.total_pend;
-    m.shops.push(r);
+function ekycSetup(){
+  // Current file
+  const box = document.getElementById('box-ekyc');
+  const file = document.getElementById('file-ekyc');
+  if(!box||!file) return;
+  box.addEventListener('click', ()=>file.click());
+  box.addEventListener('dragover', e=>{e.preventDefault();box.style.borderColor='#3b82f6'});
+  box.addEventListener('dragleave', ()=>box.style.borderColor='var(--border)');
+  box.addEventListener('drop', e=>{e.preventDefault();box.style.borderColor='var(--border)';if(e.dataTransfer.files[0])handleEkycFile(e.dataTransfer.files[0],'current');});
+  file.addEventListener('change', e=>{if(e.target.files[0])handleEkycFile(e.target.files[0],'current');});
+  // Old file
+  const boxO = document.getElementById('box-ekyc-old');
+  const fileO = document.getElementById('file-ekyc-old');
+  boxO.addEventListener('click', ()=>fileO.click());
+  boxO.addEventListener('dragover', e=>{e.preventDefault();boxO.style.borderColor='#f59e0b'});
+  boxO.addEventListener('dragleave', ()=>boxO.style.borderColor='rgba(245,158,11,.4)');
+  boxO.addEventListener('drop', e=>{e.preventDefault();boxO.style.borderColor='rgba(245,158,11,.4)';if(e.dataTransfer.files[0])handleEkycFile(e.dataTransfer.files[0],'old');});
+  fileO.addEventListener('change', e=>{if(e.target.files[0])handleEkycFile(e.target.files[0],'old');});
+  // Custom map
+  const fileM = document.getElementById('file-ekyc-map');
+  fileM.addEventListener('change', async e=>{
+    if(!e.target.files[0]) return;
+    const buf = await e.target.files[0].arrayBuffer();
+    const wb2 = XLSX.read(buf,{type:'array'});
+    const ws = wb2.Sheets[wb2.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws);
+    ekyc.customShopMap = {};
+    rows.forEach(r=>{
+      const code = String(r.Shop_Code||r.shop_code||r['Shop Code']||r.Shopcode||'').trim();
+      const block = String(r.Block||r.block||'').trim();
+      if(code&&block) ekyc.customShopMap[code]=block;
+    });
+    document.getElementById('ekyc-map-status').textContent = `✓ Custom map loaded (${Object.keys(ekyc.customShopMap).length} entries)`;
+    document.getElementById('ekyc-map-status').style.color='#fcd34d';
+    toast('Custom shop map loaded');
   });
-  return Object.values(map).map(m=>({...m, pct: m.total_cons>0?m.total_comp/m.total_cons:0}))
-    .sort((a,b)=>a.pct-b.pct);
+  document.getElementById('btn-ekyc-generate').addEventListener('click', generateEkycReport);
+  document.getElementById('btn-ekyc-reset').addEventListener('click', resetEkyc);
+}
+
+function resetEkyc(){
+  ekyc.data=null; ekyc.oldData=null; ekyc.date=''; ekyc.oldDate='';
+  ['name-ekyc','name-ekyc-old'].forEach(id=>document.getElementById(id).textContent='Click or drag to upload');
+  ['ekyc-load-status','ekyc-old-status'].forEach(id=>document.getElementById(id).textContent='');
+  document.getElementById('ekyc-action-bar').style.display='none';
+  document.getElementById('ekyc-results-area').innerHTML='';
+  document.getElementById('file-ekyc').value='';
+  document.getElementById('file-ekyc-old').value='';
+}
+
+async function handleEkycFile(file, which){
+  const nameEl = document.getElementById(which==='current'?'name-ekyc':'name-ekyc-old');
+  const statEl = document.getElementById(which==='current'?'ekyc-load-status':'ekyc-old-status');
+  nameEl.textContent = file.name;
+  statEl.textContent = '⏳ Reading...';
+  try{
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf,{type:'array'});
+    const shopSheet = wb.SheetNames.find(s=>s.toLowerCase().includes('shop')&&s.toLowerCase().includes('wise'));
+    if(!shopSheet) throw new Error('"Shop Wise" sheet not found. Sheets: '+wb.SheetNames.join(', '));
+    const ws = wb.Sheets[shopSheet];
+    const rows = XLSX.utils.sheet_to_json(ws,{defval:''});
+    const tvm = rows.filter(r=>String(r['District']||'').toLowerCase().includes('thiruvannamalai'));
+    if(tvm.length===0) throw new Error('No Thiruvannamalai rows found');
+    const dm = file.name.match(/(\d{2})[_\-](\d{2})[_\-](\d{4})/);
+    const dateStr = dm ? `${dm[1]}.${dm[2]}.${dm[3]}` : new Date().toLocaleDateString('en-GB').replace(/\//g,'.');
+    if(which==='current'){ ekyc.data=tvm; ekyc.date=dateStr; }
+    else{ ekyc.oldData=tvm; ekyc.oldDate=dateStr; }
+    statEl.textContent = `✓ ${tvm.length} TVM shops (as on ${dateStr})`;
+    statEl.style.color='#34d399';
+    if(ekyc.data) document.getElementById('ekyc-action-bar').style.display='';
+    toast(`✓ ${which==='current'?'Current':'Old'} file: ${tvm.length} shops loaded`);
+  }catch(err){
+    statEl.textContent='✗ '+err.message; statEl.style.color='#fca5a5';
+    toast('Error: '+err.message,true);
+  }
+}
+
+
+
+// ── Colour scale: red(0%) → amber(85%) → green(100%) ──────────────────────
+function pctGradient(p){
+  if(p===null||p===undefined||isNaN(p)) return {bg:'#f1f5f9',fg:'#64748b',solid:'#94a3b8'};
+  const pct=Math.max(0,Math.min(1,p));
+  let r,g,b;
+  if(pct<0.85){const t=pct/0.85;r=220;g=Math.round(53+t*106);b=53;}
+  else{const t=(pct-0.85)/0.15;r=Math.round(220-t*187);g=Math.round(159+t*64);b=Math.round(53-t*53);}
+  const lum=0.299*r+0.587*g+0.114*b;
+  return {bg:`rgba(${r},${g},${b},0.25)`,fg:lum>130?'#1e293b':'#1e293b',solid:`rgb(${r},${g},${b})`};
+}
+function pctCell(p,extraStyle=''){
+  const c=pctGradient(p);
+  return `<td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;font-weight:700;background:${c.bg};color:${c.fg};${extraStyle}">${fmtPct(p)}</td>`;
+}
+function fmtPct(p){return p===null||p===undefined||isNaN(p)?'—':(p*100).toFixed(2)+'%';}
+function fmtN(n){return n===null||isNaN(n)?'—':n.toLocaleString('en-IN');}
+
+// ── Row processing ──────────────────────────────────────────────────────────
+function parseEkycRows(rawRows){
+  return rawRows.map(row=>{
+    const shopcode=String(row['Shopcode']||row['Shop_Code']||'').trim();
+    const block=ekycGetBlock(shopcode);
+    const keys=Object.keys(row);
+    const consKeys=keys.filter(k=>k.includes('Considered'));
+    const aay_cons=+(row[consKeys[0]]||0);
+    const aay_comp=+(row['AAY EKYC Completed']||0);
+    const aay_pend=Math.max(0,aay_cons-aay_comp);
+    const phh_cons=+(row[consKeys[1]]||0);
+    const phh_comp=+(row['PHH EKYC Completed']||0);
+    const phh_pend=Math.max(0,phh_cons-phh_comp);
+    const nph_cons=+(row[consKeys[2]]||0);
+    const nph_comp=+(row['NPHH EKYC Completed']||0);
+    const nph_pend=Math.max(0,nph_cons-nph_comp);
+    const total_cons=aay_cons+phh_cons+nph_cons,total_comp=aay_comp+phh_comp+nph_comp,total_pend=Math.max(0,total_cons-total_comp);
+    return {shopcode,block,shop_name:row['Shop_Name']||'',aay_cons,aay_comp,aay_pend,phh_cons,phh_comp,phh_pend,nph_cons,nph_comp,nph_pend,total_cons,total_comp,total_pend,total_pct:total_cons>0?total_comp/total_cons:0};
+  });
+}
+
+function aggregateByBlock(rows){
+  const map={};
+  rows.forEach(r=>{
+    const b=r.block;
+    if(!map[b])map[b]={block:b,aay_cons:0,aay_comp:0,phh_cons:0,phh_comp:0,nph_cons:0,nph_comp:0,total_cons:0,total_comp:0,total_pend:0};
+    const m=map[b];
+    m.aay_cons+=r.aay_cons;m.aay_comp+=r.aay_comp;m.phh_cons+=r.phh_cons;m.phh_comp+=r.phh_comp;m.nph_cons+=r.nph_cons;m.nph_comp+=r.nph_comp;m.total_cons+=r.total_cons;m.total_comp+=r.total_comp;m.total_pend+=r.total_pend;
+  });
+  return Object.values(map).map(m=>({...m,
+    aay_pend:Math.max(0,m.aay_cons-m.aay_comp),
+    phh_pend:Math.max(0,m.phh_cons-m.phh_comp),
+    nph_pend:Math.max(0,m.nph_cons-m.nph_comp),
+    total_pend:Math.max(0,m.total_cons-m.total_comp),
+    pct:m.total_cons>0?m.total_comp/m.total_cons:0})).sort((a,b)=>a.pct-b.pct);
 }
 
 function generateEkycReport(){
-  if(!ekyc.data){ toast('Upload the file first',true); return; }
-  // Build block map from built-in shopMap
-  const shopBlockMap = state.shopMap || {};
-  const rows = ekyc.data.map(r=>processEkycRow(r, shopBlockMap));
-  const blocks = groupByBlock(rows);
-  renderEkycResults(rows, blocks);
+  if(!ekyc.data){toast('Upload current file first',true);return;}
+  const rows=parseEkycRows(ekyc.data);
+  const oldRows=ekyc.oldData?parseEkycRows(ekyc.oldData):null;
+  ekyc.processedRows2=rows;
+  ekyc.blocks=aggregateByBlock(rows);
+  ekyc.oldBlocks=oldRows?aggregateByBlock(oldRows):null;
+  renderEkycResults(rows,ekyc.blocks,oldRows,ekyc.oldBlocks);
 }
 
-function pctColor(p){
-  if(p >= 0.95) return '#064432';
-  if(p >= 0.90) return '#92400e';
-  return '#b91c1c';
-}
-function pctBg(p){
-  if(p >= 0.95) return '#d1fae5';
-  if(p >= 0.90) return '#fef3c7';
-  return '#fee2e2';
-}
-function fmtPct(p){ return (p*100).toFixed(2)+'%'; }
-function fmtN(n){ return n.toLocaleString('en-IN'); }
+function renderEkycResults(rows,blocks,oldRows,oldBlocks){
+  const d=ekyc.date,od=ekyc.oldDate,hasComp=!!oldRows;
+  const totalCons=blocks.reduce((s,b)=>s+b.total_cons,0);
+  const totalComp=blocks.reduce((s,b)=>s+b.total_comp,0);
+  const totalPend=blocks.reduce((s,b)=>s+b.total_pend,0);
+  const overallPct=totalCons>0?totalComp/totalCons:0;
+  const catDefs=[
+    {k:'all',label:'ALL (AAY+PHH+NPHH)',consF:b=>b.total_cons,compF:b=>b.total_comp,pendF:b=>Math.max(0,b.total_cons-b.total_comp)},
+    {k:'aay',label:'AAY',consF:b=>b.aay_cons,compF:b=>b.aay_comp,pendF:b=>Math.max(0,b.aay_cons-b.aay_comp)},
+    {k:'phh',label:'PHH',consF:b=>b.phh_cons,compF:b=>b.phh_comp,pendF:b=>Math.max(0,b.phh_cons-b.phh_comp)},
+    {k:'nph',label:'NPHH',consF:b=>b.nph_cons,compF:b=>b.nph_comp,pendF:b=>Math.max(0,b.nph_cons-b.nph_comp)},
+  ];
+  const oc=pctGradient(overallPct);
+  let html=`<div class="panel">
+    <h2><span class="dot"></span> 🔑 e-KYC — திருவண்ணாமலை மாவட்டம் <span style="margin-left:auto;font-size:12px;color:var(--muted);font-weight:400">As on ${d}${hasComp?' | Compare with '+od:''}</span></h2>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
+      ${[['Considered',fmtN(totalCons),'#93c5fd'],['Completed',fmtN(totalComp),'#6ee7b7'],['Pending',fmtN(totalPend),'#fca5a5'],['% Done',fmtPct(overallPct),oc.solid]].map(([l,v,c])=>`<div style="background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center"><div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;margin-bottom:4px">${l}</div><div style="font-size:20px;font-weight:700;color:${c}">${v}</div></div>`).join('')}
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+      ${catDefs.map(c=>`<button class="btn-tiny ekyc-cat-btn" id="ekyc-tab-${c.k}" onclick="switchEkycTab('${c.k}')">${c.label}</button>`).join('')}
+      <button class="btn-tiny ekyc-cat-btn" id="ekyc-tab-shop" onclick="switchEkycTab('shop')">🏪 Shop-wise</button>
+    </div>`;
 
-function renderEkycResults(rows, blocks){
-  const d = ekyc.date;
-  const totalCons = blocks.reduce((s,b)=>s+b.total_cons,0);
-  const totalComp = blocks.reduce((s,b)=>s+b.total_comp,0);
-  const totalPend = blocks.reduce((s,b)=>s+b.total_pend,0);
-  const overallPct = totalCons>0?totalComp/totalCons:0;
-
-  const html = `
-    <div class="panel">
-      <h2><span class="dot"></span> 🔑 e-KYC Progress — திருவண்ணாமலை மாவட்டம்
-        <span style="margin-left:auto;font-size:12px;color:var(--muted);font-weight:400">As on ${d}</span>
-      </h2>
-
-      <!-- Summary stats -->
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
-        <div class="stat-card" style="background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
-          <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase">Total Considered</div>
-          <div style="font-size:22px;font-weight:700;color:#93c5fd">${fmtN(totalCons)}</div>
-        </div>
-        <div class="stat-card" style="background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
-          <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase">Completed</div>
-          <div style="font-size:22px;font-weight:700;color:#6ee7b7">${fmtN(totalComp)}</div>
-        </div>
-        <div class="stat-card" style="background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
-          <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase">Pending</div>
-          <div style="font-size:22px;font-weight:700;color:#fca5a5">${fmtN(totalPend)}</div>
-        </div>
-        <div class="stat-card" style="background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
-          <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase">% Completed</div>
-          <div style="font-size:22px;font-weight:700;color:${overallPct>=0.95?'#6ee7b7':overallPct>=0.90?'#fcd34d':'#fca5a5'}">${fmtPct(overallPct)}</div>
-        </div>
-      </div>
-
-      <!-- Block Abstract Table -->
+  // Build block tables for each category
+  catDefs.forEach(cat=>{
+    const sortedB=blocks.slice().sort((a,b)=>{if(hasComp&&oldBlocks){const oa=oldBlocks.find(x=>x.block===a.block),ob2=oldBlocks.find(x=>x.block===b.block);const aa=cat.compF(a)-(oa?cat.compF(oa):0),ab=cat.compF(b)-(ob2?cat.compF(ob2):0);return ab-aa;}const pa=cat.consF(a)>0?cat.compF(a)/cat.consF(a):0,pb=cat.consF(b)>0?cat.compF(b)/cat.consF(b):0;return pa-pb;});
+    const totCons=sortedB.reduce((s,b)=>s+cat.consF(b),0);
+    const totComp=sortedB.reduce((s,b)=>s+cat.compF(b),0);
+    const totPend=sortedB.reduce((s,b)=>s+cat.pendF(b),0);
+    const totPct=totCons>0?totComp/totCons:0;
+    const oldMap={};if(hasComp&&oldBlocks)oldBlocks.forEach(b=>oldMap[b.block]=b);
+    html+=`<div id="ekyc-section-${cat.k}" style="display:none">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
-        <h3 style="font-size:14px;margin:0">📊 Block Abstract (AAY + PHH + NPHH)</h3>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button class="btn-tiny" onclick="copyEkycTable('ekyc-block-table')">📸 Copy image</button>
-          <button class="btn-tiny" onclick="downloadEkycExcel()">📥 Download Excel</button>
+        <h3 style="font-size:14px;margin:0">📊 Block Abstract — ${cat.label}</h3>
+        <div style="display:flex;gap:6px">
+          <button class="btn-tiny" onclick="copyEkycTableImg('ekyc-block-tbl-${cat.k}-wrap')">📸 Copy</button>
+          <button class="btn-tiny" onclick="downloadEkycExcel()">📥 Excel</button>
         </div>
       </div>
-      <div style="overflow-x:auto;background:white;border-radius:8px;border:1px solid #cbd5e1;color:#1e293b;margin-bottom:16px" id="ekyc-block-table-wrap">
-        <table id="ekyc-block-table" style="width:100%;border-collapse:collapse;font-size:12px">
+      <div style="overflow-x:auto;background:white;border-radius:8px;border:1px solid #cbd5e1;color:#1e293b;margin-bottom:14px" id="ekyc-block-tbl-${cat.k}-wrap">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
           <thead>
             <tr style="background:#1e3a8a;color:white">
-              <th style="padding:8px;border:1px solid #1e40af;text-align:center">#</th>
-              <th style="padding:8px;border:1px solid #1e40af;text-align:left;min-width:150px">Block</th>
-              <th style="padding:8px;border:1px solid #1e40af;text-align:center" colspan="3">AAY</th>
-              <th style="padding:8px;border:1px solid #1e40af;text-align:center" colspan="3">PHH</th>
-              <th style="padding:8px;border:1px solid #1e40af;text-align:center" colspan="3">NPHH</th>
-              <th style="padding:8px;border:1px solid #1e40af;text-align:center">Total</th>
-              <th style="padding:8px;border:1px solid #1e40af;text-align:center">Done</th>
-              <th style="padding:8px;border:1px solid #1e40af;text-align:center">Pending</th>
-              <th style="padding:8px;border:1px solid #1e40af;text-align:center">%</th>
+              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">#</th>
+              <th style="padding:7px 10px;border:1px solid #1e40af;text-align:left;min-width:150px">Block</th>
+              ${cat.k==='all'?`<th style="padding:7px 5px;border:1px solid #1e40af;text-align:center" colspan="3">AAY</th><th style="padding:7px 5px;border:1px solid #1e40af;text-align:center" colspan="3">PHH</th><th style="padding:7px 5px;border:1px solid #1e40af;text-align:center" colspan="3">NPHH</th>`:''}
+              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">Considered</th>
+              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">Completed</th>
+              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">Pending</th>
+              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;min-width:70px">%</th>
+              ${hasComp?`<th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#7c3aed">${od} %</th><th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#065f46">Added</th>`:''}
             </tr>
-            <tr style="background:#3b82f6;color:white">
-              <th style="padding:6px 4px;border:1px solid #1e40af"></th>
-              <th style="padding:6px 4px;border:1px solid #1e40af"></th>
-              ${['Cons','Done','Pend','Cons','Done','Pend','Cons','Done','Pend','','','',''].map(h=>`<th style="padding:5px 4px;border:1px solid #1e40af;font-size:10px;text-align:center">${h}</th>`).join('')}
-            </tr>
+            ${cat.k==='all'?`<tr style="background:#3b82f6;color:white">
+              <th colspan="2" style="padding:4px;border:1px solid #1e40af"></th>
+              ${['Cons','Done','Pend','Cons','Done','Pend','Cons','Done','Pend'].map(h=>`<th style="padding:4px;border:1px solid #1e40af;font-size:10px;text-align:center">${h}</th>`).join('')}
+              <th colspan="${4+(hasComp?2:0)}" style="padding:4px;border:1px solid #1e40af"></th>
+            </tr>`:''}
           </thead>
           <tbody>
-            ${blocks.map((b,i)=>{
-              const bg = pctBg(b.pct);
-              const fc = pctColor(b.pct);
-              return `<tr style="background:${bg}">
-                <td style="padding:6px 4px;border:1px solid #cbd5e1;text-align:center;color:#64748b;font-size:11px">${i+1}</td>
-                <td style="padding:6px 8px;border:1px solid #cbd5e1;font-weight:600">${b.block}</td>
-                <td style="padding:6px 4px;border:1px solid #cbd5e1;text-align:center">${fmtN(b.aay_cons)}</td>
-                <td style="padding:6px 4px;border:1px solid #cbd5e1;text-align:center">${fmtN(b.aay_comp)}</td>
-                <td style="padding:6px 4px;border:1px solid #cbd5e1;text-align:center">${fmtN(b.aay_cons-b.aay_comp)}</td>
-                <td style="padding:6px 4px;border:1px solid #cbd5e1;text-align:center">${fmtN(b.phh_cons)}</td>
-                <td style="padding:6px 4px;border:1px solid #cbd5e1;text-align:center">${fmtN(b.phh_comp)}</td>
-                <td style="padding:6px 4px;border:1px solid #cbd5e1;text-align:center">${fmtN(b.phh_cons-b.phh_comp)}</td>
-                <td style="padding:6px 4px;border:1px solid #cbd5e1;text-align:center">${fmtN(b.nph_cons)}</td>
-                <td style="padding:6px 4px;border:1px solid #cbd5e1;text-align:center">${fmtN(b.nph_comp)}</td>
-                <td style="padding:6px 4px;border:1px solid #cbd5e1;text-align:center">${fmtN(b.nph_cons-b.nph_comp)}</td>
-                <td style="padding:6px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:600">${fmtN(b.total_cons)}</td>
-                <td style="padding:6px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:600">${fmtN(b.total_comp)}</td>
-                <td style="padding:6px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:600;color:#dc2626">${fmtN(b.total_pend)}</td>
-                <td style="padding:6px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:700;color:${fc}">${fmtPct(b.pct)}</td>
+            ${sortedB.map((b,i)=>{
+              const cons=cat.consF(b),comp=cat.compF(b),pend=cat.pendF(b),pct=cons>0?comp/cons:0;
+              const ob=oldMap[b.block];
+              const oldComp=ob?cat.compF(ob):null;
+              const oldPct=ob&&cat.consF(ob)>0?cat.compF(ob)/cat.consF(ob):null;
+              const added=ob!==undefined?comp-(oldComp||0):null;
+              return `<tr>
+                <td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;color:#64748b;font-size:11px">${i+1}</td>
+                <td style="padding:6px 8px;border:1px solid #e2e8f0;font-weight:600">${b.block}</td>
+                ${cat.k==='all'?`<td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center">${fmtN(b.aay_cons)}</td><td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center">${fmtN(b.aay_comp)}</td><td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center;color:#dc2626">${fmtN(b.aay_cons-b.aay_comp)}</td><td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center">${fmtN(b.phh_cons)}</td><td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center">${fmtN(b.phh_comp)}</td><td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center;color:#dc2626">${fmtN(b.phh_cons-b.phh_comp)}</td><td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center">${fmtN(b.nph_cons)}</td><td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center">${fmtN(b.nph_comp)}</td><td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center;color:#dc2626">${fmtN(b.nph_cons-b.nph_comp)}</td>`:''}
+                <td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;font-weight:600">${fmtN(cons)}</td>
+                <td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;font-weight:600">${fmtN(comp)}</td>
+                <td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;color:#dc2626;font-weight:600">${fmtN(pend)}</td>
+                ${pctCell(pct)}
+                ${hasComp?`${pctCell(oldPct)}<td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;font-weight:700;color:${added>0?'#059669':added<0?'#dc2626':'#64748b'}">${added!==null?(added>0?'+':'')+fmtN(added):'—'}</td>`:''}
               </tr>`;
             }).join('')}
-            <tr style="background:#e2e8f0;font-weight:700">
+            <tr style="background:#f1f5f9;font-weight:700">
               <td colspan="2" style="padding:7px 8px;border:1px solid #94a3b8;text-align:center">TOTAL</td>
-              ${(()=>{
-                const ta=blocks.reduce((s,b)=>s+b.aay_cons,0),td=blocks.reduce((s,b)=>s+b.aay_comp,0);
-                const tp=blocks.reduce((s,b)=>s+b.phh_cons,0),pd=blocks.reduce((s,b)=>s+b.phh_comp,0);
-                const tn=blocks.reduce((s,b)=>s+b.nph_cons,0),nd=blocks.reduce((s,b)=>s+b.nph_comp,0);
-                return [ta,td,ta-td,tp,pd,tp-pd,tn,nd,tn-nd,totalCons,totalComp,totalPend].map(v=>`<td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center">${fmtN(v)}</td>`).join('')
-                +'<td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center;color:'+pctColor(overallPct)+'">'+fmtPct(overallPct)+'</td>';
-              })()}
+              ${cat.k==='all'?[blocks.reduce((s,b)=>s+b.aay_cons,0),blocks.reduce((s,b)=>s+b.aay_comp,0),blocks.reduce((s,b)=>s+b.aay_cons-b.aay_comp,0),blocks.reduce((s,b)=>s+b.phh_cons,0),blocks.reduce((s,b)=>s+b.phh_comp,0),blocks.reduce((s,b)=>s+b.phh_cons-b.phh_comp,0),blocks.reduce((s,b)=>s+b.nph_cons,0),blocks.reduce((s,b)=>s+b.nph_comp,0),blocks.reduce((s,b)=>s+b.nph_cons-b.nph_comp,0)].map(v=>`<td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center">${fmtN(v)}</td>`).join(''):''}
+              <td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center">${fmtN(totCons)}</td>
+              <td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center">${fmtN(totComp)}</td>
+              <td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center">${fmtN(totPend)}</td>
+              ${pctCell(totPct,'font-size:13px')}
+              ${hasComp&&oldBlocks?`${pctCell(oldBlocks.reduce((s,b)=>s+cat.compF(b),0)/Math.max(1,oldBlocks.reduce((s,b)=>s+cat.consF(b),0)),'font-size:13px')}<td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center;font-weight:700;color:#059669">+${fmtN(totComp-oldBlocks.reduce((s,b)=>s+cat.compF(b),0))}</td>`:''}
             </tr>
           </tbody>
         </table>
       </div>
-
-      <!-- Shop-wise section -->
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
-        <h3 style="font-size:14px;margin:0">🏪 Shop-wise Detail</h3>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <select id="ekyc-block-filter" style="background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:5px 10px;border-radius:5px;font-size:12px" onchange="filterEkycShops()">
-            <option value="">All Blocks</option>
-            ${blocks.map(b=>`<option value="${b.block}">${b.block}</option>`).join('')}
-          </select>
-          <button class="btn-tiny" onclick="copyEkycTable('ekyc-shop-table')">📸 Copy image</button>
-          <button class="btn-tiny" onclick="printEkycShopwise()">📄 Print / PDF</button>
-        </div>
-      </div>
-      <div style="overflow-x:auto;background:white;border-radius:8px;border:1px solid #cbd5e1;color:#1e293b;max-height:500px;overflow-y:auto" id="ekyc-shop-wrap">
-        <table id="ekyc-shop-table" style="width:100%;border-collapse:collapse;font-size:11px">
-          <thead style="position:sticky;top:0;z-index:2">
-            <tr style="background:#1e3a8a;color:white">
-              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">#</th>
-              <th style="padding:7px 8px;border:1px solid #1e40af;text-align:left;min-width:130px">Block</th>
-              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:left">Shop Code</th>
-              <th style="padding:7px 8px;border:1px solid #1e40af;text-align:left;min-width:160px">Shop Name</th>
-              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">Considered</th>
-              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">Completed</th>
-              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">Pending</th>
-              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">%</th>
-            </tr>
-          </thead>
-          <tbody id="ekyc-shop-tbody"></tbody>
-        </table>
-      </div>
-
-      <div style="margin-top:8px;font-size:11px;color:var(--muted)">
-        🟢 ≥95% &nbsp; 🟡 90–95% &nbsp; 🔴 &lt;90%
-      </div>
     </div>`;
+  });
 
-  document.getElementById('ekyc-results-area').innerHTML = html;
+  // Shop-wise section
+  html+=`<div id="ekyc-section-shop" style="display:none">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+      <h3 style="font-size:14px;margin:0">🏪 Shop-wise Detail</h3>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <select id="ekyc-block-filter" style="background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:5px 10px;border-radius:5px;font-size:12px" onchange="filterEkycShops()">
+          <option value="">All Blocks</option>
+          ${blocks.map(b=>`<option value="${b.block}">${b.block}</option>`).join('')}
+        </select>
+        <button class="btn-tiny" onclick="copyEkycTableImg('ekyc-shop-wrap')">📸 Copy</button>
+        <button class="btn-tiny" onclick="printEkycShopwise()">📄 PDF</button>
+      </div>
+    </div>
+    <div style="overflow-x:auto;background:white;border-radius:8px;border:1px solid #cbd5e1;color:#1e293b;max-height:500px;overflow-y:auto" id="ekyc-shop-wrap">
+      <table style="width:100%;border-collapse:collapse;font-size:11px">
+        <thead style="position:sticky;top:0;z-index:2">
+          <tr style="background:#1e3a8a;color:white" id="ekyc-shop-thead">
+            <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">#</th>
+            <th style="padding:7px 8px;border:1px solid #1e40af;text-align:left;min-width:130px">Block</th>
+            <th style="padding:7px 5px;border:1px solid #1e40af">Shop Code</th>
+            <th style="padding:7px 8px;border:1px solid #1e40af;min-width:150px">Shop Name</th>
+            <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">Considered</th>
+            <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">Completed</th>
+            <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">Pending</th>
+            <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;min-width:65px">%</th>
+            ${hasComp?`<th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#7c3aed;min-width:65px">${od} %</th><th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#065f46">Added</th>`:''}
+          </tr>
+        </thead>
+        <tbody id="ekyc-shop-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+  </div>`;
 
-  // Store rows for filtering
-  ekyc.processedRows = rows;
-  ekyc.blocks = blocks;
+  document.getElementById('ekyc-results-area').innerHTML=html;
   renderEkycShopTable(rows);
+  switchEkycTab('all');
+}
+
+function switchEkycTab(tab){
+  ['all','aay','phh','nph','shop'].forEach(k=>{
+    const sec=document.getElementById('ekyc-section-'+k);
+    const btn=document.getElementById('ekyc-tab-'+k);
+    if(sec)sec.style.display=k===tab?'':'none';
+    if(btn){btn.style.background=k===tab?'#1e3a8a':'';btn.style.color=k===tab?'white':'';btn.style.borderColor=k===tab?'#1e3a8a':'';}
+  });
 }
 
 function renderEkycShopTable(rows){
-  const sorted = rows.slice().sort((a,b)=>{
-    if(a.block < b.block) return -1;
-    if(a.block > b.block) return 1;
-    return a.total_pct - b.total_pct;
-  });
-  let html = ''; let si = 1; let prevBlock = null;
+  const hasComp = !!ekyc.oldBlocks;
+  // Build old shop map for comparison
+  const oldShopMap = {};
+  if(ekyc.oldData){
+    parseEkycRows(ekyc.oldData).forEach(r=>{ oldShopMap[r.shopcode] = r; });
+  }
+  const sorted=rows.slice().sort((a,b)=>a.block.localeCompare(b.block)||a.total_pct-b.total_pct);
+  let html='';let si=1;let prev=null;
   sorted.forEach(r=>{
-    const bg = pctBg(r.total_pct);
-    const fc = pctColor(r.total_pct);
-    const isNewBlock = r.block !== prevBlock;
-    if(isNewBlock && prevBlock !== null) html += '<tr><td colspan="8" style="padding:2px;background:#f1f5f9"></td></tr>';
-    if(isNewBlock){
-      const bb = ekyc.blocks.find(b=>b.block===r.block)||{};
-      html += `<tr style="background:#dbeafe">
-        <td style="padding:5px 4px;border:1px solid #cbd5e1;text-align:center;font-size:10px;color:#64748b">${si++}</td>
-        <td colspan="3" style="padding:5px 8px;border:1px solid #cbd5e1;font-weight:700;font-size:12px;color:#1e3a8a">${r.block}</td>
-        <td style="padding:5px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:700">${fmtN(bb.total_cons||0)}</td>
-        <td style="padding:5px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:700">${fmtN(bb.total_comp||0)}</td>
-        <td style="padding:5px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:700">${fmtN(bb.total_pend||0)}</td>
-        <td style="padding:5px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:700;color:${pctColor(bb.pct||0)}">${fmtPct(bb.pct||0)}</td>
-      </tr>`;
-      prevBlock = r.block;
+    const pend = Math.max(0, r.total_cons - r.total_comp);
+    const isNew=r.block!==prev;
+    if(isNew&&prev)html+='<tr><td colspan="'+(hasComp?10:8)+'" style="padding:2px;background:#f1f5f9"></td></tr>';
+    if(isNew){
+      const bb=ekyc.blocks.find(b=>b.block===r.block)||{};
+      const bpend=Math.max(0,(bb.total_cons||0)-(bb.total_comp||0));
+      const c=pctGradient(bb.pct||0);
+      html+=`<tr style="background:#dbeafe"><td style="padding:5px 4px;border:1px solid #cbd5e1;text-align:center;font-size:10px;color:#64748b">${si++}</td><td colspan="3" style="padding:5px 8px;border:1px solid #cbd5e1;font-weight:700;font-size:12px;color:#1e3a8a">${r.block}</td><td style="padding:5px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:700">${fmtN(bb.total_cons||0)}</td><td style="padding:5px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:700">${fmtN(bb.total_comp||0)}</td><td style="padding:5px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:700;color:#dc2626">${fmtN(bpend)}</td><td style="padding:5px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:700;background:${c.bg};color:${c.fg}">${fmtPct(bb.pct||0)}</td>${hasComp?'<td colspan="2" style="padding:5px 4px;border:1px solid #cbd5e1"></td>':''}</tr>`;
+      prev=r.block;
     }
-    html += `<tr style="background:${bg}">
+    const c=pctGradient(r.total_pct);
+    const oldR = oldShopMap[r.shopcode];
+    const oldPct = oldR&&oldR.total_cons>0 ? oldR.total_comp/oldR.total_cons : null;
+    const added = oldR ? r.total_comp - oldR.total_comp : null;
+    html+=`<tr>
       <td style="padding:4px;border:1px solid #e2e8f0;text-align:center;color:#94a3b8;font-size:10px">${si++}</td>
-      <td style="padding:4px 6px;border:1px solid #e2e8f0;color:#64748b;font-size:10px"></td>
+      <td style="padding:4px 6px;border:1px solid #e2e8f0"></td>
       <td style="padding:4px 6px;border:1px solid #e2e8f0;font-family:monospace;font-size:10px">${r.shopcode}</td>
       <td style="padding:4px 6px;border:1px solid #e2e8f0;font-size:11px">${r.shop_name}</td>
       <td style="padding:4px;border:1px solid #e2e8f0;text-align:center">${fmtN(r.total_cons)}</td>
       <td style="padding:4px;border:1px solid #e2e8f0;text-align:center">${fmtN(r.total_comp)}</td>
-      <td style="padding:4px;border:1px solid #e2e8f0;text-align:center;color:#dc2626">${fmtN(r.total_pend)}</td>
-      <td style="padding:4px;border:1px solid #e2e8f0;text-align:center;font-weight:600;color:${fc}">${fmtPct(r.total_pct)}</td>
+      <td style="padding:4px;border:1px solid #e2e8f0;text-align:center;color:#dc2626">${fmtN(pend)}</td>
+      <td style="padding:4px;border:1px solid #e2e8f0;text-align:center;font-weight:700;background:${c.bg};color:${c.fg}">${fmtPct(r.total_pct)}</td>
+      ${hasComp?`${pctCell(oldPct,'font-size:11px')}<td style="padding:4px;border:1px solid #e2e8f0;text-align:center;font-size:11px;font-weight:700;color:${added>0?'#059669':added<0?'#dc2626':'#64748b'}">${added!==null?(added>0?'+':'')+fmtN(added):'—'}</td>`:''}
     </tr>`;
   });
-  const tbody = document.getElementById('ekyc-shop-tbody');
-  if(tbody) tbody.innerHTML = html;
+  const tbody=document.getElementById('ekyc-shop-tbody');
+  if(tbody)tbody.innerHTML=html;
 }
 
 function filterEkycShops(){
-  const sel = document.getElementById('ekyc-block-filter').value;
-  const rows = sel ? ekyc.processedRows.filter(r=>r.block===sel) : ekyc.processedRows;
+  const sel=document.getElementById('ekyc-block-filter')?.value||'';
+  const rows=sel?ekyc.processedRows2.filter(r=>r.block===sel):ekyc.processedRows2;
   renderEkycShopTable(rows);
 }
 
-async function copyEkycTable(tableId){
-  const el = document.getElementById(tableId+''+'-wrap') || document.getElementById(tableId);
+async function copyEkycTableImg(wrapId){
+  const el=document.getElementById(wrapId);
   if(!el){toast('Table not found',true);return;}
   try{
-    const canvas = await html2canvas(el,{backgroundColor:'#ffffff',scale:2});
+    const canvas=await html2canvas(el,{backgroundColor:'#ffffff',scale:2});
     canvas.toBlob(async blob=>{
-      try{
-        await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
-        toast('✓ Table copied as image');
-      }catch(e){
-        saveAs(blob, `ekyc_table_${ekyc.date.replace(/\./g,'')}.png`);
-        toast('Clipboard blocked — downloaded as PNG');
-      }
+      try{await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);toast('✓ Image copied');}
+      catch(e){saveAs(blob,`ekyc_${ekyc.date.replace(/\./g,'')}.png`);toast('Downloaded as PNG');}
     });
   }catch(e){toast('Screenshot failed: '+e.message,true);}
 }
 
 function printEkycShopwise(){
-  const filter = document.getElementById('ekyc-block-filter')?.value || '';
-  const rows = filter ? ekyc.processedRows.filter(r=>r.block===filter) : ekyc.processedRows;
-  const sorted = rows.slice().sort((a,b)=>a.block.localeCompare(b.block)||a.total_pct-b.total_pct);
-  let tbody = ''; let si=1; let prevBlock=null;
+  const filter=document.getElementById('ekyc-block-filter')?.value||'';
+  const rows=filter?ekyc.processedRows2.filter(r=>r.block===filter):ekyc.processedRows2;
+  const sorted=rows.slice().sort((a,b)=>a.block.localeCompare(b.block)||a.total_pct-b.total_pct);
+  let tbody='';let si=1;let prev=null;
   sorted.forEach(r=>{
-    const isNew = r.block!==prevBlock;
-    if(isNew&&prevBlock) tbody+='<tr><td colspan="8" style="padding:2px;background:#eee"></td></tr>';
+    const isNew=r.block!==prev;
+    if(isNew&&prev)tbody+='<tr><td colspan="8" style="padding:1px;background:#eee"></td></tr>';
     if(isNew){
       const bb=ekyc.blocks.find(b=>b.block===r.block)||{};
-      tbody+=`<tr style="background:#dbeafe;font-weight:700">
-        <td>${si++}</td><td colspan="3">${r.block}</td>
-        <td style="text-align:center">${fmtN(bb.total_cons||0)}</td>
-        <td style="text-align:center">${fmtN(bb.total_comp||0)}</td>
-        <td style="text-align:center">${fmtN(bb.total_pend||0)}</td>
-        <td style="text-align:center">${fmtPct(bb.pct||0)}</td>
-      </tr>`;
-      prevBlock=r.block;
+      const c=pctGradient(bb.pct||0);
+      tbody+=`<tr style="background:#dbeafe;font-weight:700"><td>${si++}</td><td colspan="3">${r.block}</td><td style="text-align:center">${fmtN(bb.total_cons||0)}</td><td style="text-align:center">${fmtN(bb.total_comp||0)}</td><td style="text-align:center">${fmtN(bb.total_pend||0)}</td><td style="text-align:center;background:${c.bg};color:${c.fg}">${fmtPct(bb.pct||0)}</td></tr>`;
+      prev=r.block;
     }
-    const bg=r.total_pct>=0.95?'#d1fae5':r.total_pct>=0.90?'#fef3c7':'#fee2e2';
-    tbody+=`<tr style="background:${bg}">
-      <td>${si++}</td><td></td>
-      <td style="font-family:monospace;font-size:10px">${r.shopcode}</td>
-      <td>${r.shop_name}</td>
-      <td style="text-align:center">${fmtN(r.total_cons)}</td>
-      <td style="text-align:center">${fmtN(r.total_comp)}</td>
-      <td style="text-align:center;color:#dc2626">${fmtN(r.total_pend)}</td>
-      <td style="text-align:center;font-weight:600">${fmtPct(r.total_pct)}</td>
-    </tr>`;
+    const c=pctGradient(r.total_pct);
+    tbody+=`<tr><td>${si++}</td><td></td><td style="font-family:monospace;font-size:9pt">${r.shopcode}</td><td>${r.shop_name}</td><td style="text-align:center">${fmtN(r.total_cons)}</td><td style="text-align:center">${fmtN(r.total_comp)}</td><td style="text-align:center;color:#dc2626">${fmtN(r.total_pend)}</td><td style="text-align:center;background:${c.bg};color:${c.fg};font-weight:700">${fmtPct(r.total_pct)}</td></tr>`;
   });
-  const title = filter ? `Shop-wise e-KYC — ${filter}` : 'Shop-wise e-KYC — All Blocks';
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title>
-    <style>
-      body{font-family:Arial,sans-serif;padding:15px;font-size:10pt}
-      h2{font-size:13pt;margin:0 0 3px}
-      .sub{font-size:9pt;color:#555;margin-bottom:12px}
-      table{width:100%;border-collapse:collapse;font-size:9pt}
-      th{background:#1e3a8a;color:white;padding:6px 5px;border:1px solid #1e40af;text-align:center}
-      td{padding:4px 5px;border:1px solid #cbd5e1}
-      @page{size:A4 landscape;margin:12mm}
-      @media print{body{padding:5px}}
-    </style></head><body>
-    <h2>e-KYC Progress Status — ${title}</h2>
-    <div class="sub">திருவண்ணாமலை மாவட்டம் &nbsp;|&nbsp; As on ${ekyc.date} &nbsp;|&nbsp; 🟢 ≥95% 🟡 90-95% 🔴 &lt;90%</div>
-    <table>
-      <thead><tr>
-        <th>#</th><th style="text-align:left">Block</th><th>Shop Code</th><th style="text-align:left">Shop Name</th>
-        <th>Considered</th><th>Completed</th><th>Pending</th><th>%</th>
-      </tr></thead>
-      <tbody>${tbody}</tbody>
-    </table>
-    </body></html>`;
-  const w = window.open('','_blank');
-  w.document.write(html);
+  const title=filter?`Shop-wise — ${filter}`:'Shop-wise — All Blocks';
+  const w=window.open('','_blank');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>e-KYC ${title}</title><style>body{font-family:Arial;padding:12px;font-size:10pt}h2{font-size:12pt;margin:0 0 3px}table{width:100%;border-collapse:collapse;font-size:9pt}th{background:#1e3a8a;color:white;padding:5px;border:1px solid #1e40af;text-align:center}td{padding:4px 5px;border:1px solid #cbd5e1}@page{size:A4 landscape;margin:10mm}</style></head><body><h2>e-KYC Progress — ${title}</h2><p style="font-size:9pt;color:#555">திருவண்ணாமலை மாவட்டம் | As on ${ekyc.date}</p><table><thead><tr><th>#</th><th style="text-align:left">Block</th><th>Shop Code</th><th style="text-align:left">Shop Name</th><th>Considered</th><th>Completed</th><th>Pending</th><th>%</th></tr></thead><tbody>${tbody}</tbody></table></body></html>`);
   w.document.close();
-  setTimeout(()=>{ try{ w.print(); }catch(e){} }, 500);
-  toast('✓ Print dialog opened — choose "Save as PDF"');
+  setTimeout(()=>{try{w.print();}catch(e){}},500);
+  toast('✓ PDF print dialog opened');
 }
 
 function downloadEkycExcel(){
-  if(!ekyc.blocks || !ekyc.processedRows){ toast('Generate report first',true); return; }
-  const wb = XLSX.utils.book_new();
-  const d = ekyc.date;
-
-  // Sheet 1: Block Abstract ALL
-  const ba = [
-    ['e-KYC Progress Status — திருவண்ணாமலை மாவட்டம் (AAY + PHH + NPHH)'],
-    ['As on '+d,'','','','','','','',''],
-    ['#','Block','AAY Considered','PHH Considered','NPHH Considered','Total Considered','Total Completed','Total Pending','% Completed']
+  if(!ekyc.blocks||!ekyc.processedRows2){toast('Generate report first',true);return;}
+  const d=ekyc.date;
+  const hasComp=!!ekyc.oldBlocks;
+  const wb=XLSX.utils.book_new();
+  function makeSheet(data,colWidths){const ws=XLSX.utils.aoa_to_sheet(data);ws['!cols']=colWidths.map(w=>({wch:w}));return ws;}
+  const catDefs=[
+    {k:'all',label:'ALL',consF:b=>b.total_cons,compF:b=>b.total_comp,pendF:b=>Math.max(0,b.total_cons-b.total_comp)},
+    {k:'aay',label:'AAY',consF:b=>b.aay_cons,compF:b=>b.aay_comp,pendF:b=>Math.max(0,b.aay_cons-b.aay_comp)},
+    {k:'phh',label:'PHH',consF:b=>b.phh_cons,compF:b=>b.phh_comp,pendF:b=>Math.max(0,b.phh_cons-b.phh_comp)},
+    {k:'nph',label:'NPHH',consF:b=>b.nph_cons,compF:b=>b.nph_comp,pendF:b=>Math.max(0,b.nph_cons-b.nph_comp)},
   ];
-  ekyc.blocks.forEach((b,i)=>{
-    ba.push([i+1, b.block, b.aay_cons, b.phh_cons, b.nph_cons, b.total_cons, b.total_comp, b.total_pend, parseFloat((b.pct*100).toFixed(2))+'%']);
-  });
-  const tot=ekyc.blocks.reduce((s,b)=>({aay:s.aay+b.aay_cons,phh:s.phh+b.phh_cons,nph:s.nph+b.nph_cons,cons:s.cons+b.total_cons,comp:s.comp+b.total_comp,pend:s.pend+b.total_pend}),{aay:0,phh:0,nph:0,cons:0,comp:0,pend:0});
-  ba.push(['','TOTAL',tot.aay,tot.phh,tot.nph,tot.cons,tot.comp,tot.pend,parseFloat((tot.comp/tot.cons*100).toFixed(2))+'%']);
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(ba), 'Block Abstract');
-
-  // Sheet 2: Category Abstracts (AAY, PHH, NPHH in one sheet with sections)
-  const cats = [
-    {label:'AAY', ck:'aay'}, {label:'PHH', ck:'phh'}, {label:'NPHH', ck:'nph'}
-  ];
-  cats.forEach(cat=>{
-    const agg = {};
-    ekyc.processedRows.forEach(r=>{
-      const b=r.block;
-      if(!agg[b])agg[b]={block:b,cons:0,comp:0,pend:0};
-      agg[b].cons+=r[cat.ck+'_cons']; agg[b].comp+=r[cat.ck+'_comp']; agg[b].pend+=r[cat.ck+'_pend'];
+  catDefs.forEach(cat=>{
+    const isAll=cat.k==='all';
+    const sortedB=ekyc.blocks.slice().sort((a,b)=>{
+      if(hasComp&&ekyc.oldBlocks){const oa=ekyc.oldBlocks.find(x=>x.block===a.block),ob2=ekyc.oldBlocks.find(x=>x.block===b.block);return (cat.compF(b)-(ob2?cat.compF(ob2):0))-(cat.compF(a)-(oa?cat.compF(oa):0));}
+      const pa=cat.consF(a)>0?cat.compF(a)/cat.consF(a):0,pb=cat.consF(b)>0?cat.compF(b)/cat.consF(b):0;return pa-pb;
     });
-    const rows_arr = Object.values(agg).map(a=>({...a,pct:a.cons>0?a.comp/a.cons:0})).sort((a,b)=>a.pct-b.pct);
-    const sheet_data = [
-      [`e-KYC Progress Status — ${cat.label} (திருவண்ணாமலை)`],
-      ['As on '+d],
-      ['#','Block','Considered','Completed','Pending','% Completed']
-    ];
-    rows_arr.forEach((r,i)=>sheet_data.push([i+1,r.block,r.cons,r.comp,r.pend,parseFloat((r.pct*100).toFixed(2))+'%']));
-    const tc=rows_arr.reduce((s,r)=>s+r.cons,0),td=rows_arr.reduce((s,r)=>s+r.comp,0);
-    sheet_data.push(['','TOTAL',tc,td,tc-td,parseFloat((td/tc*100).toFixed(2))+'%']);
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sheet_data), cat.label+' Block Abstract');
+    let hdr=isAll?['#','Block','AAY Considered','AAY Completed','AAY Pending','PHH Considered','PHH Completed','PHH Pending','NPHH Considered','NPHH Completed','NPHH Pending','Total Considered','Total Completed','Total Pending','% Completed']:['#','Block','Considered','Completed','Pending','% Completed'];
+    if(hasComp)hdr=[...hdr,ekyc.oldDate+' %','Added'];
+    const data=[['e-KYC Progress Status — '+cat.label+' — As on '+d],[],hdr];
+    sortedB.forEach((b,i)=>{
+      const cons=cat.consF(b),comp=cat.compF(b),pend=cat.pendF(b),pct=cons>0?comp/cons:0;
+      const ob=ekyc.oldBlocks?ekyc.oldBlocks.find(x=>x.block===b.block):null;
+      let row=isAll?[i+1,b.block,b.aay_cons,b.aay_comp,Math.max(0,b.aay_cons-b.aay_comp),b.phh_cons,b.phh_comp,Math.max(0,b.phh_cons-b.phh_comp),b.nph_cons,b.nph_comp,Math.max(0,b.nph_cons-b.nph_comp),cons,comp,pend,(pct*100).toFixed(2)+'%']:[i+1,b.block,cons,comp,pend,(pct*100).toFixed(2)+'%'];
+      if(hasComp){const op=ob&&cat.consF(ob)>0?(cat.compF(ob)/cat.consF(ob)*100).toFixed(2)+'%':'—';const added=ob?comp-cat.compF(ob):null;row=[...row,op,added!==null?(added>0?'+':'')+added:'—'];}
+      data.push(row);
+    });
+    const tc=sortedB.reduce((s,b)=>s+cat.consF(b),0),td2=sortedB.reduce((s,b)=>s+cat.compF(b),0),tp=sortedB.reduce((s,b)=>s+cat.pendF(b),0);
+    let tot=isAll?['','TOTAL',ekyc.blocks.reduce((s,b)=>s+b.aay_cons,0),ekyc.blocks.reduce((s,b)=>s+b.aay_comp,0),ekyc.blocks.reduce((s,b)=>s+Math.max(0,b.aay_cons-b.aay_comp),0),ekyc.blocks.reduce((s,b)=>s+b.phh_cons,0),ekyc.blocks.reduce((s,b)=>s+b.phh_comp,0),ekyc.blocks.reduce((s,b)=>s+Math.max(0,b.phh_cons-b.phh_comp),0),ekyc.blocks.reduce((s,b)=>s+b.nph_cons,0),ekyc.blocks.reduce((s,b)=>s+b.nph_comp,0),ekyc.blocks.reduce((s,b)=>s+Math.max(0,b.nph_cons-b.nph_comp),0),tc,td2,tp,(tc>0?(td2/tc*100).toFixed(2):0)+'%']:['','TOTAL',tc,td2,tp,(tc>0?(td2/tc*100).toFixed(2):0)+'%'];
+    if(hasComp&&ekyc.oldBlocks){const otc=ekyc.oldBlocks.reduce((s,b)=>s+cat.consF(b),0),otd=ekyc.oldBlocks.reduce((s,b)=>s+cat.compF(b),0);tot=[...tot,otc>0?(otd/otc*100).toFixed(2)+'%':'—','+'+(td2-otd)];}
+    data.push(tot);
+    const widths=isAll?[4,22,14,14,12,14,14,12,14,14,12,14,14,12,12,...(hasComp?[12,10]:[])]:
+                      [4,22,14,14,12,12,...(hasComp?[12,10]:[])];
+    XLSX.utils.book_append_sheet(wb,makeSheet(data,widths),cat.label+' Block');
   });
-
-  // Sheet 3: Shop-wise
-  const sw = [
-    ['e-KYC Progress Status — Shop-wise Detail (AAY + PHH + NPHH)'],
-    ['As on '+d],
-    ['#','Block','Shop Code','Shop Name','Considered','Completed','Pending','% Completed']
-  ];
-  const sorted = ekyc.processedRows.slice().sort((a,b)=>a.block.localeCompare(b.block)||a.total_pct-b.total_pct);
-  sorted.forEach((r,i)=>sw.push([i+1,r.block,r.shopcode,r.shop_name,r.total_cons,r.total_comp,r.total_pend,parseFloat((r.total_pct*100).toFixed(2))+'%']));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sw), 'Shop-Wise Detail');
-
-  const fname = `eKYC_Tiruvannamalai_${d.replace(/\./g,'')}.xlsx`;
-  XLSX.writeFile(wb, fname);
-  toast('✓ Excel downloaded: '+fname);
+  // Shop-wise
+  const oldSM={};if(ekyc.oldData)parseEkycRows(ekyc.oldData).forEach(r=>{oldSM[r.shopcode]=r;});
+  let swHdr=['#','Block','Shop Code','Shop Name','Considered','Completed','Pending','% Completed'];
+  if(hasComp)swHdr=[...swHdr,ekyc.oldDate+' %','Added'];
+  const sw=[['e-KYC Shop-wise — As on '+d],[],swHdr];
+  ekyc.processedRows2.slice().sort((a,b)=>a.block.localeCompare(b.block)||a.total_pct-b.total_pct).forEach((r,i)=>{
+    const pend=Math.max(0,r.total_cons-r.total_comp);
+    let row=[i+1,r.block,r.shopcode,r.shop_name,r.total_cons,r.total_comp,pend,(r.total_pct*100).toFixed(2)+'%'];
+    if(hasComp){const or=oldSM[r.shopcode];const op=or&&or.total_cons>0?(or.total_comp/or.total_cons*100).toFixed(2)+'%':'—';const added=or?r.total_comp-or.total_comp:null;row=[...row,op,added!==null?(added>0?'+':'')+added:'—'];}
+    sw.push(row);
+  });
+  XLSX.utils.book_append_sheet(wb,makeSheet(sw,[4,22,12,28,12,12,10,12,...(hasComp?[12,10]:[])]),'Shop-Wise');
+  XLSX.writeFile(wb,'eKYC_TVM_'+d.replace(/\./g,'')+'.xlsx');
+  toast('✓ Excel downloaded');
 }
 
 ekycSetup();
-
 
 // ============================================================================
 // =================  WHATSAPP REMINDER MODULE  ===============================
