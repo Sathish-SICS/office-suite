@@ -6113,6 +6113,8 @@ function aggregateByBlock(rows){
 
 function generateEkycReport(){
   if(!ekyc.data){toast('Upload current file first',true);return;}
+  // Set default sort: Added↓ if comparison, Pending↓ if current only
+  ekyc.shopSort = ekyc.oldData ? {col:'added',dir:'desc'} : {col:'pend',dir:'desc'};
   const rows=parseEkycRows(ekyc.data);
   const oldRows=ekyc.oldData?parseEkycRows(ekyc.oldData):null;
   ekyc.processedRows2=rows;
@@ -6213,14 +6215,33 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
   });
 
   // Shop-wise section
+  // Set default sort: pending desc if current only, added desc if comparison
+  if(!ekyc.shopSort) ekyc.shopSort = hasComp ? {col:'added',dir:'desc'} : {col:'pend',dir:'desc'};
+  else if(hasComp && ekyc.shopSort.col==='pend') ekyc.shopSort = {col:'added',dir:'desc'};
+
+  function sortArrow(col){
+    if(ekyc.shopSort.col!==col) return '<span style="opacity:.35;font-size:10px;margin-left:3px">⇅</span>';
+    return ekyc.shopSort.dir==='asc'
+      ? '<span style="font-size:10px;margin-left:3px">▲</span>'
+      : '<span style="font-size:10px;margin-left:3px">▼</span>';
+  }
+  function sortTh(col,label,extra=''){
+    const active=ekyc.shopSort.col===col;
+    return `<th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;cursor:pointer;user-select:none;${active?'background:#2563eb;':''}${extra}" onclick="ekycShopSetSort('${col}')">${label}${sortArrow(col)}</th>`;
+  }
+
   html+=`<div id="ekyc-section-shop" style="display:none">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
       <h3 style="font-size:14px;margin:0">🏪 Shop-wise Detail</h3>
-      <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
         <select id="ekyc-block-filter" style="background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:5px 10px;border-radius:5px;font-size:12px" onchange="filterEkycShops()">
           <option value="">All Blocks</option>
           ${blocks.map(b=>`<option value="${b.block}">${b.block}</option>`).join('')}
         </select>
+        <span style="font-size:11px;color:var(--muted)">Sort:</span>
+        <button class="btn-tiny" id="sort-btn-pend" onclick="ekycShopSetSort('pend')" style="${!hasComp&&ekyc.shopSort.col==='pend'?'background:#1e3a8a;color:white;':''}">Pending ${ekyc.shopSort.col==='pend'?(ekyc.shopSort.dir==='desc'?'▼':'▲'):'⇅'}</button>
+        <button class="btn-tiny" id="sort-btn-pct" onclick="ekycShopSetSort('pct')" style="${ekyc.shopSort.col==='pct'?'background:#1e3a8a;color:white;':''}">% ${ekyc.shopSort.col==='pct'?(ekyc.shopSort.dir==='desc'?'▼':'▲'):'⇅'}</button>
+        ${hasComp?`<button class="btn-tiny" id="sort-btn-added" onclick="ekycShopSetSort('added')" style="${ekyc.shopSort.col==='added'?'background:#059669;color:white;':''}">Added ${ekyc.shopSort.col==='added'?(ekyc.shopSort.dir==='desc'?'▼':'▲'):'⇅'}</button>`:''}
         <button class="btn-tiny" onclick="copyEkycTableImg('ekyc-shop-wrap')">📸 Copy</button>
         <button class="btn-tiny" onclick="printEkycShopwise()">📄 PDF</button>
       </div>
@@ -6235,9 +6256,10 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
             <th style="padding:7px 8px;border:1px solid #1e40af;min-width:150px">Shop Name</th>
             <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">Considered</th>
             <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">Completed</th>
-            <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">Pending</th>
-            <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;min-width:65px">%</th>
-            ${hasComp?`<th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#7c3aed;min-width:65px">${od} %</th><th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#065f46">Added</th>`:''}
+            ${sortTh('pend','Pending')}
+            ${sortTh('pct','%','min-width:65px;')}
+            ${hasComp?sortTh('pct_old',od+' %','background:#7c3aed;min-width:65px;'):''}
+            ${hasComp?sortTh('added','Added','background:#065f46;'):''}
           </tr>
         </thead>
         <tbody id="ekyc-shop-tbody"></tbody>
@@ -6260,41 +6282,92 @@ function switchEkycTab(tab){
   });
 }
 
+// ── Sort toggle for shop-wise columns ──────────────────────────────────────
+function ekycShopSetSort(col){
+  if(!ekyc.shopSort) ekyc.shopSort={col,dir:'desc'};
+  else if(ekyc.shopSort.col===col){
+    ekyc.shopSort.dir = ekyc.shopSort.dir==='desc'?'asc':'desc';
+  } else {
+    // New column: default direction
+    const defaultDesc = ['pend','added']; // these default to descending (high first)
+    ekyc.shopSort = {col, dir: defaultDesc.includes(col)?'desc':'asc'};
+  }
+  filterEkycShops(); // re-render with new sort
+}
+
+function sortShopsWithinBlock(shops){
+  const {col,dir} = ekyc.shopSort || {col:'pend',dir:'desc'};
+  const hasComp = !!ekyc.oldBlocks;
+  const oldShopMap = {};
+  if(ekyc.oldData) parseEkycRows(ekyc.oldData).forEach(r=>{ oldShopMap[r.shopcode]=r; });
+  return shops.slice().sort((a,b)=>{
+    let va, vb;
+    const pA=Math.max(0,a.total_cons-a.total_comp), pB=Math.max(0,b.total_cons-b.total_comp);
+    if(col==='pend'){va=pA;vb=pB;}
+    else if(col==='pct'){va=a.total_pct;vb=b.total_pct;}
+    else if(col==='pct_old'){
+      const oA=oldShopMap[a.shopcode],oB=oldShopMap[b.shopcode];
+      va=oA&&oA.total_cons>0?oA.total_comp/oA.total_cons:0;
+      vb=oB&&oB.total_cons>0?oB.total_comp/oB.total_cons:0;
+    } else if(col==='added'){
+      const oA=oldShopMap[a.shopcode],oB=oldShopMap[b.shopcode];
+      va=oA?a.total_comp-oA.total_comp:-99999;
+      vb=oB?b.total_comp-oB.total_comp:-99999;
+    } else {va=pA;vb=pB;}
+    return dir==='desc'?vb-va:va-vb;
+  });
+}
+
 function renderEkycShopTable(rows){
   const hasComp = !!ekyc.oldBlocks;
-  // Build old shop map for comparison
   const oldShopMap = {};
-  if(ekyc.oldData){
-    parseEkycRows(ekyc.oldData).forEach(r=>{ oldShopMap[r.shopcode] = r; });
-  }
-  const sorted=rows.slice().sort((a,b)=>a.block.localeCompare(b.block)||a.total_pct-b.total_pct);
-  let html='';let si=1;let prev=null;
-  sorted.forEach(r=>{
-    const pend = Math.max(0, r.total_cons - r.total_comp);
-    const isNew=r.block!==prev;
-    if(isNew&&prev)html+='<tr><td colspan="'+(hasComp?10:8)+'" style="padding:2px;background:#f1f5f9"></td></tr>';
-    if(isNew){
-      const bb=ekyc.blocks.find(b=>b.block===r.block)||{};
-      const bpend=Math.max(0,(bb.total_cons||0)-(bb.total_comp||0));
-      const c=pctGradient(bb.pct||0);
-      html+=`<tr style="background:#dbeafe"><td style="padding:5px 4px;border:1px solid #cbd5e1;text-align:center;font-size:10px;color:#64748b">${si++}</td><td colspan="3" style="padding:5px 8px;border:1px solid #cbd5e1;font-weight:700;font-size:12px;color:#1e3a8a">${r.block}</td><td style="padding:5px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:700">${fmtN(bb.total_cons||0)}</td><td style="padding:5px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:700">${fmtN(bb.total_comp||0)}</td><td style="padding:5px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:700;color:#dc2626">${fmtN(bpend)}</td><td style="padding:5px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:700;background:${c.bg};color:${c.fg}">${fmtPct(bb.pct||0)}</td>${hasComp?'<td colspan="2" style="padding:5px 4px;border:1px solid #cbd5e1"></td>':''}</tr>`;
-      prev=r.block;
-    }
-    const c=pctGradient(r.total_pct);
-    const oldR = oldShopMap[r.shopcode];
-    const oldPct = oldR&&oldR.total_cons>0 ? oldR.total_comp/oldR.total_cons : null;
-    const added = oldR ? r.total_comp - oldR.total_comp : null;
-    html+=`<tr>
-      <td style="padding:4px;border:1px solid #e2e8f0;text-align:center;color:#94a3b8;font-size:10px">${si++}</td>
-      <td style="padding:4px 6px;border:1px solid #e2e8f0"></td>
-      <td style="padding:4px 6px;border:1px solid #e2e8f0;font-family:monospace;font-size:10px">${r.shopcode}</td>
-      <td style="padding:4px 6px;border:1px solid #e2e8f0;font-size:11px">${r.shop_name}</td>
-      <td style="padding:4px;border:1px solid #e2e8f0;text-align:center">${fmtN(r.total_cons)}</td>
-      <td style="padding:4px;border:1px solid #e2e8f0;text-align:center">${fmtN(r.total_comp)}</td>
-      <td style="padding:4px;border:1px solid #e2e8f0;text-align:center;color:#dc2626">${fmtN(pend)}</td>
-      <td style="padding:4px;border:1px solid #e2e8f0;text-align:center;font-weight:700;background:${c.bg};color:${c.fg}">${fmtPct(r.total_pct)}</td>
-      ${hasComp?`${pctCell(oldPct,'font-size:11px')}<td style="padding:4px;border:1px solid #e2e8f0;text-align:center;font-size:11px;font-weight:700;color:${added>0?'#059669':added<0?'#dc2626':'#64748b'}">${added!==null?(added>0?'+':'')+fmtN(added):'—'}</td>`:''}
+  if(ekyc.oldData) parseEkycRows(ekyc.oldData).forEach(r=>{ oldShopMap[r.shopcode]=r; });
+
+  // Group rows by block, sort within each block using chosen sort
+  const blockGroups = {};
+  rows.forEach(r=>{
+    if(!blockGroups[r.block]) blockGroups[r.block]=[];
+    blockGroups[r.block].push(r);
+  });
+  // Sort block names alphabetically
+  const blockNames = Object.keys(blockGroups).sort();
+
+  let html=''; let si=1;
+  blockNames.forEach((blockName,bi)=>{
+    if(bi>0) html+=`<tr><td colspan="${hasComp?10:8}" style="padding:2px;background:#f1f5f9"></td></tr>`;
+    const bb=ekyc.blocks.find(b=>b.block===blockName)||{};
+    const bpend=Math.max(0,(bb.total_cons||0)-(bb.total_comp||0));
+    const c=pctGradient(bb.pct||0);
+    // Block header row
+    html+=`<tr style="background:#dbeafe">
+      <td style="padding:5px 4px;border:1px solid #cbd5e1;text-align:center;font-size:10px;color:#64748b">${si++}</td>
+      <td colspan="3" style="padding:5px 8px;border:1px solid #cbd5e1;font-weight:700;font-size:12px;color:#1e3a8a">${blockName}</td>
+      <td style="padding:5px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:700">${fmtN(bb.total_cons||0)}</td>
+      <td style="padding:5px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:700">${fmtN(bb.total_comp||0)}</td>
+      <td style="padding:5px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:700;color:#dc2626">${fmtN(bpend)}</td>
+      <td style="padding:5px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:700;background:${c.bg};color:${c.fg}">${fmtPct(bb.pct||0)}</td>
+      ${hasComp?'<td colspan="2" style="padding:5px 4px;border:1px solid #cbd5e1"></td>':''}
     </tr>`;
+    // Sort shops within this block
+    const sorted = sortShopsWithinBlock(blockGroups[blockName]);
+    sorted.forEach(r=>{
+      const pend=Math.max(0,r.total_cons-r.total_comp);
+      const cShop=pctGradient(r.total_pct);
+      const oldR=oldShopMap[r.shopcode];
+      const oldPct=oldR&&oldR.total_cons>0?oldR.total_comp/oldR.total_cons:null;
+      const added=oldR?r.total_comp-oldR.total_comp:null;
+      html+=`<tr>
+        <td style="padding:4px;border:1px solid #e2e8f0;text-align:center;color:#94a3b8;font-size:10px">${si++}</td>
+        <td style="padding:4px 6px;border:1px solid #e2e8f0"></td>
+        <td style="padding:4px 6px;border:1px solid #e2e8f0;font-family:monospace;font-size:10px">${r.shopcode}</td>
+        <td style="padding:4px 6px;border:1px solid #e2e8f0;font-size:11px">${r.shop_name}</td>
+        <td style="padding:4px;border:1px solid #e2e8f0;text-align:center">${fmtN(r.total_cons)}</td>
+        <td style="padding:4px;border:1px solid #e2e8f0;text-align:center">${fmtN(r.total_comp)}</td>
+        <td style="padding:4px;border:1px solid #e2e8f0;text-align:center;color:#dc2626">${fmtN(pend)}</td>
+        <td style="padding:4px;border:1px solid #e2e8f0;text-align:center;font-weight:700;background:${cShop.bg};color:${cShop.fg}">${fmtPct(r.total_pct)}</td>
+        ${hasComp?`${pctCell(oldPct,'font-size:11px')}<td style="padding:4px;border:1px solid #e2e8f0;text-align:center;font-size:11px;font-weight:700;color:${added>0?'#059669':added<0?'#dc2626':'#64748b'}">${added!==null?(added>0?'+':'')+fmtN(added):'—'}</td>`:''}
+      </tr>`;
+    });
   });
   const tbody=document.getElementById('ekyc-shop-tbody');
   if(tbody)tbody.innerHTML=html;
@@ -6304,40 +6377,100 @@ function filterEkycShops(){
   const sel=document.getElementById('ekyc-block-filter')?.value||'';
   const rows=sel?ekyc.processedRows2.filter(r=>r.block===sel):ekyc.processedRows2;
   renderEkycShopTable(rows);
-}
-
-async function copyEkycTableImg(wrapId){
-  const el=document.getElementById(wrapId);
-  if(!el){toast('Table not found',true);return;}
-  try{
-    const canvas=await html2canvas(el,{backgroundColor:'#ffffff',scale:2});
-    canvas.toBlob(async blob=>{
-      try{await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);toast('✓ Image copied');}
-      catch(e){saveAs(blob,`ekyc_${ekyc.date.replace(/\./g,'')}.png`);toast('Downloaded as PNG');}
-    });
-  }catch(e){toast('Screenshot failed: '+e.message,true);}
+  // Update sort button styles after re-render
+  ['pend','pct','added'].forEach(col=>{
+    const btn=document.getElementById('sort-btn-'+col);
+    if(!btn)return;
+    const active=ekyc.shopSort&&ekyc.shopSort.col===col;
+    const isAdded=col==='added';
+    btn.style.background=active?(isAdded?'#059669':'#1e3a8a'):'';
+    btn.style.color=active?'white':'';
+    btn.textContent=(col==='pend'?'Pending':col==='pct'?'%':'Added')+' '+(active?(ekyc.shopSort.dir==='desc'?'▼':'▲'):'⇅');
+  });
 }
 
 function printEkycShopwise(){
+  const hasComp=!!ekyc.oldBlocks;
   const filter=document.getElementById('ekyc-block-filter')?.value||'';
-  const rows=filter?ekyc.processedRows2.filter(r=>r.block===filter):ekyc.processedRows2;
-  const sorted=rows.slice().sort((a,b)=>a.block.localeCompare(b.block)||a.total_pct-b.total_pct);
-  let tbody='';let si=1;let prev=null;
-  sorted.forEach(r=>{
-    const isNew=r.block!==prev;
-    if(isNew&&prev)tbody+='<tr><td colspan="8" style="padding:1px;background:#eee"></td></tr>';
-    if(isNew){
-      const bb=ekyc.blocks.find(b=>b.block===r.block)||{};
-      const c=pctGradient(bb.pct||0);
-      tbody+=`<tr style="background:#dbeafe;font-weight:700"><td>${si++}</td><td colspan="3">${r.block}</td><td style="text-align:center">${fmtN(bb.total_cons||0)}</td><td style="text-align:center">${fmtN(bb.total_comp||0)}</td><td style="text-align:center">${fmtN(bb.total_pend||0)}</td><td style="text-align:center;background:${c.bg};color:${c.fg}">${fmtPct(bb.pct||0)}</td></tr>`;
-      prev=r.block;
-    }
-    const c=pctGradient(r.total_pct);
-    tbody+=`<tr><td>${si++}</td><td></td><td style="font-family:monospace;font-size:9pt">${r.shopcode}</td><td>${r.shop_name}</td><td style="text-align:center">${fmtN(r.total_cons)}</td><td style="text-align:center">${fmtN(r.total_comp)}</td><td style="text-align:center;color:#dc2626">${fmtN(r.total_pend)}</td><td style="text-align:center;background:${c.bg};color:${c.fg};font-weight:700">${fmtPct(r.total_pct)}</td></tr>`;
+  const allRows=filter?ekyc.processedRows2.filter(r=>r.block===filter):ekyc.processedRows2;
+  const oldShopMapPrint={};
+  if(ekyc.oldData) parseEkycRows(ekyc.oldData).forEach(r=>{ oldShopMapPrint[r.shopcode]=r; });
+
+  // Group and sort same as webapp
+  const blockGroups={};
+  allRows.forEach(r=>{ if(!blockGroups[r.block])blockGroups[r.block]=[]; blockGroups[r.block].push(r); });
+  const blockNames=Object.keys(blockGroups).sort();
+
+  const colCount = hasComp ? 9 : 8;
+  let tbody=''; let si=1;
+  blockNames.forEach((blockName,bi)=>{
+    if(bi>0) tbody+=`<tr><td colspan="${colCount}" style="padding:1px;background:#eee"></td></tr>`;
+    const bb=ekyc.blocks.find(b=>b.block===blockName)||{};
+    const bpend=Math.max(0,(bb.total_cons||0)-(bb.total_comp||0));
+    const c=pctGradient(bb.pct||0);
+    tbody+=`<tr style="background:#dbeafe;font-weight:700">
+      <td>${si++}</td>
+      <td colspan="3">${blockName}</td>
+      <td style="text-align:center">${fmtN(bb.total_cons||0)}</td>
+      <td style="text-align:center">${fmtN(bb.total_comp||0)}</td>
+      <td style="text-align:center;color:#dc2626">${fmtN(bpend)}</td>
+      <td style="text-align:center;background:${c.bg}">${fmtPct(bb.pct||0)}</td>
+      ${hasComp?'<td colspan="1"></td>':''}
+    </tr>`;
+    const sorted=sortShopsWithinBlock(blockGroups[blockName]);
+    sorted.forEach(r=>{
+      const pend=Math.max(0,r.total_cons-r.total_comp);
+      const cShop=pctGradient(r.total_pct);
+      const oldR=oldShopMapPrint[r.shopcode];
+      const added=oldR?r.total_comp-oldR.total_comp:null;
+      tbody+=`<tr>
+        <td>${si++}</td><td></td>
+        <td style="font-family:monospace;font-size:8.5pt">${r.shopcode}</td>
+        <td>${r.shop_name}</td>
+        <td style="text-align:center">${fmtN(r.total_cons)}</td>
+        <td style="text-align:center">${fmtN(r.total_comp)}</td>
+        <td style="text-align:center;color:#dc2626">${fmtN(pend)}</td>
+        <td style="text-align:center;background:${cShop.bg};font-weight:700">${fmtPct(r.total_pct)}</td>
+        ${hasComp?`<td style="text-align:center;font-weight:700;color:${added>0?'#059669':added<0?'#dc2626':'#555'}">${added!==null?(added>0?'+':'')+fmtN(added):'—'}</td>`:''}
+      </tr>`;
+    });
   });
+
+  const {col,dir}=ekyc.shopSort||{col:'pend',dir:'desc'};
+  const sortLabel={'pend':'Pending','pct':'%','added':'Added','pct_old':'Old %'}[col]||col;
+  const sortDesc=`Sorted by: ${sortLabel} ${dir==='desc'?'↓ (High → Low)':'↑ (Low → High)'}`;
   const title=filter?`Shop-wise — ${filter}`:'Shop-wise — All Blocks';
+
+  const extraHead = hasComp
+    ? `<th>Pending</th><th>%</th><th>Added</th>`
+    : `<th>Pending</th><th>%</th>`;
+
   const w=window.open('','_blank');
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>e-KYC ${title}</title><style>body{font-family:Arial;padding:12px;font-size:10pt}h2{font-size:12pt;margin:0 0 3px}table{width:100%;border-collapse:collapse;font-size:9pt}th{background:#1e3a8a;color:white;padding:5px;border:1px solid #1e40af;text-align:center}td{padding:4px 5px;border:1px solid #cbd5e1}@page{size:A4 landscape;margin:10mm}</style></head><body><h2>e-KYC Progress — ${title}</h2><p style="font-size:9pt;color:#555">திருவண்ணாமலை மாவட்டம் | As on ${ekyc.date}</p><table><thead><tr><th>#</th><th style="text-align:left">Block</th><th>Shop Code</th><th style="text-align:left">Shop Name</th><th>Considered</th><th>Completed</th><th>Pending</th><th>%</th></tr></thead><tbody>${tbody}</tbody></table></body></html>`);
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>e-KYC ${title}</title>
+  <style>
+    body{font-family:Arial,sans-serif;padding:12px;font-size:10pt}
+    h2{font-size:12pt;margin:0 0 2px}
+    .sub{font-size:9pt;color:#555;margin-bottom:10px}
+    table{width:100%;border-collapse:collapse;font-size:8.5pt}
+    th{background:#1e3a8a;color:white;padding:5px 4px;border:1px solid #1e40af;text-align:center}
+    td{padding:3px 4px;border:1px solid #cbd5e1}
+    @page{size:A4 ${hasComp?'landscape':'portrait'};margin:10mm}
+  </style></head><body>
+  <h2>e-KYC Progress — ${title}</h2>
+  <div class="sub">திருவண்ணாமலை மாவட்டம் | As on ${ekyc.date}${hasComp?' | Compare: '+ekyc.oldDate:''} | ${sortDesc}</div>
+  <table>
+    <thead><tr>
+      <th>#</th>
+      <th style="text-align:left">Block</th>
+      <th>Shop Code</th>
+      <th style="text-align:left">Shop Name</th>
+      <th>Considered</th>
+      <th>Completed</th>
+      ${extraHead}
+    </tr></thead>
+    <tbody>${tbody}</tbody>
+  </table>
+  </body></html>`);
   w.document.close();
   setTimeout(()=>{try{w.print();}catch(e){}},500);
   toast('✓ PDF print dialog opened');
