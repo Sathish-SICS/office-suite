@@ -6,6 +6,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/file-saver/2.0.5/FileSaver.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <style>
 :root{
   --bg:#0f172a; --panel:#1e293b; --panel-2:#334155;
@@ -6041,8 +6043,17 @@ async function handleEkycFile(file, which){
     const rows = XLSX.utils.sheet_to_json(ws,{defval:''});
     const tvm = rows.filter(r=>String(r['District']||'').toLowerCase().includes('thiruvannamalai'));
     if(tvm.length===0) throw new Error('No Thiruvannamalai rows found');
-    const dm = file.name.match(/(\d{2})[_\-](\d{2})[_\-](\d{4})/);
-    const dateStr = dm ? `${dm[1]}.${dm[2]}.${dm[3]}` : new Date().toLocaleDateString('en-GB').replace(/\//g,'.');
+    // Try multiple date patterns from filename: DD_MM_YYYY, DD-MM-YYYY, DD.MM.YYYY
+    const dm = file.name.match(/(\d{2})[_\-\.](\d{2})[_\-\.](\d{4})/)
+           || file.name.match(/(\d{4})[_\-\.](\d{2})[_\-\.](\d{2})/);  // YYYY_MM_DD fallback
+    let dateStr;
+    if(dm){
+      // Check if first group is year (4 digits) or day (2 digits)
+      if(dm[1].length===4) dateStr = `${dm[3]}.${dm[2]}.${dm[1]}`; // YYYY_MM_DD → DD.MM.YYYY
+      else dateStr = `${dm[1]}.${dm[2]}.${dm[3]}`; // DD.MM.YYYY
+    } else {
+      dateStr = new Date().toLocaleDateString('en-GB').replace(/\//g,'.');
+    }
     if(which==='current'){ ekyc.data=tvm; ekyc.date=dateStr; }
     else{ ekyc.oldData=tvm; ekyc.oldDate=dateStr; }
     statEl.textContent = `✓ ${tvm.length} TVM shops (as on ${dateStr})`;
@@ -6390,6 +6401,9 @@ function filterEkycShops(){
 }
 
 function printEkycShopwise(){
+  if(typeof window.jspdf === 'undefined' && typeof jspdf === 'undefined'){
+    toast('PDF library not loaded. Check internet and retry.',true); return;
+  }
   const hasComp=!!ekyc.oldBlocks;
   const filter=document.getElementById('ekyc-block-filter')?.value||'';
   const allRows=filter?ekyc.processedRows2.filter(r=>r.block===filter):ekyc.processedRows2;
@@ -6401,79 +6415,129 @@ function printEkycShopwise(){
   allRows.forEach(r=>{ if(!blockGroups[r.block])blockGroups[r.block]=[]; blockGroups[r.block].push(r); });
   const blockNames=Object.keys(blockGroups).sort();
 
-  const colCount = hasComp ? 9 : 8;
-  let tbody=''; let si=1;
-  blockNames.forEach((blockName,bi)=>{
-    if(bi>0) tbody+=`<tr><td colspan="${colCount}" style="padding:1px;background:#eee"></td></tr>`;
+  const {col,dir}=ekyc.shopSort||{col:'pend',dir:'desc'};
+  const sortLabel={'pend':'Pending','pct':'%','added':'Added','pct_old':'Old %'}[col]||col;
+  const sortDesc=`Sorted by: ${sortLabel} ${dir==='desc'?'High → Low':'Low → High'}`;
+  const title=filter?`${filter}`:'All Blocks';
+
+  // Build autoTable rows
+  const tableBody=[];
+  let si=1;
+  blockNames.forEach(blockName=>{
     const bb=ekyc.blocks.find(b=>b.block===blockName)||{};
     const bpend=Math.max(0,(bb.total_cons||0)-(bb.total_comp||0));
-    const c=pctGradient(bb.pct||0);
-    tbody+=`<tr style="background:#dbeafe;font-weight:700">
-      <td>${si++}</td>
-      <td colspan="3">${blockName}</td>
-      <td style="text-align:center">${fmtN(bb.total_cons||0)}</td>
-      <td style="text-align:center">${fmtN(bb.total_comp||0)}</td>
-      <td style="text-align:center;color:#dc2626">${fmtN(bpend)}</td>
-      <td style="text-align:center;background:${c.bg}">${fmtPct(bb.pct||0)}</td>
-      ${hasComp?'<td colspan="1"></td>':''}
-    </tr>`;
+    const bpct=bb.pct||0;
+    // Block header row
+    const bRow=['','⬛ '+blockName,'','',
+      String(bb.total_cons||0), String(bb.total_comp||0), String(bpend),
+      fmtPct(bpct)];
+    if(hasComp) bRow.push('');
+    bRow[0]=String(si++);
+    tableBody.push({data:bRow, isBlock:true, pct:bpct});
+
     const sorted=sortShopsWithinBlock(blockGroups[blockName]);
     sorted.forEach(r=>{
       const pend=Math.max(0,r.total_cons-r.total_comp);
-      const cShop=pctGradient(r.total_pct);
       const oldR=oldShopMapPrint[r.shopcode];
       const added=oldR?r.total_comp-oldR.total_comp:null;
-      tbody+=`<tr>
-        <td>${si++}</td><td></td>
-        <td style="font-family:monospace;font-size:8.5pt">${r.shopcode}</td>
-        <td>${r.shop_name}</td>
-        <td style="text-align:center">${fmtN(r.total_cons)}</td>
-        <td style="text-align:center">${fmtN(r.total_comp)}</td>
-        <td style="text-align:center;color:#dc2626">${fmtN(pend)}</td>
-        <td style="text-align:center;background:${cShop.bg};font-weight:700">${fmtPct(r.total_pct)}</td>
-        ${hasComp?`<td style="text-align:center;font-weight:700;color:${added>0?'#059669':added<0?'#dc2626':'#555'}">${added!==null?(added>0?'+':'')+fmtN(added):'—'}</td>`:''}
-      </tr>`;
+      const row=[String(si++), '', r.shopcode, r.shop_name,
+        String(r.total_cons), String(r.total_comp), String(pend),
+        fmtPct(r.total_pct)];
+      if(hasComp) row.push(added!==null?(added>0?'+':'')+String(added):'—');
+      tableBody.push({data:row, isBlock:false, pct:r.total_pct, added});
     });
   });
 
-  const {col,dir}=ekyc.shopSort||{col:'pend',dir:'desc'};
-  const sortLabel={'pend':'Pending','pct':'%','added':'Added','pct_old':'Old %'}[col]||col;
-  const sortDesc=`Sorted by: ${sortLabel} ${dir==='desc'?'↓ (High → Low)':'↑ (Low → High)'}`;
-  const title=filter?`Shop-wise — ${filter}`:'Shop-wise — All Blocks';
+  // jsPDF
+  const { jsPDF } = window.jspdf;
+  const orient = hasComp ? 'landscape' : 'portrait';
+  const doc = new jsPDF({orientation:orient, unit:'mm', format:'a4'});
 
-  const extraHead = hasComp
-    ? `<th>Pending</th><th>%</th><th>Added</th>`
-    : `<th>Pending</th><th>%</th>`;
+  // Title
+  doc.setFontSize(11);
+  doc.setFont('helvetica','bold');
+  doc.text(`e-KYC Progress — Shop-wise — ${title}`, 10, 12);
+  doc.setFontSize(8);
+  doc.setFont('helvetica','normal');
+  doc.setTextColor(100);
+  const subLine = `Thiruvannamalai District | As on ${ekyc.date}${hasComp?' | Compare: '+ekyc.oldDate:''} | ${sortDesc}`;
+  doc.text(subLine, 10, 18);
+  doc.setTextColor(0);
 
-  const w=window.open('','_blank');
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>e-KYC ${title}</title>
-  <style>
-    body{font-family:Arial,sans-serif;padding:12px;font-size:10pt}
-    h2{font-size:12pt;margin:0 0 2px}
-    .sub{font-size:9pt;color:#555;margin-bottom:10px}
-    table{width:100%;border-collapse:collapse;font-size:8.5pt}
-    th{background:#1e3a8a;color:white;padding:5px 4px;border:1px solid #1e40af;text-align:center}
-    td{padding:3px 4px;border:1px solid #cbd5e1}
-    @page{size:A4 ${hasComp?'landscape':'portrait'};margin:10mm}
-  </style></head><body>
-  <h2>e-KYC Progress — ${title}</h2>
-  <div class="sub">திருவண்ணாமலை மாவட்டம் | As on ${ekyc.date}${hasComp?' | Compare: '+ekyc.oldDate:''} | ${sortDesc}</div>
-  <table>
-    <thead><tr>
-      <th>#</th>
-      <th style="text-align:left">Block</th>
-      <th>Shop Code</th>
-      <th style="text-align:left">Shop Name</th>
-      <th>Considered</th>
-      <th>Completed</th>
-      ${extraHead}
-    </tr></thead>
-    <tbody>${tbody}</tbody>
-  </table>
-  </body></html>`);
-  w.document.close();
-  setTimeout(()=>{try{w.print();}catch(e){}},500);
-  toast('✓ PDF print dialog opened');
+  // Gradient colour helper → RGB for jsPDF
+  function pctRgb(p){
+    const pct=Math.max(0,Math.min(1,p||0));
+    let r,g,b;
+    if(pct<0.85){const t=pct/0.85;r=220;g=Math.round(53+t*106);b=53;}
+    else{const t=(pct-0.85)/0.15;r=Math.round(220-t*187);g=Math.round(159+t*64);b=Math.round(53-t*53);}
+    return [r,g,b];
+  }
+
+  const cols = ['#','Block','Shop Code','Shop Name','Considered','Completed','Pending','%'];
+  if(hasComp) cols.push('Added');
+
+  // Column widths (mm) — portrait or landscape
+  const cw = hasComp
+    ? [7,35,18,45,17,17,14,14,14]   // landscape: total ~181mm
+    : [7,35,18,45,17,17,14,14];     // portrait: total ~173mm
+
+  doc.autoTable({
+    startY:22,
+    head:[cols],
+    body:tableBody.map(r=>r.data),
+    columnStyles: Object.fromEntries(cw.map((w,i)=>([i,{cellWidth:w}]))),
+    headStyles:{fillColor:[30,58,138],textColor:255,fontSize:7.5,fontStyle:'bold',halign:'center'},
+    bodyStyles:{fontSize:7,cellPadding:1.5},
+    styles:{overflow:'linebreak',lineColor:[203,213,225],lineWidth:0.2},
+    willDrawCell(data){
+      if(data.section!=='body') return;
+      const row=tableBody[data.row.index];
+      if(!row) return;
+      if(row.isBlock){
+        // Blue block header
+        data.cell.styles.fillColor=[219,234,254];
+        data.cell.styles.fontStyle='bold';
+        data.cell.styles.textColor=[30,58,138];
+        return;
+      }
+      // Colour the % column (index 7)
+      if(data.column.index===7){
+        const [r,g,b]=pctRgb(row.pct);
+        data.cell.styles.fillColor=[r,g,b];
+        data.cell.styles.textColor=255;
+        data.cell.styles.fontStyle='bold';
+        data.cell.styles.halign='center';
+      }
+      // Colour Added column (index 8) if present
+      if(hasComp && data.column.index===8 && row.added!==null&&row.added!==undefined){
+        data.cell.styles.textColor = row.added>0?[5,150,105]:row.added<0?[220,38,38]:[100,116,139];
+        data.cell.styles.fontStyle='bold';
+        data.cell.styles.halign='center';
+      }
+      // Colour Pending column (index 6) in red for non-zero
+      if(data.column.index===6){
+        const pend=parseInt(data.cell.raw||0);
+        if(pend>0) data.cell.styles.textColor=[220,38,38];
+        data.cell.styles.halign='center';
+      }
+      // Center numeric columns
+      if(data.column.index>=4) data.cell.styles.halign='center';
+    },
+    didDrawPage(data){
+      // Footer with page number
+      const pageCount=doc.getNumberOfPages();
+      doc.setFontSize(7);
+      doc.setTextColor(150);
+      const pageW=doc.internal.pageSize.getWidth();
+      doc.text(`Page ${data.pageNumber} of ${pageCount}`,pageW-20,doc.internal.pageSize.getHeight()-5);
+      doc.text('திருவண்ணாமலை மாவட்டம்',10,doc.internal.pageSize.getHeight()-5);
+      doc.setTextColor(0);
+    }
+  });
+
+  const fname=`eKYC_Shopwise_${filter||'AllBlocks'}_${ekyc.date.replace(/\./g,'')}.pdf`;
+  doc.save(fname);
+  toast('✓ PDF downloaded: '+fname);
 }
 
 function downloadEkycExcel(){
