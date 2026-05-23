@@ -6126,6 +6126,10 @@ function generateEkycReport(){
   if(!ekyc.data){toast('Upload current file first',true);return;}
   // Set default sort: Added↓ if comparison, Pending↓ if current only
   ekyc.shopSort = ekyc.oldData ? {col:'added',dir:'desc'} : {col:'pend',dir:'desc'};
+  // Reset block abstract sort states
+  ['all','aay','phh','nph'].forEach(k=>{
+    ekyc['ekyc_blk_sort_'+k] = ekyc.oldData ? {col:'added',dir:'desc'} : {col:'pct',dir:'asc'};
+  });
   const rows=parseEkycRows(ekyc.data);
   const oldRows=ekyc.oldData?parseEkycRows(ekyc.oldData):null;
   ekyc.processedRows2=rows;
@@ -6159,16 +6163,34 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
 
   // Build block tables for each category
   catDefs.forEach(cat=>{
-    const sortedB=blocks.slice().sort((a,b)=>{if(hasComp&&oldBlocks){const oa=oldBlocks.find(x=>x.block===a.block),ob2=oldBlocks.find(x=>x.block===b.block);const aa=cat.compF(a)-(oa?cat.compF(oa):0),ab=cat.compF(b)-(ob2?cat.compF(ob2):0);return ab-aa;}const pa=cat.consF(a)>0?cat.compF(a)/cat.consF(a):0,pb=cat.consF(b)>0?cat.compF(b)/cat.consF(b):0;return pa-pb;});
+    const sortedB=blocks.slice().sort((a,b)=>{
+      const sk=ekyc['ekyc_blk_sort_'+cat.k]||{col:hasComp?'added':'pct',dir:hasComp?'desc':'asc'};
+      const oa=oldMap[a.block],ob2=oldMap[b.block];
+      if(sk.col==='added'&&hasComp){const aa=cat.compF(a)-(oa?cat.compF(oa):0),ab2=cat.compF(b)-(ob2?cat.compF(ob2):0);return sk.dir==='desc'?ab2-aa:aa-ab2;}
+      if(sk.col==='pend'){const pa=cat.pendF(a),pb=cat.pendF(b);return sk.dir==='desc'?pb-pa:pa-pb;}
+      if(sk.col==='pct_old'){const pa=oa&&cat.consF(oa)>0?cat.compF(oa)/cat.consF(oa):0,pb=ob2&&cat.consF(ob2)>0?cat.compF(ob2)/cat.consF(ob2):0;return sk.dir==='desc'?pb-pa:pa-pb;}
+      // default pct
+      const pa=cat.consF(a)>0?cat.compF(a)/cat.consF(a):0,pb=cat.consF(b)>0?cat.compF(b)/cat.consF(b):0;
+      return sk.dir==='desc'?pb-pa:pa-pb;
+    });
     const totCons=sortedB.reduce((s,b)=>s+cat.consF(b),0);
     const totComp=sortedB.reduce((s,b)=>s+cat.compF(b),0);
     const totPend=sortedB.reduce((s,b)=>s+cat.pendF(b),0);
     const totPct=totCons>0?totComp/totCons:0;
     const oldMap={};if(hasComp&&oldBlocks)oldBlocks.forEach(b=>oldMap[b.block]=b);
+
+    // Sort state for this category's block abstract table
+    const catSortKey = 'ekyc_blk_sort_'+cat.k;
+    if(!ekyc[catSortKey]) ekyc[catSortKey] = hasComp ? {col:'added',dir:'desc'} : {col:'pct',dir:'asc'};
+
     html+=`<div id="ekyc-section-${cat.k}" style="display:none">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
         <h3 style="font-size:14px;margin:0">📊 Block Abstract — ${cat.label}</h3>
-        <div style="display:flex;gap:6px">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <span style="font-size:11px;color:var(--muted)">Sort:</span>
+          <button class="btn-tiny" id="blk-sort-pend-${cat.k}" onclick="ekycBlockSetSort('${cat.k}','pend')" style="${ekyc[catSortKey].col==='pend'?'background:#1e3a8a;color:white':''}">Pending ${ekyc[catSortKey].col==='pend'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</button>
+          <button class="btn-tiny" id="blk-sort-pct-${cat.k}" onclick="ekycBlockSetSort('${cat.k}','pct')" style="${ekyc[catSortKey].col==='pct'?'background:#1e3a8a;color:white':''}">% ${ekyc[catSortKey].col==='pct'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</button>
+          ${hasComp?`<button class="btn-tiny" id="blk-sort-added-${cat.k}" onclick="ekycBlockSetSort('${cat.k}','added')" style="${ekyc[catSortKey].col==='added'?'background:#059669;color:white':''}">Added ${ekyc[catSortKey].col==='added'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</button>`:''}
           <button class="btn-tiny" onclick="copyEkycTableImg('ekyc-block-tbl-${cat.k}-wrap')">📸 Copy</button>
           <button class="btn-tiny" onclick="downloadEkycExcel()">📥 Excel</button>
         </div>
@@ -6182,9 +6204,9 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
               ${cat.k==='all'?`<th style="padding:7px 5px;border:1px solid #1e40af;text-align:center" colspan="3">AAY</th><th style="padding:7px 5px;border:1px solid #1e40af;text-align:center" colspan="3">PHH</th><th style="padding:7px 5px;border:1px solid #1e40af;text-align:center" colspan="3">NPHH</th>`:''}
               <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">Considered</th>
               <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">Completed</th>
-              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">Pending</th>
-              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;min-width:70px">%</th>
-              ${hasComp?`<th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#7c3aed">${od} %</th><th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#065f46">Added</th>`:''}
+              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','pend')">Pending ${ekyc[catSortKey].col==='pend'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th>
+              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;min-width:80px;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','pct')">${d} % ${ekyc[catSortKey].col==='pct'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th>
+              ${hasComp?`<th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#7c3aed;min-width:80px;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','pct_old')">${od} % ${ekyc[catSortKey].col==='pct_old'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th><th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#065f46;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','added')">Added ${ekyc[catSortKey].col==='added'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th>`:''}
             </tr>
             ${cat.k==='all'?`<tr style="background:#3b82f6;color:white">
               <th colspan="2" style="padding:4px;border:1px solid #1e40af"></th>
@@ -6293,7 +6315,23 @@ function switchEkycTab(tab){
   });
 }
 
-// ── Sort toggle for shop-wise columns ──────────────────────────────────────
+// ── Sort for Block Abstract tables (ALL/AAY/PHH/NPHH) ─────────────────────
+function ekycBlockSetSort(catK, col){
+  const key='ekyc_blk_sort_'+catK;
+  if(!ekyc[key]) ekyc[key]={col,dir:'desc'};
+  else if(ekyc[key].col===col){
+    ekyc[key].dir = ekyc[key].dir==='desc'?'asc':'desc';
+  } else {
+    const defaultDesc=['pend','added'];
+    ekyc[key]={col, dir: defaultDesc.includes(col)?'desc':'asc'};
+  }
+  // Re-render using stored data
+  if(ekyc.processedRows2 && ekyc.blocks){
+    const oldRows=ekyc.oldData?parseEkycRows(ekyc.oldData):null;
+    renderEkycResults(ekyc.processedRows2, ekyc.blocks, oldRows, ekyc.oldBlocks);
+    switchEkycTab(catK);
+  }
+}
 function ekycShopSetSort(col){
   if(!ekyc.shopSort) ekyc.shopSort={col,dir:'desc'};
   else if(ekyc.shopSort.col===col){
@@ -6460,7 +6498,7 @@ function printEkycShopwise(){
   doc.setFontSize(8);
   doc.setFont('helvetica','normal');
   doc.setTextColor(100);
-  const subLine = `Thiruvannamalai District | As on ${ekyc.date}${hasComp?' | Compare: '+ekyc.oldDate:''} | ${sortDesc}`;
+  const subLine = `Thiruvannamalai District | As on ${ekyc.date}${hasComp?' | Compared from: '+ekyc.oldDate:''} | ${sortDesc}`;
   doc.text(subLine, 10, 18);
   doc.setTextColor(0);
 
