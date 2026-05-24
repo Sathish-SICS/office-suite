@@ -1440,29 +1440,27 @@ function processReports(){
     const raw = document.getElementById('insp-squad-codes').value;
     raw.split(/[\n,\s]+/).map(s=>s.trim().toUpperCase()).filter(Boolean).forEach(c=>squadCodes.add(c));
   } else if(squadSrc === 'gsheet'){
-    // Already fetched into state.squadCodes
     if(state.squadCodes) state.squadCodes.forEach(c=>squadCodes.add(c));
   }
 
-  // Build lookup: which squad codes were actually found in MIS within date window
-  // squadCheckList: {code: {found: bool, inspDate: str, onTime: bool, daysDiff: int}}
+  // Build checklist entries for each squad shop
   const squadCheckList = {};
   squadCodes.forEach(code=>{
     squadCheckList[code] = {code, found:false, inspDate:null, onTime:false, daysDiff:null};
   });
 
-  // Track which rows are squad rows (to subtract from counts)
-  // A row is a squad row if: its shop code is in squadCodes AND date within tolerance
-  // Key insight: deduct only ONE inspection per shop (the one on squad date).
-  // Subsequent inspections of the same shop on other dates still count toward monthly target.
+  // CORRECT SQUAD LOGIC:
+  // A "squad inspection row" = shopCode is in squadCodes AND date is within tolerance of squad date
+  // For each officer, identify which of their MIS rows are squad inspection rows.
+  // Deduct exactly those rows (one per officer per shop) from their monthly count.
+  // All other rows (squad shops inspected on non-squad dates, or non-squad shops) count normally.
 
-  // squadDeductMap: shopCode → isoDate of the inspection to deduct (the squad-day one)
-  const squadDeductMap = {}; // shopCode → isoDate string to exclude (exactly ONE per shop)
-  const squadInspectedCodes = new Set(); // shop codes confirmed as squad-inspected in MIS
+  // Step 1: Build a Set of row keys that are squad inspections: "phone|shopCode|isoDate"
+  // Also track per (phone,shopCode) — deduct only ONE occurrence per officer per shop
+  const squadRowSet = new Set(); // "phone|shopCode|isoDate" → is a squad row
 
   if(squadSrc !== 'none' && squadCodes.size > 0 && squadDate){
     const anchorMs = new Date(squadDate).getTime();
-    // First pass: find which inspection date to deduct for each shop
     dataRows.forEach(r=>{
       const shopCode = (r[colFps]||'').toString().trim().toUpperCase();
       if(!squadCodes.has(shopCode)) return;
@@ -1470,32 +1468,27 @@ function processReports(){
       if(!isoDate) return;
       const rowMs = new Date(isoDate).getTime();
       const daysDiff = Math.round((rowMs - anchorMs)/86400000);
-      // Only within tolerance window (on or after squad date)
+      const phone = String(Math.round(Number(r[colPhone]||0)));
+
       if(daysDiff >= 0 && daysDiff <= squadTol){
-        // Among all on-time inspections for this shop, keep the closest to squad date
-        if(!squadCheckList[shopCode].found || daysDiff < squadCheckList[shopCode].daysDiff){
+        // This row is a squad inspection
+        squadRowSet.add(phone + '|' + shopCode + '|' + isoDate);
+        // Update checklist (closest to squad date wins)
+        if(!squadCheckList[shopCode].found || daysDiff < (squadCheckList[shopCode].daysDiff||99)){
           squadCheckList[shopCode] = {code:shopCode, found:true, inspDate:isoDate, onTime:true, daysDiff};
-          squadDeductMap[shopCode] = isoDate; // this is the ONE inspection to deduct
         }
-        squadInspectedCodes.add(shopCode);
       } else if(daysDiff > squadTol){
-        // Late — found but after tolerance window, record in checklist only
+        // Late — update checklist only if not already found on time
         if(!squadCheckList[shopCode].found){
           squadCheckList[shopCode] = {code:shopCode, found:true, inspDate:isoDate, onTime:false, daysDiff};
         }
       }
     });
-  }
 
-  // Now subtract squad-inspected shops from each role's count.
-  // IMPORTANT: only deduct ONE inspection per shop (the one on the squad date).
-  // If the same shop was inspected again on a different date, those still count.
-  if(Object.keys(squadDeductMap).length > 0){
-    // For each officer, track how many squad-day deductions have been applied per shop
-    // (max 1 per shop per officer)
-    const deductedPerOfficer = {}; // officerName → Set of shopCodes already deducted once
+    // Step 2: Rebuild block staff counts
+    // For each officer: skip squad rows, but only once per (officer, shop) combination
+    const deductedOnce = new Set(); // "phone|shopCode" — track if we already skipped this pair
 
-    // Reset block staff counts — rebuild from scratch
     Object.keys(blockStaffInspections).forEach(k=>blockStaffInspections[k]=0);
     dataRows.forEach(r=>{
       const phone = r[colPhone];
@@ -1507,43 +1500,48 @@ function processReports(){
       const isoDate = toIsoDate(r[colDate]);
 
       if(lookup.role==='Block Staff'){
-        const desig = lookup.designation;
-        // Check if this is the squad-day inspection for this shop
-        if(squadDeductMap[shopCode] && isoDate === squadDeductMap[shopCode]){
-          // This is the squad-day visit — deduct it (skip once per shop per officer)
-          if(!deductedPerOfficer[desig]) deductedPerOfficer[desig] = new Set();
-          if(!deductedPerOfficer[desig].has(shopCode)){
-            deductedPerOfficer[desig].add(shopCode);
-            return; // skip this one inspection — it's the squad-day one
-          }
-          // If this officer has multiple inspections on squad date for same shop (rare), count the rest
+        const rowKey = phoneStr + '|' + shopCode + '|' + isoDate;
+        const deductKey = phoneStr + '|' + shopCode;
+        // Skip only if: this row is a squad inspection AND we haven't deducted this shop for this officer yet
+        if(squadRowSet.has(rowKey) && !deductedOnce.has(deductKey)){
+          deductedOnce.add(deductKey);
+          return; // deduct exactly once
         }
-        blockStaffInspections[desig] = (blockStaffInspections[desig]||0)+1;
+        // All other rows count normally (including subsequent visits to same squad shop)
+        blockStaffInspections[lookup.designation] = (blockStaffInspections[lookup.designation]||0)+1;
       }
     });
 
-    // For DR and JR: also deduct only the squad-day inspection (not subsequent ones)
-    const drDeducted = new Set(); // shopCodes where squad-day DR visit already removed
+    // Step 3: DR and JR — same logic using their phone numbers
+    // Find DR and JR phones from phoneLookup
+    const drPhones = Object.entries(phoneLookup).filter(([p,v])=>v.role==='Deputy Registrar').map(([p])=>p);
+    const jrPhones = Object.entries(phoneLookup).filter(([p,v])=>v.role==='Joint Registrar').map(([p])=>p);
+
+    const drDeductOnce = new Set();
     const drFiltered = drInspections.filter(d=>{
       const sc = d.fpsCode.toUpperCase();
-      if(squadDeductMap[sc]){
-        const isoDate = toIsoDate(d.date);
-        if(isoDate === squadDeductMap[sc] && !drDeducted.has(sc)){
-          drDeducted.add(sc);
-          return false; // remove this one
+      const isoDate = toIsoDate(d.date);
+      for(const drPhone of drPhones){
+        const rowKey = drPhone + '|' + sc + '|' + isoDate;
+        const deductKey = drPhone + '|' + sc;
+        if(squadRowSet.has(rowKey) && !drDeductOnce.has(deductKey)){
+          drDeductOnce.add(deductKey);
+          return false; // remove this squad-day DR inspection
         }
       }
-      return true; // keep all others
+      return true;
     });
     drInspections.length=0; drFiltered.forEach(d=>drInspections.push(d));
 
-    const jrDeducted = new Set();
+    const jrDeductOnce = new Set();
     const jrFiltered = jrInspections.filter(d=>{
       const sc = d.fpsCode.toUpperCase();
-      if(squadDeductMap[sc]){
-        const isoDate = toIsoDate(d.date);
-        if(isoDate === squadDeductMap[sc] && !jrDeducted.has(sc)){
-          jrDeducted.add(sc);
+      const isoDate = toIsoDate(d.date);
+      for(const jrPhone of jrPhones){
+        const rowKey = jrPhone + '|' + sc + '|' + isoDate;
+        const deductKey = jrPhone + '|' + sc;
+        if(squadRowSet.has(rowKey) && !jrDeductOnce.has(deductKey)){
+          jrDeductOnce.add(deductKey);
           return false;
         }
       }
@@ -1551,10 +1549,6 @@ function processReports(){
     });
     jrInspections.length=0; jrFiltered.forEach(d=>jrInspections.push(d));
   }
-
-  // Renumber DR and JR after deduction
-  drInspections.forEach((d,i)=>d.sl=i+1);
-  jrInspections.forEach((d,i)=>d.sl=i+1);
 
   // ── END SQUAD DEDUCTION ────────────────────────────────────────────────
 
@@ -1573,7 +1567,7 @@ function processReports(){
     targetDR: 50,
     targetJR: 10,
     squadCheckList: Object.values(squadCheckList),
-    squadCount: Object.keys(squadDeductMap).length,
+    squadCount: Object.values(squadCheckList).filter(x=>x.found&&x.onTime).length,
     squadTotal: squadCodes.size,
     squadDate,
     squadTol
