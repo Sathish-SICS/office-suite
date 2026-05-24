@@ -1963,7 +1963,7 @@ function renderDetail(title, list, cardId, bg1, bg2){
         <tbody>
           ${list.map(d=>`
             <tr>
-              <td style="text-align:center">${d.sl}</td>
+              <td style="text-align:center">${i+1}</td>
               <td>${d.fpsCode}</td>
               <td>${d.block}</td>
               <td>${d.fpsName}</td>
@@ -2503,7 +2503,7 @@ function downloadExcel(){
     ['#','FPS Code','Block','FPS Name','Date of Inspection','Remarks']
   ];
   r.drInspections.forEach(d=>{
-    drRows.push([d.sl, d.fpsCode, d.block, d.fpsName, fmtDate(d.date), '']);
+    drRows.push([i+1, d.fpsCode, d.block, d.fpsName, fmtDate(d.date), '']);
   });
   const ws2 = XLSX.utils.aoa_to_sheet(drRows);
   ws2['!cols'] = [{wch:5},{wch:14},{wch:20},{wch:28},{wch:18},{wch:14}];
@@ -2518,7 +2518,7 @@ function downloadExcel(){
     ['#','FPS Code','Block','FPS Name','Date of Inspection','Remarks']
   ];
   r.jrInspections.forEach(d=>{
-    jrRows.push([d.sl, d.fpsCode, d.block, d.fpsName, fmtDate(d.date), '']);
+    jrRows.push([i+1, d.fpsCode, d.block, d.fpsName, fmtDate(d.date), '']);
   });
   const ws3 = XLSX.utils.aoa_to_sheet(jrRows);
   ws3['!cols'] = [{wch:5},{wch:14},{wch:20},{wch:28},{wch:18},{wch:14}];
