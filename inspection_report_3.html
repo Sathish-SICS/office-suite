@@ -1961,7 +1961,7 @@ function renderDetail(title, list, cardId, bg1, bg2){
           <tr><th>#</th><th>FPS Code</th><th>Block</th><th>FPS Name</th><th>Date of Inspection</th><th>Remarks</th></tr>
         </thead>
         <tbody>
-          ${list.map(d=>`
+          ${list.map((d,i)=>`
             <tr>
               <td style="text-align:center">${i+1}</td>
               <td>${d.fpsCode}</td>
@@ -2502,7 +2502,7 @@ function downloadExcel(){
     [`${drDesig}  அவர்களின் ${month} மாதத்திற்கான ஆய்வு அறிக்கை விவரம்`],
     ['#','FPS Code','Block','FPS Name','Date of Inspection','Remarks']
   ];
-  r.drInspections.forEach(d=>{
+  r.drInspections.forEach((d,i)=>{
     drRows.push([i+1, d.fpsCode, d.block, d.fpsName, fmtDate(d.date), '']);
   });
   const ws2 = XLSX.utils.aoa_to_sheet(drRows);
@@ -2517,7 +2517,7 @@ function downloadExcel(){
     [`${jrDesig}  அவர்களின் ${month} மாதத்திற்கான ஆய்வு அறிக்கை விவரம்`],
     ['#','FPS Code','Block','FPS Name','Date of Inspection','Remarks']
   ];
-  r.jrInspections.forEach(d=>{
+  r.jrInspections.forEach((d,i)=>{
     jrRows.push([i+1, d.fpsCode, d.block, d.fpsName, fmtDate(d.date), '']);
   });
   const ws3 = XLSX.utils.aoa_to_sheet(jrRows);
@@ -6021,6 +6021,29 @@ function ekycGetBlock(code){
   return 'Unknown';
 }
 
+// Screenshot e-KYC tables
+async function copyEkycTableImg(wrapId){
+  const wrap=document.getElementById(wrapId);
+  if(!wrap){toast('Table not found',true);return;}
+  const target=wrap.querySelector('table')||wrap;
+  try{
+    const canvas=await html2canvas(target,{
+      backgroundColor:'#ffffff',scale:2,useCORS:true,
+      width:target.scrollWidth,height:target.scrollHeight,
+      windowWidth:target.scrollWidth+100
+    });
+    canvas.toBlob(async blob=>{
+      try{
+        await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
+        toast('✓ Image copied to clipboard');
+      }catch(e){
+        saveAs(blob,`ekyc_${(ekyc.date||'').replace(/\./g,'')}.png`);
+        toast('Clipboard blocked — saved as PNG');
+      }
+    });
+  }catch(e){toast('Screenshot failed: '+e.message,true);}
+}
+
 function ekycSetup(){
   // Current file
   const box = document.getElementById('box-ekyc');
@@ -6205,13 +6228,18 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
 
   // Build block tables for each category
   catDefs.forEach(cat=>{
+    const oldMap={};if(hasComp&&oldBlocks)oldBlocks.forEach(b=>oldMap[b.block]=b);
+
+    // Sort state for this category's block abstract table
+    const catSortKey = 'ekyc_blk_sort_'+cat.k;
+    if(!ekyc[catSortKey]) ekyc[catSortKey] = hasComp ? {col:'added',dir:'desc'} : {col:'pct',dir:'asc'};
+
     const sortedB=blocks.slice().sort((a,b)=>{
       const sk=ekyc['ekyc_blk_sort_'+cat.k]||{col:hasComp?'added':'pct',dir:hasComp?'desc':'asc'};
       const oa=oldMap[a.block],ob2=oldMap[b.block];
       if(sk.col==='added'&&hasComp){const aa=cat.compF(a)-(oa?cat.compF(oa):0),ab2=cat.compF(b)-(ob2?cat.compF(ob2):0);return sk.dir==='desc'?ab2-aa:aa-ab2;}
       if(sk.col==='pend'){const pa=cat.pendF(a),pb=cat.pendF(b);return sk.dir==='desc'?pb-pa:pa-pb;}
       if(sk.col==='pct_old'){const pa=oa&&cat.consF(oa)>0?cat.compF(oa)/cat.consF(oa):0,pb=ob2&&cat.consF(ob2)>0?cat.compF(ob2)/cat.consF(ob2):0;return sk.dir==='desc'?pb-pa:pa-pb;}
-      // default pct
       const pa=cat.consF(a)>0?cat.compF(a)/cat.consF(a):0,pb=cat.consF(b)>0?cat.compF(b)/cat.consF(b):0;
       return sk.dir==='desc'?pb-pa:pa-pb;
     });
@@ -6219,11 +6247,6 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
     const totComp=sortedB.reduce((s,b)=>s+cat.compF(b),0);
     const totPend=sortedB.reduce((s,b)=>s+cat.pendF(b),0);
     const totPct=totCons>0?totComp/totCons:0;
-    const oldMap={};if(hasComp&&oldBlocks)oldBlocks.forEach(b=>oldMap[b.block]=b);
-
-    // Sort state for this category's block abstract table
-    const catSortKey = 'ekyc_blk_sort_'+cat.k;
-    if(!ekyc[catSortKey]) ekyc[catSortKey] = hasComp ? {col:'added',dir:'desc'} : {col:'pct',dir:'asc'};
 
     html+=`<div id="ekyc-section-${cat.k}" style="display:none">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
@@ -6247,9 +6270,9 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
               <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">Considered</th>
               <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">Completed</th>
               <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','pend')">Pending ${ekyc[catSortKey].col==='pend'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th>
+              ${hasComp?`<th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#7c3aed;min-width:80px;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','pct_old')">${od} % ${ekyc[catSortKey].col==='pct_old'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th>`:''}
               <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;min-width:80px;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','pct')">${d} % ${ekyc[catSortKey].col==='pct'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th>
-              ${hasComp?`<th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#7c3aed;min-width:80px;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','pct_old')">${od} % ${ekyc[catSortKey].col==='pct_old'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th><th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#065f46;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','added')">Added ${ekyc[catSortKey].col==='added'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th>`:''}
-            </tr>
+              ${hasComp?`<th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#065f46;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','added')">Added ${ekyc[catSortKey].col==='added'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th>`:''}
             ${cat.k==='all'?`<tr style="background:#3b82f6;color:white">
               <th colspan="2" style="padding:4px;border:1px solid #1e40af"></th>
               ${['Cons','Done','Pend','Cons','Done','Pend','Cons','Done','Pend'].map(h=>`<th style="padding:4px;border:1px solid #1e40af;font-size:10px;text-align:center">${h}</th>`).join('')}
@@ -6270,8 +6293,9 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
                 <td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;font-weight:600">${fmtN(cons)}</td>
                 <td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;font-weight:600">${fmtN(comp)}</td>
                 <td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;color:#dc2626;font-weight:600">${fmtN(pend)}</td>
+                ${hasComp?pctCell(oldPct):''}
                 ${pctCell(pct)}
-                ${hasComp?`${pctCell(oldPct)}<td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;font-weight:700;color:${added>0?'#059669':added<0?'#dc2626':'#64748b'}">${added!==null?(added>0?'+':'')+fmtN(added):'—'}</td>`:''}
+                ${hasComp?`<td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;font-weight:700;color:${added>0?'#059669':added<0?'#dc2626':'#64748b'}">${added!==null?(added>0?'+':'')+fmtN(added):'—'}</td>`:''}
               </tr>`;
             }).join('')}
             <tr style="background:#f1f5f9;font-weight:700">
@@ -6280,8 +6304,9 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
               <td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center">${fmtN(totCons)}</td>
               <td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center">${fmtN(totComp)}</td>
               <td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center">${fmtN(totPend)}</td>
+              ${hasComp&&oldBlocks?pctCell(oldBlocks.reduce((s,b)=>s+cat.compF(b),0)/Math.max(1,oldBlocks.reduce((s,b)=>s+cat.consF(b),0)),'font-size:13px'):''}
               ${pctCell(totPct,'font-size:13px')}
-              ${hasComp&&oldBlocks?`${pctCell(oldBlocks.reduce((s,b)=>s+cat.compF(b),0)/Math.max(1,oldBlocks.reduce((s,b)=>s+cat.consF(b),0)),'font-size:13px')}<td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center;font-weight:700;color:#059669">+${fmtN(totComp-oldBlocks.reduce((s,b)=>s+cat.compF(b),0))}</td>`:''}
+              ${hasComp&&oldBlocks?`<td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center;font-weight:700;color:#059669">+${fmtN(totComp-oldBlocks.reduce((s,b)=>s+cat.compF(b),0))}</td>`:''}
             </tr>
           </tbody>
         </table>
@@ -6332,8 +6357,8 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
             <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">Considered</th>
             <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">Completed</th>
             ${sortTh('pend','Pending')}
-            ${sortTh('pct','%','min-width:65px;')}
             ${hasComp?sortTh('pct_old',od+' %','background:#7c3aed;min-width:65px;'):''}
+            ${sortTh('pct',hasComp?d+' %':'%','min-width:65px;')}
             ${hasComp?sortTh('added','Added','background:#065f46;'):''}
           </tr>
         </thead>
@@ -6455,8 +6480,9 @@ function renderEkycShopTable(rows){
         <td style="padding:4px;border:1px solid #e2e8f0;text-align:center">${fmtN(r.total_cons)}</td>
         <td style="padding:4px;border:1px solid #e2e8f0;text-align:center">${fmtN(r.total_comp)}</td>
         <td style="padding:4px;border:1px solid #e2e8f0;text-align:center;color:#dc2626">${fmtN(pend)}</td>
+        ${hasComp?pctCell(oldPct,'font-size:11px'):''}
         <td style="padding:4px;border:1px solid #e2e8f0;text-align:center;font-weight:700;background:${cShop.bg};color:${cShop.fg}">${fmtPct(r.total_pct)}</td>
-        ${hasComp?`${pctCell(oldPct,'font-size:11px')}<td style="padding:4px;border:1px solid #e2e8f0;text-align:center;font-size:11px;font-weight:700;color:${added>0?'#059669':added<0?'#dc2626':'#64748b'}">${added!==null?(added>0?'+':'')+fmtN(added):'—'}</td>`:''}
+        ${hasComp?`<td style="padding:4px;border:1px solid #e2e8f0;text-align:center;font-size:11px;font-weight:700;color:${added>0?'#059669':added<0?'#dc2626':'#64748b'}">${added!==null?(added>0?'+':'')+fmtN(added):'—'}</td>`:''}
       </tr>`;
     });
   });
@@ -6507,24 +6533,26 @@ function printEkycShopwise(){
     const bb=ekyc.blocks.find(b=>b.block===blockName)||{};
     const bpend=Math.max(0,(bb.total_cons||0)-(bb.total_comp||0));
     const bpct=bb.pct||0;
-    // Block header row
-    const bRow=['','⬛ '+blockName,'','',
-      String(bb.total_cons||0), String(bb.total_comp||0), String(bpend),
-      fmtPct(bpct)];
-    if(hasComp) bRow.push('');
-    bRow[0]=String(si++);
+    // Block header row: old % blank, new % shown
+    const bRow=[String(si++), '⬛ '+blockName,'','',
+      String(bb.total_cons||0), String(bb.total_comp||0), String(bpend)];
+    if(hasComp) bRow.push(''); // old % blank for block header
+    bRow.push(fmtPct(bpct));  // current %
+    if(hasComp) bRow.push(''); // Added blank for block header
     tableBody.push({data:bRow, isBlock:true, pct:bpct});
 
     const sorted=sortShopsWithinBlock(blockGroups[blockName]);
     sorted.forEach(r=>{
       const pend=Math.max(0,r.total_cons-r.total_comp);
       const oldR=oldShopMapPrint[r.shopcode];
+      const oldPct=oldR&&oldR.total_cons>0?oldR.total_comp/oldR.total_cons:null;
       const added=oldR?r.total_comp-oldR.total_comp:null;
       const row=[String(si++), '', r.shopcode, r.shop_name,
-        String(r.total_cons), String(r.total_comp), String(pend),
-        fmtPct(r.total_pct)];
+        String(r.total_cons), String(r.total_comp), String(pend)];
+      if(hasComp) row.push(oldPct!==null?fmtPct(oldPct):'—'); // old %
+      row.push(fmtPct(r.total_pct)); // current %
       if(hasComp) row.push(added!==null?(added>0?'+':'')+String(added):'—');
-      tableBody.push({data:row, isBlock:false, pct:r.total_pct, added});
+      tableBody.push({data:row, isBlock:false, pct:r.total_pct, oldPct, added});
     });
   });
 
@@ -6553,13 +6581,15 @@ function printEkycShopwise(){
     return [r,g,b];
   }
 
-  const cols = ['#','Block','Shop Code','Shop Name','Considered','Completed','Pending','%'];
+  const cols = ['#','Block','Shop Code','Shop Name','Considered','Completed','Pending'];
+  if(hasComp) cols.push(ekyc.oldDate+' %');
+  cols.push(ekyc.date+' %');
   if(hasComp) cols.push('Added');
 
   // Column widths (mm) — portrait or landscape
   const cw = hasComp
-    ? [7,35,18,45,17,17,14,14,14]   // landscape: total ~181mm
-    : [7,35,18,45,17,17,14,14];     // portrait: total ~173mm
+    ? [7,32,16,40,14,14,12,12,12,11]  // landscape with 2 date cols + Added
+    : [7,35,18,45,17,17,14,14];       // portrait: total ~173mm
 
   doc.autoTable({
     startY:22,
@@ -6574,27 +6604,38 @@ function printEkycShopwise(){
       const row=tableBody[data.row.index];
       if(!row) return;
       if(row.isBlock){
-        // Blue block header
         data.cell.styles.fillColor=[219,234,254];
         data.cell.styles.fontStyle='bold';
         data.cell.styles.textColor=[30,58,138];
         return;
       }
-      // Colour the % column (index 7)
-      if(data.column.index===7){
+      // Column indices: 0=#, 1=Block, 2=ShopCode, 3=ShopName, 4=Cons, 5=Comp, 6=Pend, 7=old%(if comp) or %,  8=%(if comp), 9=Added(if comp)
+      const pctCol = hasComp ? 8 : 7;
+      const oldPctCol = hasComp ? 7 : -1;
+      const addedCol = hasComp ? 9 : -1;
+      // Colour current % column
+      if(data.column.index===pctCol){
         const [r,g,b]=pctRgb(row.pct);
         data.cell.styles.fillColor=[r,g,b];
         data.cell.styles.textColor=255;
         data.cell.styles.fontStyle='bold';
         data.cell.styles.halign='center';
       }
-      // Colour Added column (index 8) if present
-      if(hasComp && data.column.index===8 && row.added!==null&&row.added!==undefined){
-        data.cell.styles.textColor = row.added>0?[5,150,105]:row.added<0?[220,38,38]:[100,116,139];
+      // Colour old % column
+      if(oldPctCol>=0 && data.column.index===oldPctCol && row.oldPct!=null){
+        const [r,g,b]=pctRgb(row.oldPct);
+        data.cell.styles.fillColor=[r,g,b];
+        data.cell.styles.textColor=255;
         data.cell.styles.fontStyle='bold';
         data.cell.styles.halign='center';
       }
-      // Colour Pending column (index 6) in red for non-zero
+      // Colour Added column
+      if(addedCol>=0 && data.column.index===addedCol && row.added!=null){
+        data.cell.styles.textColor=row.added>0?[5,150,105]:row.added<0?[220,38,38]:[100,116,139];
+        data.cell.styles.fontStyle='bold';
+        data.cell.styles.halign='center';
+      }
+      // Pending in red
       if(data.column.index===6){
         const pend=parseInt(data.cell.raw||0);
         if(pend>0) data.cell.styles.textColor=[220,38,38];
