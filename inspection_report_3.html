@@ -1296,6 +1296,10 @@ document.getElementById('btn-process').addEventListener('click',async ()=>{
     toast('Please upload shop-code-to-block file',true);
     return;
   }
+  // Normalise shopMap: if it's a plain object (old cache format), convert to array
+  if(!Array.isArray(state.shopMap)){
+    state.shopMap = Object.entries(state.shopMap).map(([k,v])=>({'Shop_Code':k,'Block':v}));
+  }
   try{
     processReports();
     toast('Reports generated');
@@ -2063,10 +2067,11 @@ async function fetchMappingSheet(type){
     const cachedPhone = localStorage.getItem(MAPPING_LS_KEY.phone);
     if(cachedPhone){
       const parsed = JSON.parse(cachedPhone);
-      if(parsed.length > 0){
-        state.phoneMap = parsed.map(p=>({phone:p.phone, designation:p.post}));
+      const arr = Array.isArray(parsed) ? parsed : [];
+      if(arr.length > 0){
+        state.phoneMap = arr.map(p=>({phone:p.phone, designation:p.designation||p.post||''}));
         const nameEl = document.getElementById('name-phone');
-        if(nameEl) nameEl.textContent = `✓ Sheet cached (${parsed.length} entries)`;
+        if(nameEl) nameEl.textContent = `✓ Sheet cached (${arr.length} entries)`;
         const st = document.getElementById('fetch-phone-status');
         if(st){ st.textContent='✓ Cached'; st.style.color='#6ee7b7'; }
       }
