@@ -1329,8 +1329,9 @@ function processReports(){
   // 2. Build phone -> {designation, role} lookup
   const phoneLookup = {};
   state.phoneMap.forEach(p=>{
-    const role = classifyRole(p.designation);
-    phoneLookup[String(p.phone)] = {designation:p.designation.trim(),role};
+    const desig = (p.designation||p.post||p.name||'').trim();
+    const role = classifyRole(desig);
+    phoneLookup[String(p.phone)] = {designation:desig,role};
   });
 
   // 3. Build shop -> block lookup
@@ -1348,9 +1349,10 @@ function processReports(){
 
   // initialize block staff counts using known designations
   state.phoneMap.forEach(p=>{
-    if(classifyRole(p.designation)==='Block Staff'){
-      blockStaffInspections[p.designation.trim()] = 0;
-      blockStaffByDate[p.designation.trim()] = {};
+    const desig = (p.designation||p.post||p.name||'').trim();
+    if(classifyRole(desig)==='Block Staff'){
+      blockStaffInspections[desig] = 0;
+      blockStaffByDate[desig] = {};
     }
   });
 
@@ -2027,7 +2029,7 @@ async function fetchMappingSheet(type){
         if(phone && post) parsed.push({phone, post});
       }
       if(parsed.length === 0) throw new Error('No valid rows found');
-      state.phoneMap = parsed.map(p=>({phone:p.phone, post:p.post, name:p.post}));
+      state.phoneMap = parsed.map(p=>({phone:p.phone, designation:p.post}));
       localStorage.setItem(MAPPING_LS_KEY.phone, JSON.stringify(parsed));
       if(nameEl) nameEl.textContent = `✓ Sheet (${parsed.length} entries)`;
       document.getElementById('box-phone')?.classList.add('has-file');
@@ -2062,7 +2064,7 @@ async function fetchMappingSheet(type){
     if(cachedPhone){
       const parsed = JSON.parse(cachedPhone);
       if(parsed.length > 0){
-        state.phoneMap = parsed.map(p=>({phone:p.phone, post:p.post, name:p.post}));
+        state.phoneMap = parsed.map(p=>({phone:p.phone, designation:p.post}));
         const nameEl = document.getElementById('name-phone');
         if(nameEl) nameEl.textContent = `✓ Sheet cached (${parsed.length} entries)`;
         const st = document.getElementById('fetch-phone-status');
