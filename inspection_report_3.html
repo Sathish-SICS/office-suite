@@ -609,26 +609,33 @@ document.addEventListener('keydown', e=>{
       </label>
       <input type="file" id="file-mis" accept=".xlsx,.xls">
     </div>
-    <div class="upload-box has-file" id="box-phone">
+    <div class="upload-box has-file" id="box-phone" style="position:relative">
       <label for="file-phone">
         <div class="title">📞 Phone → Post Mapping</div>
         <div class="filename" id="name-phone">✓ Built-in (24 entries)</div>
         <div class="hint">Click to override with new file</div>
       </label>
       <input type="file" id="file-phone" accept=".xlsx,.xls">
+      <button class="btn-tiny" id="btn-fetch-phone-map" onclick="event.stopPropagation();fetchMappingSheet('phone')" style="margin-top:6px;font-size:11px;width:100%;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.4);color:#93c5fd">🔄 Fetch from Google Sheet</button>
+      <div id="fetch-phone-status" style="font-size:10px;color:var(--muted);margin-top:3px;min-height:14px"></div>
     </div>
-    <div class="upload-box has-file" id="box-shop">
+    <div class="upload-box has-file" id="box-shop" style="position:relative">
       <label for="file-shop">
         <div class="title">🏪 Shop Code → Block</div>
         <div class="filename" id="name-shop">✓ Built-in (1628 entries)</div>
         <div class="hint">Click to override with new file</div>
       </label>
       <input type="file" id="file-shop" accept=".xlsx,.xls">
+      <button class="btn-tiny" id="btn-fetch-shop-map" onclick="event.stopPropagation();fetchMappingSheet('shop')" style="margin-top:6px;font-size:11px;width:100%;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.4);color:#93c5fd">🔄 Fetch from Google Sheet</button>
+      <div id="fetch-shop-status" style="font-size:10px;color:var(--muted);margin-top:3px;min-height:14px"></div>
     </div>
   </div>
   <div class="action-bar">
     <button class="btn" id="btn-process">⚡ Generate Reports</button>
     <button class="btn secondary" id="btn-reset">🔄 Reset</button>
+    <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);cursor:pointer;margin-left:8px">
+      <input type="checkbox" id="chk-summary-row" style="cursor:pointer"> Include summary row in DR/JR Excel
+    </label>
   </div>
 
   <!-- Squad Shop Deduction -->
@@ -1977,9 +1984,210 @@ function renderDetail(title, list, cardId, bg1, bg2){
     <div class="card-actions" style="border-radius:0 0 10px 10px;border:1px solid #cbd5e1;border-top:0">
       <button class="icon-btn" onclick="copyCard('${cardId}')">📋 Copy as image</button>
       <button class="icon-btn" onclick="downloadCard('${cardId}','${title.replace(' ','_')}_${getMonthLabel().replace(' ','_')}')">💾 Save PNG</button>
+      <button class="icon-btn" onclick="downloadDetailExcel('${cardId}')">📥 Excel</button>
+      <button class="icon-btn" onclick="printDetailPdf('${cardId}')">🖨️ Print / PDF</button>
     </div>
   </div>
   `;
+}
+
+// ============================================================
+// MAPPING SHEET FETCH (Phone→Post & Shop→Block from Google Sheet)
+// ============================================================
+const MAPPING_BASE_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSpzRLTLAANlwKgjRmRPdyTN2dElLuvKp-VEjgE1FTwFTsoQxeOxt46q9qUja4fDcMJ5t6P8k0zl2Wk/pub';
+const MAPPING_GID = { phone: '152457480', shop: '1361470057' };
+const MAPPING_LS_KEY = { phone: 'insp_phone_map_cache_v1', shop: 'insp_shop_map_cache_v1' };
+
+async function fetchMappingSheet(type){
+  const statusEl = document.getElementById(`fetch-${type}-status`);
+  const nameEl   = document.getElementById(`name-${type}`);
+  statusEl.textContent = '🔄 Fetching...';
+  statusEl.style.color = 'var(--muted)';
+  const url = `${MAPPING_BASE_URL}?gid=${MAPPING_GID[type]}&single=true&output=csv&_=${Date.now()}`;
+  try{
+    const resp = await safeFetch(url);
+    if(!resp.ok) throw new Error('HTTP '+resp.status);
+    const txt = await resp.text();
+    if(txt.startsWith('<!DOCTYPE')||txt.startsWith('<html')) throw new Error('Not a CSV response');
+    const rows = parseCSV(txt);
+    if(rows.length < 2) throw new Error('Empty data');
+    if(type === 'phone'){
+      // Expected columns: Phone | Post/Name
+      const parsed = [];
+      for(let i=1;i<rows.length;i++){
+        const phone = String(rows[i][0]||'').trim().replace(/\D/g,'');
+        const post  = String(rows[i][1]||'').trim();
+        if(phone && post) parsed.push({phone, post});
+      }
+      if(parsed.length === 0) throw new Error('No valid rows found');
+      state.phoneMap = parsed.map(p=>({phone:p.phone, post:p.post, name:p.post}));
+      localStorage.setItem(MAPPING_LS_KEY.phone, JSON.stringify(parsed));
+      nameEl.textContent = `✓ Sheet (${parsed.length} entries)`;
+      document.getElementById('box-phone').classList.add('has-file');
+      statusEl.textContent = `✓ Loaded ${parsed.length} entries`;
+      statusEl.style.color = '#34d399';
+    } else {
+      // Expected columns: Shop Code | Block
+      const parsed = {};
+      for(let i=1;i<rows.length;i++){
+        const code  = String(rows[i][0]||'').trim().toUpperCase();
+        const block = String(rows[i][1]||'').trim();
+        if(code && block) parsed[code] = block;
+      }
+      const count = Object.keys(parsed).length;
+      if(count === 0) throw new Error('No valid rows found');
+      state.shopMap = parsed;
+      localStorage.setItem(MAPPING_LS_KEY.shop, JSON.stringify(parsed));
+      nameEl.textContent = `✓ Sheet (${count} entries)`;
+      document.getElementById('box-shop').classList.add('has-file');
+      statusEl.textContent = `✓ Loaded ${count} entries`;
+      statusEl.style.color = '#34d399';
+    }
+    toast(`${type==='phone'?'Phone→Post':'Shop→Block'} loaded from sheet`);
+  } catch(err){
+    statusEl.textContent = '✗ '+err.message;
+    statusEl.style.color = '#fca5a5';
+    toast('Fetch failed: '+err.message, true);
+  }
+}
+
+// Load cached mapping on startup
+(function loadCachedMappings(){
+  try{
+    const cachedPhone = localStorage.getItem(MAPPING_LS_KEY.phone);
+    if(cachedPhone){
+      const parsed = JSON.parse(cachedPhone);
+      if(parsed.length > 0){
+        state.phoneMap = parsed.map(p=>({phone:p.phone, post:p.post, name:p.post}));
+        const nameEl = document.getElementById('name-phone');
+        if(nameEl) nameEl.textContent = `✓ Sheet cached (${parsed.length} entries)`;
+        const st = document.getElementById('fetch-phone-status');
+        if(st){ st.textContent='✓ Cached'; st.style.color='#6ee7b7'; }
+      }
+    }
+  } catch(e){}
+  try{
+    const cachedShop = localStorage.getItem(MAPPING_LS_KEY.shop);
+    if(cachedShop){
+      const parsed = JSON.parse(cachedShop);
+      const count = Object.keys(parsed).length;
+      if(count > 0){
+        state.shopMap = parsed;
+        const nameEl = document.getElementById('name-shop');
+        if(nameEl) nameEl.textContent = `✓ Sheet cached (${count} entries)`;
+        const st = document.getElementById('fetch-shop-status');
+        if(st){ st.textContent='✓ Cached'; st.style.color='#6ee7b7'; }
+      }
+    }
+  } catch(e){}
+})();
+
+// ============================================================
+// DR/JR DETAIL — Excel & PDF/Print export
+// ============================================================
+function downloadDetailExcel(cardId){
+  // Find which list to use
+  const r = state.results;
+  if(!r) { toast('No report generated',true); return; }
+  const isDR = cardId === 'card-dr';
+  const list = isDR ? r.drInspections : r.jrInspections;
+  const title = isDR ? r.drInspections[0]?.designation || 'Deputy Registrar' : r.jrInspections[0]?.designation || 'Joint Registrar';
+  const includeSummary = document.getElementById('chk-summary-row')?.checked;
+
+  const ws_data = [
+    ['#', 'FPS Code', 'Block', 'FPS Name', 'Date of Inspection', 'Remarks']
+  ];
+  list.forEach((d,i) => {
+    ws_data.push([i+1, d.fpsCode, d.block, d.fpsName, fmtDate(d.date), '']);
+  });
+  if(includeSummary){
+    ws_data.push(['', '', '', '', 'Total Inspections', list.length]);
+  }
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(ws_data);
+  ws['!cols'] = [{wch:5},{wch:14},{wch:18},{wch:30},{wch:18},{wch:20}];
+  XLSX.utils.book_append_sheet(wb, ws, title.substring(0,28));
+  const month = getMonthLabel().replace(' ','_');
+  XLSX.writeFile(wb, `${isDR?'DR':'JR'}_Inspections_${month}.xlsx`);
+  toast('Excel downloaded');
+}
+
+function printDetailPdf(cardId){
+  const r = state.results;
+  if(!r) { toast('No report generated',true); return; }
+  const isDR = cardId === 'card-dr';
+  const list = isDR ? r.drInspections : r.jrInspections;
+  const desig = list[0]?.designation || (isDR ? 'துணைப்பதிவாளர் (பொவிதி)' : 'இணைப்பதிவாளர்');
+  const month = getMonthLabel();
+  const includeSummary = document.getElementById('chk-summary-row')?.checked;
+  const ROWS_PER_PAGE = 28;
+
+  let tableRows = list.map((d,i) => `
+    <tr>
+      <td style="text-align:center">${i+1}</td>
+      <td>${d.fpsCode}</td>
+      <td>${d.block}</td>
+      <td>${d.fpsName||''}</td>
+      <td>${fmtDate(d.date)}</td>
+      <td></td>
+    </tr>`).join('');
+
+  if(includeSummary){
+    tableRows += `<tr style="font-weight:700;background:#f1f5f9">
+      <td colspan="4" style="text-align:right">மொத்தம்:</td>
+      <td colspan="2">${list.length} கடைகள்</td>
+    </tr>`;
+  }
+
+  // Split into pages of ROWS_PER_PAGE
+  const pages = [];
+  for(let i=0;i<list.length;i+=ROWS_PER_PAGE) pages.push(list.slice(i,i+ROWS_PER_PAGE));
+  if(pages.length===0) pages.push([]);
+
+  const pageHtml = pages.map((pageRows, pi) => `
+    <div class="page">
+      <div class="header">
+        <div style="font-size:14px;font-weight:700">${desig} அவர்களின் ${month} மாதத்திற்கான ஆய்வு அறிக்கை விவரம்</div>
+        <div style="font-size:11px;color:#64748b">Page ${pi+1} of ${pages.length} | மொத்தம்: ${list.length}</div>
+      </div>
+      <table>
+        <thead>
+          <tr><th style="width:40px">#</th><th style="width:90px">FPS Code</th><th style="width:110px">Block</th><th>FPS Name</th><th style="width:100px">Date</th><th style="width:80px">Remarks</th></tr>
+        </thead>
+        <tbody>
+          ${pageRows.map((d,i2)=>`<tr>
+            <td style="text-align:center">${pi*ROWS_PER_PAGE+i2+1}</td>
+            <td>${d.fpsCode}</td>
+            <td>${d.block}</td>
+            <td>${d.fpsName||''}</td>
+            <td>${fmtDate(d.date)}</td>
+            <td></td>
+          </tr>`).join('')}
+          ${pi===pages.length-1 && includeSummary ? `<tr style="font-weight:700;background:#f1f5f9"><td colspan="4" style="text-align:right">மொத்தம்:</td><td colspan="2">${list.length} கடைகள்</td></tr>` : ''}
+        </tbody>
+      </table>
+    </div>
+  `).join('');
+
+  const printWin = window.open('','_blank','width=800,height=600');
+  printWin.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <title>${isDR?'DR':'JR'} Inspection Report</title>
+  <style>
+    @page { size: A4; margin: 15mm; }
+    body { font-family: 'Latha','Arial Unicode MS',Arial,sans-serif; font-size:12px; color:#1e293b; margin:0; }
+    .page { page-break-after: always; }
+    .page:last-child { page-break-after: avoid; }
+    .header { margin-bottom: 10px; border-bottom: 2px solid #1e3a8a; padding-bottom: 6px; }
+    table { width:100%; border-collapse:collapse; }
+    th { background:#1e3a8a; color:white; padding:6px 5px; border:1px solid #1e40af; font-size:11px; }
+    td { padding:5px 4px; border:1px solid #e2e8f0; font-size:11px; }
+    tr:nth-child(even) { background:#f8fafc; }
+  </style></head><body>
+  ${pageHtml}
+  <script>window.onload=()=>{window.print();}<\/script>
+  </body></html>`);
+  printWin.document.close();
 }
 
 // ============================================================
@@ -6005,7 +6213,7 @@ const BUILT_IN_SHOP_BLOCK = {
 "05KP198PY":"Kilpennathur"
 };
 
-const ekyc = { data:null, oldData:null, date:'', oldDate:'', customShopMap:null };
+const ekyc = { data:null, oldData:null, date:'', oldDate:'', customShopMap:null, filter:{active:false} };
 
 function ekycGetBlock(code){
   const c = String(code||'').trim();
@@ -6085,7 +6293,7 @@ function ekycSetup(){
 }
 
 function resetEkyc(){
-  ekyc.data=null; ekyc.oldData=null; ekyc.date=''; ekyc.oldDate='';
+  ekyc.data=null; ekyc.oldData=null; ekyc.date=''; ekyc.oldDate=''; ekyc.filter={active:false};
   ['name-ekyc','name-ekyc-old'].forEach(id=>document.getElementById(id).textContent='Click or drag to upload');
   ['ekyc-load-status','ekyc-old-status'].forEach(id=>document.getElementById(id).textContent='');
   document.getElementById('ekyc-action-bar').style.display='none';
@@ -6224,6 +6432,39 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
     <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
       ${catDefs.map(c=>`<button class="btn-tiny ekyc-cat-btn" id="ekyc-tab-${c.k}" onclick="switchEkycTab('${c.k}')">${c.label}</button>`).join('')}
       <button class="btn-tiny ekyc-cat-btn" id="ekyc-tab-shop" onclick="switchEkycTab('shop')">🏪 Shop-wise</button>
+    </div>
+    <!-- Filter Panel -->
+    <div id="ekyc-filter-panel" style="background:rgba(15,23,42,.5);border:1px solid rgba(99,102,241,.35);border-radius:8px;padding:10px 14px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+        <span style="font-size:12px;font-weight:700;color:#a5b4fc">🔍 வடிகட்டி (Filter)</span>
+        <span style="font-size:11px;color:var(--muted)">Block abstract and Shop-wise tabs</span>
+        <button class="btn-tiny" id="btn-ekyc-clear-filter" onclick="ekycClearFilter()" style="margin-left:auto;font-size:11px;background:rgba(239,68,68,.15);border-color:rgba(239,68,68,.4);color:#fca5a5">✕ Clear</button>
+      </div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
+        <div>
+          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">% Filter</label>
+          <div style="display:flex;align-items:center;gap:6px">
+            <select id="ekyc-pct-op" style="background:rgba(15,23,42,.7);border:1px solid var(--border);color:var(--ink);padding:5px 8px;border-radius:5px;font-size:12px">
+              <option value="lt">Below (&lt;)</option>
+              <option value="gte">Above or equal (≥)</option>
+            </select>
+            <input type="number" id="ekyc-pct-val" min="0" max="100" placeholder="e.g. 90" style="width:70px;background:rgba(15,23,42,.7);border:1px solid var(--border);color:var(--ink);padding:5px 8px;border-radius:5px;font-size:12px">
+            <span style="font-size:12px;color:var(--muted)">%</span>
+          </div>
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Pending Filter</label>
+          <div style="display:flex;align-items:center;gap:6px">
+            <select id="ekyc-pend-op" style="background:rgba(15,23,42,.7);border:1px solid var(--border);color:var(--ink);padding:5px 8px;border-radius:5px;font-size:12px">
+              <option value="gt">Above (&gt;)</option>
+              <option value="lte">Below or equal (≤)</option>
+            </select>
+            <input type="number" id="ekyc-pend-val" min="0" placeholder="e.g. 100" style="width:70px;background:rgba(15,23,42,.7);border:1px solid var(--border);color:var(--ink);padding:5px 8px;border-radius:5px;font-size:12px">
+          </div>
+        </div>
+        <button class="btn" onclick="ekycApplyFilter()" style="font-size:12px;padding:7px 18px">Apply Filter</button>
+      </div>
+      <div id="ekyc-filter-status" style="font-size:11px;color:#fcd34d;margin-top:6px;min-height:16px"></div>
     </div>`;
 
   // Build block tables for each category
@@ -6234,7 +6475,7 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
     const catSortKey = 'ekyc_blk_sort_'+cat.k;
     if(!ekyc[catSortKey]) ekyc[catSortKey] = hasComp ? {col:'added',dir:'desc'} : {col:'pct',dir:'asc'};
 
-    const sortedB=blocks.slice().sort((a,b)=>{
+    const sortedB=blocks.slice().filter(b=>!ekyc.filter||!ekyc.filter.active||ekycBlockPassesFilter(cat.consF(b),cat.compF(b))).sort((a,b)=>{
       const sk=ekyc['ekyc_blk_sort_'+cat.k]||{col:hasComp?'added':'pct',dir:hasComp?'desc':'asc'};
       const oa=oldMap[a.block],ob2=oldMap[b.block];
       if(sk.col==='added'&&hasComp){const aa=cat.compF(a)-(oa?cat.compF(oa):0),ab2=cat.compF(b)-(ob2?cat.compF(ob2):0);return sk.dir==='desc'?ab2-aa:aa-ab2;}
@@ -6258,6 +6499,7 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
           ${hasComp?`<button class="btn-tiny" id="blk-sort-added-${cat.k}" onclick="ekycBlockSetSort('${cat.k}','added')" style="${ekyc[catSortKey].col==='added'?'background:#059669;color:white':''}">Added ${ekyc[catSortKey].col==='added'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</button>`:''}
           <button class="btn-tiny" onclick="copyEkycTableImg('ekyc-block-tbl-${cat.k}-wrap')">📸 Copy</button>
           <button class="btn-tiny" onclick="downloadEkycExcel()">📥 Excel</button>
+          <button class="btn-tiny" onclick="printEkycBlockAbstract('${cat.k}')">🖨️ Print</button>
         </div>
       </div>
       <div style="overflow-x:auto;background:white;border-radius:8px;border:1px solid #cbd5e1;color:#1e293b;margin-bottom:14px" id="ekyc-block-tbl-${cat.k}-wrap">
@@ -6343,7 +6585,8 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
         <button class="btn-tiny" id="sort-btn-pct" onclick="ekycShopSetSort('pct')" style="${ekyc.shopSort.col==='pct'?'background:#1e3a8a;color:white;':''}">% ${ekyc.shopSort.col==='pct'?(ekyc.shopSort.dir==='desc'?'▼':'▲'):'⇅'}</button>
         ${hasComp?`<button class="btn-tiny" id="sort-btn-added" onclick="ekycShopSetSort('added')" style="${ekyc.shopSort.col==='added'?'background:#059669;color:white;':''}">Added ${ekyc.shopSort.col==='added'?(ekyc.shopSort.dir==='desc'?'▼':'▲'):'⇅'}</button>`:''}
         <button class="btn-tiny" onclick="copyEkycTableImg('ekyc-shop-wrap')">📸 Copy</button>
-        <button class="btn-tiny" onclick="printEkycShopwise()">📄 PDF</button>
+        <button class="btn-tiny" onclick="downloadEkycShopExcel()">📥 Excel</button>
+        <button class="btn-tiny" onclick="printEkycShopwise()">🖨️ Print / PDF</button>
       </div>
     </div>
     <div style="overflow-x:auto;background:white;border-radius:8px;border:1px solid #cbd5e1;color:#1e293b;max-height:500px;overflow-y:auto" id="ekyc-shop-wrap">
@@ -6492,7 +6735,11 @@ function renderEkycShopTable(rows){
 
 function filterEkycShops(){
   const sel=document.getElementById('ekyc-block-filter')?.value||'';
-  const rows=sel?ekyc.processedRows2.filter(r=>r.block===sel):ekyc.processedRows2;
+  let rows=sel?ekyc.processedRows2.filter(r=>r.block===sel):ekyc.processedRows2;
+  // Apply numeric filters
+  if(ekyc.filter && ekyc.filter.active){
+    rows = rows.filter(r=>ekycBlockPassesFilter(r.total_cons||0, r.total_comp||0));
+  }
   renderEkycShopTable(rows);
   // Update sort button styles after re-render
   ['pend','pct','added'].forEach(col=>{
@@ -7326,6 +7573,241 @@ async function copyReminderMsg(){
 
 // Init
 initReminder();
+
+// ============================================================
+// e-KYC FILTER LOGIC
+// ============================================================
+ekyc.filter = { pctOp: null, pctVal: null, pendOp: null, pendVal: null, active: false };
+
+function ekycApplyFilter(){
+  const pctValRaw = document.getElementById('ekyc-pct-val')?.value.trim();
+  const pendValRaw = document.getElementById('ekyc-pend-val')?.value.trim();
+  const pctOp  = document.getElementById('ekyc-pct-op')?.value || 'lt';
+  const pendOp = document.getElementById('ekyc-pend-op')?.value || 'gt';
+
+  const hasPct  = pctValRaw !== '' && !isNaN(parseFloat(pctValRaw));
+  const hasPend = pendValRaw !== '' && !isNaN(parseFloat(pendValRaw));
+
+  if(!hasPct && !hasPend){ toast('Enter at least one filter value', true); return; }
+
+  ekyc.filter = {
+    pctOp, pctVal: hasPct  ? parseFloat(pctValRaw)  : null,
+    pendOp, pendVal: hasPend ? parseFloat(pendValRaw) : null,
+    active: true
+  };
+
+  // Re-render with filter applied
+  if(ekyc.processedRows2 && ekyc.blocks){
+    const oldRows = ekyc.oldData ? parseEkycRows(ekyc.oldData) : null;
+    renderEkycResults(ekyc.processedRows2, ekyc.blocks, oldRows, ekyc.oldBlocks);
+  }
+  filterEkycShops();
+
+  // Update status label
+  const parts = [];
+  if(hasPct)  parts.push(`% ${pctOp==='lt'?'<':'≥'} ${pctValRaw}%`);
+  if(hasPend) parts.push(`Pending ${pendOp==='gt'?'>':'≤'} ${pendValRaw}`);
+  const statusEl = document.getElementById('ekyc-filter-status');
+  if(statusEl) statusEl.textContent = `🔎 Active filter: ${parts.join(' AND ')}`;
+  toast('Filter applied');
+}
+
+function ekycClearFilter(){
+  ekyc.filter = { active: false };
+  const pv = document.getElementById('ekyc-pct-val');
+  const pnd = document.getElementById('ekyc-pend-val');
+  if(pv) pv.value = '';
+  if(pnd) pnd.value = '';
+  const statusEl = document.getElementById('ekyc-filter-status');
+  if(statusEl) statusEl.textContent = '';
+  if(ekyc.processedRows2 && ekyc.blocks){
+    const oldRows = ekyc.oldData ? parseEkycRows(ekyc.oldData) : null;
+    renderEkycResults(ekyc.processedRows2, ekyc.blocks, oldRows, ekyc.oldBlocks);
+  }
+  filterEkycShops();
+  toast('Filter cleared');
+}
+
+function ekycBlockPassesFilter(cons, comp){
+  if(!ekyc.filter.active) return true;
+  const pend = Math.max(0, cons - comp);
+  const pct  = cons > 0 ? (comp / cons * 100) : 0;
+  const f = ekyc.filter;
+  if(f.pctVal !== null){
+    const pass = f.pctOp === 'lt' ? pct < f.pctVal : pct >= f.pctVal;
+    if(!pass) return false;
+  }
+  if(f.pendVal !== null){
+    const pass = f.pendOp === 'gt' ? pend > f.pendVal : pend <= f.pendVal;
+    if(!pass) return false;
+  }
+  return true;
+}
+
+// ============================================================
+// e-KYC Shop-wise Excel Download
+// ============================================================
+function downloadEkycShopExcel(){
+  if(!ekyc.processedRows2){ toast('Generate report first',true); return; }
+  const hasComp = !!ekyc.oldData;
+  const blockFilter = document.getElementById('ekyc-block-filter')?.value || '';
+  let rows = blockFilter ? ekyc.processedRows2.filter(r=>r.block===blockFilter) : ekyc.processedRows2.slice();
+
+  // Apply filter
+  if(ekyc.filter.active){
+    rows = rows.filter(r=>{
+      const cons = r.total_cons||0, comp = r.total_comp||0;
+      return ekycBlockPassesFilter(cons, comp);
+    });
+  }
+
+  // Sort same as current shop sort
+  const sk = ekyc.shopSort || {col:'pend',dir:'desc'};
+  const oldMap = {};
+  if(hasComp && ekyc.oldData){
+    parseEkycRows(ekyc.oldData).forEach(r=>{ if(!oldMap[r.shopCode]) oldMap[r.shopCode]=r; });
+  }
+  rows.sort((a,b)=>{
+    if(sk.col==='pend'){return sk.dir==='desc'?(b.total_pend||0)-(a.total_pend||0):(a.total_pend||0)-(b.total_pend||0);}
+    if(sk.col==='pct'){const pa=a.total_cons>0?a.total_comp/a.total_cons:0,pb=b.total_cons>0?b.total_comp/b.total_cons:0;return sk.dir==='desc'?pb-pa:pa-pb;}
+    if(sk.col==='added'&&hasComp){const oa=oldMap[a.shopCode],ob=oldMap[b.shopCode];const aa=(a.total_comp||0)-(oa?oa.total_comp||0:0),ab=(b.total_comp||0)-(ob?ob.total_comp||0:0);return sk.dir==='desc'?ab-aa:aa-ab;}
+    return 0;
+  });
+
+  const headers = ['#','Shop Code','Block','FPS Name','Considered','Completed','Pending','% Done'];
+  if(hasComp) headers.push('Old %', 'Added');
+  const data = [headers];
+  rows.forEach((r,i)=>{
+    const cons=r.total_cons||0, comp=r.total_comp||0, pend=Math.max(0,cons-comp);
+    const pct = cons>0 ? (comp/cons*100).toFixed(1)+'%' : '0%';
+    const row = [i+1, r.shopCode, r.block||'', r.fpsName||'', cons, comp, pend, pct];
+    if(hasComp){
+      const or = oldMap[r.shopCode];
+      const oPct = or&&or.total_cons>0?(or.total_comp/or.total_cons*100).toFixed(1)+'%':'—';
+      const added = or!==undefined?comp-(or.total_comp||0):null;
+      row.push(oPct, added!==null?(added>0?'+':'')+added:'—');
+    }
+    data.push(row);
+  });
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  ws['!cols'] = [5,12,18,30,11,11,11,10,10,10].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb, ws, 'Shop-wise');
+  XLSX.writeFile(wb, `ekyc_shopwise_${(ekyc.date||'').replace(/\./g,'')}.xlsx`);
+  toast('Shop-wise Excel downloaded');
+}
+
+// ============================================================
+// e-KYC Block Abstract Print / PDF
+// ============================================================
+function printEkycBlockAbstract(catK){
+  if(!ekyc.blocks){ toast('Generate report first',true); return; }
+  const hasComp = !!ekyc.oldBlocks;
+  const catDefs = [
+    {k:'all',label:'ALL (AAY+PHH+NPHH)',consF:b=>b.total_cons,compF:b=>b.total_comp,pendF:b=>Math.max(0,b.total_cons-b.total_comp)},
+    {k:'aay',label:'AAY',consF:b=>b.aay_cons,compF:b=>b.aay_comp,pendF:b=>Math.max(0,b.aay_cons-b.aay_comp)},
+    {k:'phh',label:'PHH',consF:b=>b.phh_cons,compF:b=>b.phh_comp,pendF:b=>Math.max(0,b.phh_cons-b.phh_comp)},
+    {k:'nph',label:'NPHH',consF:b=>b.nph_cons,compF:b=>b.nph_comp,pendF:b=>Math.max(0,b.nph_cons-b.nph_comp)},
+  ];
+  const cat = catDefs.find(c=>c.k===catK) || catDefs[0];
+  const oldMap = {};
+  if(hasComp && ekyc.oldBlocks) ekyc.oldBlocks.forEach(b=>oldMap[b.block]=b);
+
+  let blocks = ekyc.blocks.slice();
+  // Apply filter
+  if(ekyc.filter.active){
+    blocks = blocks.filter(b=>ekycBlockPassesFilter(cat.consF(b), cat.compF(b)));
+  }
+  const sk = ekyc['ekyc_blk_sort_'+catK] || {col:'pct',dir:'asc'};
+  blocks.sort((a,b2)=>{
+    const oa=oldMap[a.block],ob=oldMap[b2.block];
+    if(sk.col==='added'&&hasComp){const aa=cat.compF(a)-(oa?cat.compF(oa):0),ab=cat.compF(b2)-(ob?cat.compF(ob):0);return sk.dir==='desc'?ab-aa:aa-ab;}
+    if(sk.col==='pend'){const pa=cat.pendF(a),pb=cat.pendF(b2);return sk.dir==='desc'?pb-pa:pa-pb;}
+    const pa=cat.consF(a)>0?cat.compF(a)/cat.consF(a):0,pb=cat.consF(b2)>0?cat.compF(b2)/cat.consF(b2):0;
+    return sk.dir==='desc'?pb-pa:pa-pb;
+  });
+
+  const filterNote = ekyc.filter.active ? (() => {
+    const parts=[];
+    if(ekyc.filter.pctVal!==null) parts.push(`% ${ekyc.filter.pctOp==='lt'?'<':'≥'} ${ekyc.filter.pctVal}%`);
+    if(ekyc.filter.pendVal!==null) parts.push(`Pending ${ekyc.filter.pendOp==='gt'?'>':'≤'} ${ekyc.filter.pendVal}`);
+    return `Filter: ${parts.join(' AND ')} — ${blocks.length} blocks shown`;
+  })() : '';
+
+  const rows = blocks.map((b,i)=>{
+    const cons=cat.consF(b),comp=cat.compF(b),pend=cat.pendF(b),pct=cons>0?comp/cons:0;
+    const ob=oldMap[b.block];
+    const oldPct=ob&&cat.consF(ob)>0?cat.compF(ob)/cat.consF(ob):null;
+    const added=ob!==undefined?comp-(ob?cat.compF(ob):0):null;
+    const pctBg=pct>=0.9?'#d1fae5':pct>=0.8?'#fef3c7':'#fee2e2';
+    return `<tr>
+      <td style="text-align:center">${i+1}</td>
+      <td>${b.block}</td>
+      <td style="text-align:center">${fmtN(cons)}</td>
+      <td style="text-align:center">${fmtN(comp)}</td>
+      <td style="text-align:center;color:#dc2626;font-weight:600">${fmtN(pend)}</td>
+      ${hasComp&&oldPct!==null?`<td style="text-align:center;background:#ede9fe">${(oldPct*100).toFixed(1)}%</td>`:''}
+      <td style="text-align:center;background:${pctBg};font-weight:700">${(pct*100).toFixed(1)}%</td>
+      ${hasComp?`<td style="text-align:center;font-weight:700;color:${added>0?'#059669':added<0?'#dc2626':'#64748b'}">${added!==null?(added>0?'+':'')+fmtN(added):'—'}</td>`:''}
+    </tr>`;
+  }).join('');
+
+  const totCons=blocks.reduce((s,b)=>s+cat.consF(b),0);
+  const totComp=blocks.reduce((s,b)=>s+cat.compF(b),0);
+  const totPend=blocks.reduce((s,b)=>s+cat.pendF(b),0);
+  const totPct=totCons>0?totComp/totCons:0;
+
+  const printWin = window.open('','_blank','width=800,height=600');
+  printWin.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <title>e-KYC Block Abstract — ${cat.label}</title>
+  <style>
+    @page { size: A4; margin: 15mm; }
+    body { font-family: 'Latha','Arial Unicode MS',Arial,sans-serif; font-size:12px; color:#1e293b; margin:0; }
+    .header { margin-bottom:10px; border-bottom:2px solid #1e3a8a; padding-bottom:6px; }
+    table { width:100%; border-collapse:collapse; }
+    th { background:#1e3a8a; color:white; padding:6px 5px; border:1px solid #1e40af; font-size:11px; text-align:center; }
+    td { padding:5px 6px; border:1px solid #e2e8f0; font-size:11px; }
+    tr:nth-child(even) { background:#f8fafc; }
+    tfoot td { background:#f1f5f9; font-weight:700; }
+    .filter-note { font-size:10px; color:#7c3aed; margin-top:4px; }
+  </style></head><body>
+  <div class="header">
+    <div style="font-size:14px;font-weight:700">e-KYC Block Abstract — ${cat.label} | திருவண்ணாமலை மாவட்டம்</div>
+    <div style="font-size:11px;color:#64748b">As on ${ekyc.date}${hasComp?' | Compared with '+ekyc.oldDate:''}</div>
+    ${filterNote?`<div class="filter-note">⚠ ${filterNote}</div>`:''}
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:35px">#</th>
+        <th style="text-align:left;min-width:130px">Block</th>
+        <th>Considered</th>
+        <th>Completed</th>
+        <th>Pending</th>
+        ${hasComp?`<th style="background:#7c3aed">${ekyc.oldDate} %</th>`:''}
+        <th>${ekyc.date} %</th>
+        ${hasComp?'<th style="background:#065f46;color:white">Added</th>':''}
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+    <tfoot>
+      <tr>
+        <td colspan="2" style="text-align:center">TOTAL</td>
+        <td style="text-align:center">${fmtN(totCons)}</td>
+        <td style="text-align:center">${fmtN(totComp)}</td>
+        <td style="text-align:center;color:#dc2626">${fmtN(totPend)}</td>
+        ${hasComp&&ekyc.oldBlocks?`<td style="text-align:center">${(ekyc.oldBlocks.reduce((s,b)=>s+cat.compF(b),0)/Math.max(1,ekyc.oldBlocks.reduce((s,b)=>s+cat.consF(b),0))*100).toFixed(1)}%</td>`:''}
+        <td style="text-align:center">${(totPct*100).toFixed(1)}%</td>
+        ${hasComp?`<td style="text-align:center">+${fmtN(totComp-(ekyc.oldBlocks?ekyc.oldBlocks.reduce((s,b)=>s+cat.compF(b),0):0))}</td>`:''}
+      </tr>
+    </tfoot>
+  </table>
+  <script>window.onload=()=>{window.print();}<\/script>
+  </body></html>`);
+  printWin.document.close();
+}
+
 
 
 
