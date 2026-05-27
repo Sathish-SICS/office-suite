@@ -689,7 +689,8 @@ document.addEventListener('keydown', e=>{
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <input type="text" id="insp-sq-gsheet-url"
           placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=csv"
-          style="flex:1;min-width:240px;background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:8px 12px;border-radius:6px;font-size:12px">
+          style="flex:1;min-width:240px;background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:8px 12px;border-radius:6px;font-size:12px"
+          oninput="localStorage.setItem('squad_insp_url_v1',this.value.trim())">
         <button class="btn secondary" id="btn-fetch-squad-sheet" style="font-size:12px;padding:8px 14px">🔄 Fetch</button>
       </div>
       <div id="insp-sq-gsheet-status" style="font-size:11px;margin-top:4px;color:var(--muted)"></div>
@@ -1858,6 +1859,13 @@ function openSquadChecklist(){
 
 // ── SQUAD SOURCE UI EVENTS ─────────────────────────────────────────────────
 function setupSquadSourceUI(){
+  // Restore saved squad GSheet URL
+  const savedSquadUrl = localStorage.getItem('squad_insp_url_v1');
+  if(savedSquadUrl){
+    const inp = document.getElementById('insp-sq-gsheet-url');
+    if(inp) inp.value = savedSquadUrl;
+  }
+
   // Radio toggle
   document.querySelectorAll('input[name="insp-squad-src"]').forEach(r=>{
     r.addEventListener('change', e=>{
@@ -2001,20 +2009,19 @@ const MAPPING_LS_KEY = { phone: 'insp_phone_map_cache_v1', shop: 'insp_shop_map_
 async function fetchMappingSheet(type){
   const statusEl = document.getElementById(`fetch-${type}-status`);
   const nameEl   = document.getElementById(`name-${type}`);
-  statusEl.textContent = '🔄 Fetching...';
-  statusEl.style.color = 'var(--muted)';
+  if(statusEl){ statusEl.textContent = '🔄 Fetching...'; statusEl.style.color = 'var(--muted)'; }
   const url = `${MAPPING_BASE_URL}?gid=${MAPPING_GID[type]}&single=true&output=csv&_=${Date.now()}`;
   try{
     const resp = await safeFetch(url);
-    if(!resp.ok) throw new Error('HTTP '+resp.status);
+    if(!resp || !resp.ok) throw new Error('HTTP '+(resp?resp.status:'no response'));
     const txt = await resp.text();
-    if(txt.startsWith('<!DOCTYPE')||txt.startsWith('<html')) throw new Error('Not a CSV response');
+    if(!txt || txt.startsWith('<!DOCTYPE')||txt.startsWith('<html')) throw new Error('Not a CSV response');
     const rows = parseCSV(txt);
-    if(rows.length < 2) throw new Error('Empty data');
+    if(!rows || rows.length < 2) throw new Error('Empty data');
     if(type === 'phone'){
-      // Expected columns: Phone | Post/Name
       const parsed = [];
       for(let i=1;i<rows.length;i++){
+        if(!rows[i]) continue;
         const phone = String(rows[i][0]||'').trim().replace(/\D/g,'');
         const post  = String(rows[i][1]||'').trim();
         if(phone && post) parsed.push({phone, post});
@@ -2022,14 +2029,13 @@ async function fetchMappingSheet(type){
       if(parsed.length === 0) throw new Error('No valid rows found');
       state.phoneMap = parsed.map(p=>({phone:p.phone, post:p.post, name:p.post}));
       localStorage.setItem(MAPPING_LS_KEY.phone, JSON.stringify(parsed));
-      nameEl.textContent = `✓ Sheet (${parsed.length} entries)`;
-      document.getElementById('box-phone').classList.add('has-file');
-      statusEl.textContent = `✓ Loaded ${parsed.length} entries`;
-      statusEl.style.color = '#34d399';
+      if(nameEl) nameEl.textContent = `✓ Sheet (${parsed.length} entries)`;
+      document.getElementById('box-phone')?.classList.add('has-file');
+      if(statusEl){ statusEl.textContent = `✓ Loaded ${parsed.length} entries`; statusEl.style.color = '#34d399'; }
     } else {
-      // Expected columns: Shop Code | Block
       const parsed = {};
       for(let i=1;i<rows.length;i++){
+        if(!rows[i]) continue;
         const code  = String(rows[i][0]||'').trim().toUpperCase();
         const block = String(rows[i][1]||'').trim();
         if(code && block) parsed[code] = block;
@@ -2038,15 +2044,13 @@ async function fetchMappingSheet(type){
       if(count === 0) throw new Error('No valid rows found');
       state.shopMap = parsed;
       localStorage.setItem(MAPPING_LS_KEY.shop, JSON.stringify(parsed));
-      nameEl.textContent = `✓ Sheet (${count} entries)`;
-      document.getElementById('box-shop').classList.add('has-file');
-      statusEl.textContent = `✓ Loaded ${count} entries`;
-      statusEl.style.color = '#34d399';
+      if(nameEl) nameEl.textContent = `✓ Sheet (${count} entries)`;
+      document.getElementById('box-shop')?.classList.add('has-file');
+      if(statusEl){ statusEl.textContent = `✓ Loaded ${count} entries`; statusEl.style.color = '#34d399'; }
     }
     toast(`${type==='phone'?'Phone→Post':'Shop→Block'} loaded from sheet`);
   } catch(err){
-    statusEl.textContent = '✗ '+err.message;
-    statusEl.style.color = '#fca5a5';
+    if(statusEl){ statusEl.textContent = '✗ '+err.message; statusEl.style.color = '#fca5a5'; }
     toast('Fetch failed: '+err.message, true);
   }
 }
