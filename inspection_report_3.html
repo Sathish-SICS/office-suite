@@ -2028,7 +2028,14 @@ async function fetchMappingSheet(type){
       const parsed = [];
       for(let i=1;i<rows.length;i++){
         if(!rows[i]) continue;
-        const phone = String(rows[i][0]||'').trim().replace(/\D/g,'');
+        const rawPhone = String(rows[i][0]||'').trim();
+        // Handle scientific notation (e.g. 7.3387495E9) from Google Sheets CSV
+        let phone = '';
+        if(rawPhone.toLowerCase().includes('e')){
+          phone = String(Math.round(Number(rawPhone))).replace(/\D/g,'');
+        } else {
+          phone = rawPhone.replace(/\D/g,'');
+        }
         const post  = String(rows[i][1]||'').trim();
         if(phone && post) parsed.push({phone, post});
       }
@@ -2037,7 +2044,7 @@ async function fetchMappingSheet(type){
       localStorage.setItem(MAPPING_LS_KEY.phone, JSON.stringify(parsed));
       if(nameEl) nameEl.textContent = `✓ Sheet (${parsed.length} entries)`;
       document.getElementById('box-phone')?.classList.add('has-file');
-      if(statusEl){ statusEl.textContent = `✓ Loaded ${parsed.length} entries`; statusEl.style.color = '#34d399'; }
+      if(statusEl){ statusEl.textContent = `✓ Loaded ${parsed.length} entries | Sample: ${parsed[0]?.phone}`; statusEl.style.color = '#34d399'; }
     } else {
       const parsedArr = [];
       for(let i=1;i<rows.length;i++){
