@@ -590,10 +590,10 @@ document.addEventListener('keydown', e=>{
 <div class="tabs">
   <div class="tab active" data-tab="inspection">📊 Inspection Report</div>
   <div class="tab" data-tab="squad">🚓 Squad Duty Order</div>
-  <div class="tab" data-tab="pdl">📋 Head Office PDL</div>
+  <div class="tab" data-tab="hopdl">📋 Head Office PDL</div>
   <div class="tab" data-tab="reminder">📲 WhatsApp Reminder</div>
   <div class="tab" data-tab="ekyc">🔑 e-KYC Report</div>
-  <div class="tab" data-tab="future" style="opacity:.5">➕ Future Modules</div>
+  <div class="tab" data-tab="pdlsheet">📋 PDL Sheet</div>
 </div>
 
 <div class="tab-content active" id="tab-inspection">
@@ -839,7 +839,7 @@ document.addEventListener('keydown', e=>{
 <!-- ================================================================ -->
 <!-- HEAD OFFICE PDL MODULE -->
 <!-- ================================================================ -->
-<div class="tab-content" id="tab-pdl">
+<div class="tab-content" id="tab-hopdl">
 
 <div class="panel">
   <h2><span class="dot"></span> Step 1: Upload MIS Report</h2>
@@ -1143,18 +1143,330 @@ document.addEventListener('keydown', e=>{
 
 </div>
 
-<div class="tab-content" id="tab-future">
-  <div class="panel">
-    <h2><span class="dot"></span> Coming Next</h2>
-    <p style="color:var(--muted);line-height:1.7">
-      • Google Sheets live sync (Part B of Squad)<br>
-      • Periodicals tracker<br>
-      • Google Sheets monitoring<br>
-      • Email composer with attachments<br>
-      • PDL (17-sheet) consolidator<br>
-    </p>
+<div class="tab-content" id="tab-pdlsheet">
+
+<!-- PDL SHEET MODULE -->
+<style>
+/* PDL-specific styles */
+.pdl-hero {
+  background: linear-gradient(135deg, rgba(15,23,42,0.95) 0%, rgba(30,58,138,0.4) 50%, rgba(15,23,42,0.95) 100%);
+  border: 1px solid rgba(99,102,241,.3);
+  border-radius: 14px;
+  padding: 22px 28px;
+  margin-bottom: 18px;
+  position: relative;
+  overflow: hidden;
+}
+.pdl-hero::before {
+  content: '';
+  position: absolute;
+  top: -40px; right: -40px;
+  width: 160px; height: 160px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(99,102,241,.18) 0%, transparent 70%);
+  pointer-events: none;
+}
+.pdl-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.pdl-form-card {
+  background: rgba(15,23,42,.6);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  cursor: pointer;
+  transition: border-color .2s, background .2s, transform .15s;
+  position: relative;
+  overflow: hidden;
+}
+.pdl-form-card:hover {
+  border-color: rgba(99,102,241,.6);
+  background: rgba(30,58,138,.25);
+  transform: translateY(-2px);
+}
+.pdl-form-card.active {
+  border-color: #6366f1;
+  background: rgba(99,102,241,.18);
+}
+.pdl-form-card.status-ready { border-left: 3px solid #34d399; }
+.pdl-form-card.status-partial { border-left: 3px solid #fbbf24; }
+.pdl-form-card.status-manual { border-left: 3px solid #94a3b8; }
+.pdl-form-card .form-num {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #818cf8;
+  margin-bottom: 4px;
+}
+.pdl-form-card .form-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.4;
+  margin-bottom: 6px;
+}
+.pdl-form-card .form-src {
+  font-size: 10px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.pdl-form-card .form-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 9px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.badge-auto { background: rgba(52,211,153,.2); color: #34d399; }
+.badge-semi { background: rgba(251,191,36,.2); color: #fbbf24; }
+.badge-manual { background: rgba(148,163,184,.15); color: #94a3b8; }
+.pdl-panel {
+  background: rgba(15,23,42,.7);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 22px 24px;
+  margin-bottom: 14px;
+}
+.pdl-panel h3 {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0 0 16px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pdls-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.pdls-table th {
+  background: rgba(30,58,138,.5);
+  color: #93c5fd;
+  padding: 8px 10px;
+  text-align: left;
+  border: 1px solid rgba(99,102,241,.2);
+  font-weight: 600;
+  font-size: 11px;
+}
+.pdls-table td {
+  padding: 7px 10px;
+  border: 1px solid rgba(255,255,255,.06);
+  color: var(--ink);
+  vertical-align: middle;
+}
+.pdls-table tr:nth-child(even) td { background: rgba(255,255,255,.02); }
+.pdls-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.pdls-table td.editable {
+  background: rgba(99,102,241,.08);
+}
+.pdls-table td.editable input {
+  background: transparent;
+  border: none;
+  color: #fcd34d;
+  width: 100%;
+  font-size: 12px;
+  outline: none;
+  text-align: right;
+  font-family: inherit;
+}
+.pdls-table td.editable input:focus {
+  background: rgba(99,102,241,.15);
+  border-radius: 3px;
+}
+.pdl-source-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(15,23,42,.5);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+}
+.pdl-source-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  min-width: 90px;
+}
+.pdl-section-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.pdl-section-tab {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all .2s;
+}
+.pdl-section-tab.active {
+  background: rgba(99,102,241,.25);
+  border-color: #6366f1;
+  color: #a5b4fc;
+}
+.pdl-progress-bar {
+  height: 4px;
+  background: rgba(255,255,255,.08);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+.pdl-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #6366f1, #34d399);
+  border-radius: 2px;
+  transition: width .5s ease;
+}
+.pdl-month-selector {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+.commodity-highlight { color: #fcd34d; font-weight: 700; }
+.pct-good { color: #34d399; }
+.pct-warn { color: #fbbf24; }
+.pdl-empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--muted);
+}
+.pdl-empty-state .icon { font-size: 40px; margin-bottom: 12px; }
+</style>
+
+<!-- TOP AREA: Month selector + overview -->
+<div class="pdl-hero">
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">
+    <div>
+      <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#818cf8;margin-bottom:6px">திருவண்ணாமலை மண்டலம்</div>
+      <div style="font-size:22px;font-weight:800;color:var(--ink);margin-bottom:4px">PDL Monthly Returns</div>
+      <div style="font-size:12px;color:var(--muted)">படிவங்கள் 1–17 | Periodical Data Letters</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <div>
+        <div style="font-size:10px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Month</div>
+        <input type="month" id="pdl-month" style="background:rgba(15,23,42,.7);border:1px solid rgba(99,102,241,.4);color:var(--ink);padding:7px 12px;border-radius:7px;font-size:13px;font-weight:600">
+      </div>
+      <div>
+        <div style="font-size:10px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Region</div>
+        <input type="text" id="pdl-region" value="Thiruvannamalai" style="background:rgba(15,23,42,.7);border:1px solid rgba(99,102,241,.4);color:var(--ink);padding:7px 12px;border-radius:7px;font-size:13px;width:160px">
+      </div>
+      <div style="display:flex;gap:8px;align-self:flex-end">
+        <button class="btn" onclick="pdlDownloadExcel()" style="font-size:12px;padding:8px 16px">📥 Download All Excel</button>
+      </div>
+    </div>
+  </div>
+  <!-- Progress overview -->
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px">
+    <div style="background:rgba(52,211,153,.08);border:1px solid rgba(52,211,153,.2);border-radius:8px;padding:10px 14px">
+      <div style="font-size:10px;color:#34d399;text-transform:uppercase;letter-spacing:.5px;font-weight:700">Auto-Generated</div>
+      <div style="font-size:20px;font-weight:800;color:#34d399" id="pdl-stat-auto">0</div>
+      <div style="font-size:10px;color:var(--muted)">forms fully ready</div>
+    </div>
+    <div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);border-radius:8px;padding:10px 14px">
+      <div style="font-size:10px;color:#fbbf24;text-transform:uppercase;letter-spacing:.5px;font-weight:700">Partial / Upload</div>
+      <div style="font-size:20px;font-weight:800;color:#fbbf24" id="pdl-stat-partial">0</div>
+      <div style="font-size:10px;color:var(--muted)">need data upload</div>
+    </div>
+    <div style="background:rgba(148,163,184,.08);border:1px solid rgba(148,163,184,.2);border-radius:8px;padding:10px 14px">
+      <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;font-weight:700">Manual Entry</div>
+      <div style="font-size:20px;font-weight:800;color:#94a3b8" id="pdl-stat-manual">0</div>
+      <div style="font-size:10px;color:var(--muted)">enter data below</div>
+    </div>
   </div>
 </div>
+
+<!-- ══ STEP 1: BASIC DATA UPLOAD ══════════════════════════ -->
+<div class="pdl-panel" style="border-color:rgba(99,102,241,.35)">
+  <h3 style="color:#a5b4fc">📂 Step 1 — Basic Data Upload
+    <span style="margin-left:auto;font-size:11px;font-weight:400;color:var(--muted)">Populates Forms 5, 10, 11</span>
+  </h3>
+  <div style="font-size:12px;color:var(--muted);margin-bottom:14px">
+    Upload the FPS master Excel file. Both <b style="color:#a5b4fc">old format</b> (1769 FPS As on...) and <b style="color:#34d399">new format</b> (FPS_Data_Collection...) are auto-detected.
+    Re-upload any time to replace with updated data.
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <input type="file" id="pdl-basic-file" accept=".xlsx,.xls" style="display:none" onchange="pdlUploadBasicData(this)">
+    <div id="pdl-basic-box" onclick="document.getElementById('pdl-basic-file').click()"
+      style="flex:1;min-width:240px;background:rgba(15,23,42,.5);border:2px dashed rgba(99,102,241,.4);border-radius:10px;padding:16px 20px;cursor:pointer;transition:border-color .2s;text-align:center"
+      onmouseover="this.style.borderColor='rgba(99,102,241,.8)'" onmouseout="this.style.borderColor='rgba(99,102,241,.4)'">
+      <div id="pdl-basic-name" style="font-size:13px;color:var(--muted)">📁 Click to upload Basic Data Excel</div>
+      <div id="pdl-basic-status" style="font-size:11px;color:#818cf8;margin-top:4px"></div>
+    </div>
+    <div id="pdl-basic-summary" style="display:none;background:rgba(52,211,153,.08);border:1px solid rgba(52,211,153,.25);border-radius:8px;padding:12px 16px;font-size:12px;line-height:1.8">
+    </div>
+  </div>
+</div>
+
+<!-- ══ STEP 2: CARDS FILE ══════════════════════════════════ -->
+<div class="pdl-panel" style="border-color:rgba(52,211,153,.3)">
+  <h3 style="color:#6ee7b7">🪪 Step 2 — Cards Data Upload
+    <span style="margin-left:auto;font-size:11px;font-weight:400;color:var(--muted)">Populates Form 1 (Cards col), Form 6</span>
+  </h3>
+  <div style="font-size:12px;color:var(--muted);margin-bottom:14px">
+    From MIS Portal → copy-paste the card count summary into Excel with two sheets: <b style="color:#6ee7b7">Card Type Overview</b> and <b style="color:#6ee7b7">NFSA Details</b>. Re-upload anytime to update.
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <input type="file" id="pdl-cards-file" accept=".xlsx,.xls" style="display:none" onchange="pdlUploadCards(this)">
+    <div onclick="document.getElementById('pdl-cards-file').click()"
+      style="flex:1;min-width:240px;background:rgba(15,23,42,.5);border:2px dashed rgba(52,211,153,.3);border-radius:10px;padding:16px 20px;cursor:pointer;transition:border-color .2s;text-align:center"
+      onmouseover="this.style.borderColor='rgba(52,211,153,.7)'" onmouseout="this.style.borderColor='rgba(52,211,153,.3)'">
+      <div id="pdl-cards-name" style="font-size:13px;color:var(--muted)">📁 Click to upload Cards Excel</div>
+      <div id="pdl-cards-status" style="font-size:11px;color:#6ee7b7;margin-top:4px"></div>
+    </div>
+    <div id="pdl-cards-summary" style="display:none;background:rgba(52,211,153,.06);border:1px solid rgba(52,211,153,.2);border-radius:8px;padding:12px 16px;font-size:12px;line-height:1.8"></div>
+  </div>
+</div>
+
+<!-- ══ STEP 3: MIS OFFTAKE FILES ═══════════════════════════ -->
+<div class="pdl-panel" style="border-color:rgba(251,191,36,.3)">
+  <h3 style="color:#fcd34d">📥 Step 3 — MIS Offtake Files (one per commodity)
+    <span style="margin-left:auto;font-size:11px;font-weight:400;color:var(--muted)">Populates Form 1, 2, 3, 4</span>
+  </h3>
+  <div style="font-size:12px;color:var(--muted);margin-bottom:14px">
+    Download from MIS Portal → <b>Commodity Offtake Details</b> → select commodity → download. Upload each file separately. Re-upload any commodity to replace.
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px" id="pdl-offtake-grid">
+  </div>
+  <div style="margin-top:10px">
+    <input type="file" id="pdl-offtake-file" accept=".xlsx,.xls" style="display:none" onchange="pdlUploadOfftake(this)">
+    <button class="btn" onclick="document.getElementById('pdl-offtake-file').click()" style="font-size:12px;padding:8px 18px">
+      📂 Upload Offtake File
+    </button>
+    <span style="font-size:11px;color:var(--muted);margin-left:10px">Commodity is auto-detected from file header</span>
+  </div>
+</div>
+
+<!-- FORM SELECTOR GRID -->
+<div style="margin-bottom:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted)">Click a form to view / edit</div>
+<div class="pdl-form-grid" id="pdl-form-grid"></div>
+
+<!-- ACTIVE FORM PANEL -->
+<div id="pdl-active-form" style="display:none"></div>
+
+</div><!-- end tab-pdlsheet -->
+
 
 </div>
 
@@ -1220,7 +1532,7 @@ function toast(msg, isErr){
 // Tabs
 document.querySelectorAll('.tab').forEach(tab=>{
   tab.addEventListener('click',()=>{
-    if(tab.dataset.tab==='future') return;
+    if(tab.dataset.tab==='future') return; // legacy guard
     document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
     tab.classList.add('active');
@@ -7593,8 +7905,1360 @@ async function copyReminderMsg(){
   }catch(e){toast('Copy failed: '+e.message,true);}
 }
 
+// ============================================================
+// PDL SHEET MODULE — Forms 1–17 Monthly Returns
+// ============================================================
+const PDL_FORMS = [
+  { id:'f1',  num:'Form 1',     title:'Liftment, Offtake & Closing Balance',  src:'mis',    badge:'semi',  icon:'📦', lang:'en' },
+  { id:'f2',  num:'Form 2',     title:'Boiled & Raw Rice Particulars',         src:'mis',    badge:'semi',  icon:'🍚', lang:'en' },
+  { id:'f3',  num:'Form 3',     title:'Police Card Offtake',                   src:'mis',    badge:'semi',  icon:'👮', lang:'en' },
+  { id:'f4',  num:'Form 4',     title:'Annual Turnover (Essential Commodities)',src:'auto',  badge:'auto',  icon:'📊', lang:'en' },
+  { id:'f5',  num:'Form 5',     title:'நியாய விலைக் கடை விவரங்கள்',           src:'basic',  badge:'auto',  icon:'🏪', lang:'ta' },
+  { id:'f6',  num:'Form 6',     title:'Family Card Details',                   src:'basic',  badge:'auto',  icon:'🪪', lang:'en' },
+  { id:'f7',  num:'Form 7',     title:'Classification of Societies',           src:'basic',  badge:'auto',  icon:'🏛️', lang:'en' },
+  { id:'f8',  num:'Form 8',     title:'FPS Personnel Details',                 src:'basic',  badge:'auto',  icon:'👥', lang:'en' },
+  { id:'f9',  num:'Form 9',     title:'Personnel Working & Vacancy',           src:'basic',  badge:'auto',  icon:'📋', lang:'en' },
+  { id:'f10', num:'Form 10',    title:'Building Particulars',                  src:'basic',  badge:'auto',  icon:'🏗️', lang:'en' },
+  { id:'f11', num:'Form 11',    title:'Card Strength Particulars',             src:'basic',  badge:'auto',  icon:'📈', lang:'en' },
+  { id:'f12', num:'Form 12',    title:'Ooty Tea Indent Details',               src:'manual', badge:'manual',icon:'🍵', lang:'en' },
+  { id:'f13', num:'Form 13',    title:'புதியதாக துவங்கப்பட்ட கடைகள்',         src:'gsheet', badge:'semi',  icon:'🆕', lang:'ta' },
+  { id:'f14', num:'Form 14',    title:'புதிய கடை கோரிக்கைகள்',                src:'basic',  badge:'auto',  icon:'📝', lang:'ta' },
+  { id:'f15', num:'Form 15',    title:'கட்டப்பட்ட கடைகள் விவரம்',             src:'basic',  badge:'auto',  icon:'🏠', lang:'ta' },
+  { id:'f16', num:'Form 16',    title:'கட்டப்பட்ட கட்டடங்கள் (ஆண்டுவாரியம்)',  src:'basic',  badge:'auto',  icon:'🏢', lang:'ta' },
+  { id:'f17', num:'Form 17',    title:'கட்டட கோரிக்கைகள் விவரம்',             src:'basic',  badge:'auto',  icon:'📐', lang:'ta' },
+];
+
+// PDL state — stores all entered/uploaded data
+const pdlSheet = {
+  month: '',
+  region: 'Thiruvannamalai',
+  activeForm: null,
+  basicLoaded: false,
+  basicFormat: null,
+  basicRows: [],
+  cardsLoaded: false,
+  cards: { rice:0,sugar:0,police:0,oap:0,anp:0,aay:0,phh:0,nphh:0,total:0,urban:0,rural:0,noComm:0 },
+  offtake: {},
+  // Form data stores
+  f1: { rows: [], uploaded: false },
+  f2: { boiled:{ob:0,receipt:0,offtake:0}, raw:{ob:0,receipt:0,offtake:0}, uploaded:false },
+  f3: { rows: [], uploaded: false },
+  f4: { derived: true },
+  f5: { data: {rural_ft:0,rural_pt:0,urban_ft:0,urban_pt:0,shg_ft:0,shg_pt:0,tncsc_ft:0,tncsc_pt:0,kerosene:0,mobile:0,newMonth:0} },
+  f6: { data: {phh:0,nphh:0,aay:0,sugar_opt:0,police:0,forest:0,n_cards:0,oap:0,ap:0,others:0,ceylon:0,kerosene:0,rural:0,urban:0} },
+  f10: { data:{ft_own:0,ft_govt:0,ft_rent:0,ft_free:0,pt_own:0,pt_govt:0,pt_rent:0,pt_free:0} },
+  f11: { rows:[] },
+  f12: { data:{target:12,ob:8,receipt:0,sales:6,indent:12,dues:13.8,remitted:13.8,upto:13.8} },
+  f13: { rows:[], gsheet_url:'', uploaded:false },
+  f14: { data:{ft_req:15,pt_req:138,ft_done:8,pt_done:95,ft_reject:0,pt_reject:8,ft_pend:3,pt_pend:39} },
+  f17: { data:{ft_req:17,pt_req:3,ft_done:16,pt_done:3,ft_reject:0,pt_reject:0,ft_pend:1,pt_pend:0} },
+};
+
+// ── COMMODITY MAPPING ────────────────────────────────────────
+const PDL_COMMODITIES_LIST = [
+  {key:'Rice',      label:'Rice (PHH+NPHH)',  color:'#93c5fd'},
+  {key:'AAY Rice',  label:'AAY Rice',          color:'#6ee7b7'},
+  {key:'Sugar',     label:'Sugar',             color:'#fcd34d'},
+  {key:'Sugar AAY', label:'Sugar AAY',         color:'#fbbf24'},
+  {key:'Wheat',     label:'Wheat',             color:'#c4b5fd'},
+  {key:'Kerosene',  label:'Kerosene',          color:'#fdba74'},
+  {key:'Toordhall', label:'Toordhall',         color:'#f9a8d4'},
+  {key:'Palmoil',   label:'Palmoil',           color:'#86efac'},
+  {key:'OAP Rice',  label:'OAP Rice',          color:'#67e8f9'},
+  {key:'ANP Rice',  label:'ANP Rice',          color:'#a5b4fc'},
+  {key:'Ooty Tea',  label:'Ooty Tea',          color:'#d9f99d'},
+];
+
+// Detect commodity from MIS file header text
+function pdlDetectCommodity(headerText){
+  const t = headerText.toLowerCase();
+  if(t.includes('aay') && t.includes('rice')) return 'AAY Rice';
+  if(t.includes('oap') && t.includes('rice')) return 'OAP Rice';
+  if(t.includes('anp') && t.includes('rice')) return 'ANP Rice';
+  if(t.includes('ooty') || t.includes('tea')) return 'Ooty Tea';
+  if(t.includes('wheat')) return 'Wheat';
+  if(t.includes('kerosene')) return 'Kerosene';
+  if(t.includes('toordhall') || t.includes('toor')) return 'Toordhall';
+  if(t.includes('palm') || t.includes('palmoil')) return 'Palmoil';
+  if(t.includes('sugar') && t.includes('aay')) return 'Sugar AAY';
+  if(t.includes('sugar')) return 'Sugar';
+  if(t.includes('rice')) return 'Rice';
+  return null;
+}
+
+// ── CARDS FILE UPLOAD ────────────────────────────────────────
+async function pdlUploadCards(input){
+  const file = input.files[0]; if(!file) return;
+  const nameEl = document.getElementById('pdl-cards-name');
+  const statusEl = document.getElementById('pdl-cards-status');
+  nameEl.textContent = '⏳ Reading '+file.name+'...';
+  try{
+    const wb = await readExcel(file);
+    const c = pdlSheet.cards;
+
+    // Sheet 1: Card Type Overview
+    const sh1Name = wb.SheetNames.find(n=>n.toLowerCase().includes('card type')||n.toLowerCase().includes('overview')) || wb.SheetNames[0];
+    const d1 = XLSX.utils.sheet_to_json(wb.Sheets[sh1Name], {header:1});
+    // Row 1 = data, Row 2 = headers (as per sample)
+    // Find data row (the one with numbers)
+    let dataRow1 = null;
+    for(const row of d1){
+      if(row.some(v=>!isNaN(+v)&&+v>100)){
+        dataRow1 = row; break;
+      }
+    }
+    // Find header row to map columns
+    let hRow1 = null;
+    for(const row of d1){
+      const joined = row.join(' ').toLowerCase();
+      if(joined.includes('rice') && joined.includes('sugar')){ hRow1 = row; break; }
+    }
+    if(dataRow1 && hRow1){
+      hRow1.forEach((h,i)=>{
+        const hh = String(h||'').toLowerCase();
+        const val = +dataRow1[i]||0;
+        if(hh.includes('rice') && !hh.includes('aay') && !hh.includes('oap') && !hh.includes('anp')) c.rice = val;
+        else if(hh.includes('sugar')) c.sugar = val;
+        else if(hh.includes('police')) c.police = val;
+        else if(hh.includes('oap')) c.oap = val;
+        else if(hh.includes('anp')) c.anp = val;
+        else if(hh.includes('aay')) c.aay = val;
+        else if(hh.includes('no commodity')||hh.includes('no comm')) c.noComm = val;
+        else if(hh.includes('total')) c.total = val;
+      });
+    }
+
+    // Sheet 2: NFSA Details
+    const sh2Name = wb.SheetNames.find(n=>n.toLowerCase().includes('nfsa')) || wb.SheetNames[1];
+    if(sh2Name && wb.Sheets[sh2Name]){
+      const d2 = XLSX.utils.sheet_to_json(wb.Sheets[sh2Name], {header:1});
+      let hRow2=null, dataRow2=null;
+      for(const row of d2){
+        const joined = row.join(' ').toLowerCase();
+        if(joined.includes('phh') && joined.includes('nphh')){ hRow2=row; }
+        else if(row.some(v=>!isNaN(+v)&&+v>1000)){ dataRow2=row; }
+      }
+      if(hRow2 && dataRow2){
+        hRow2.forEach((h,i)=>{
+          const hh = String(h||'').toLowerCase();
+          const val = +dataRow2[i]||0;
+          if(hh.includes('aay') && hh.includes('card') && !hh.includes('benefic')) c.aay = val;
+          else if(hh.includes('phh') && hh.includes('card') && !hh.includes('benefic') && !hh.includes('nphh')) c.phh = val;
+          else if(hh.includes('nphh') && hh.includes('card') && !hh.includes('benefic')) c.nphh = val;
+          else if(hh.includes('total') && hh.includes('card') && !hh.includes('benefic')) c.total = val;
+          else if(hh.includes('urban')) c.urban = val;
+          else if(hh.includes('rural')) c.rural = val;
+        });
+      }
+    }
+
+    pdlSheet.cardsLoaded = true;
+    pdlApplyCardsToForms();
+
+    nameEl.innerHTML = `<span style="color:#34d399">✓</span> ${file.name}`;
+    statusEl.innerHTML = `<span style="color:#34d399">✓ Cards loaded</span>`;
+
+    const sumEl = document.getElementById('pdl-cards-summary');
+    sumEl.style.display = 'block';
+    sumEl.innerHTML = `
+      <div style="font-weight:700;color:#6ee7b7;margin-bottom:6px">✓ Cards Loaded</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px 16px">
+        <div>PHH: <b style="color:#93c5fd">${c.phh.toLocaleString()}</b></div>
+        <div>NPHH: <b style="color:#93c5fd">${c.nphh.toLocaleString()}</b></div>
+        <div>AAY: <b style="color:#fcd34d">${c.aay.toLocaleString()}</b></div>
+        <div>OAP: <b style="color:#6ee7b7">${c.oap.toLocaleString()}</b></div>
+        <div>Police: <b style="color:#c4b5fd">${c.police.toLocaleString()}</b></div>
+        <div>Total: <b style="color:#34d399">${c.total.toLocaleString()}</b></div>
+        <div>Rural: <b style="color:#86efac">${c.rural.toLocaleString()}</b></div>
+        <div>Urban: <b style="color:#fdba74">${c.urban.toLocaleString()}</b></div>
+      </div>
+    `;
+    if(pdlSheet.activeForm) pdlOpenForm(pdlSheet.activeForm);
+    toast(`Cards loaded: ${c.total.toLocaleString()} total`);
+  }catch(e){ nameEl.textContent='✗ Error'; statusEl.textContent=e.message; toast('Cards upload failed: '+e.message,true); }
+  input.value='';
+}
+
+function pdlApplyCardsToForms(){
+  const c = pdlSheet.cards;
+  // Update Form 6 data
+  pdlSheet.f6.data.phh    = c.phh;
+  pdlSheet.f6.data.nphh   = c.nphh;
+  pdlSheet.f6.data.aay    = c.aay;
+  pdlSheet.f6.data.police = c.police;
+  pdlSheet.f6.data.oap    = c.oap;
+  pdlSheet.f6.data.ap     = c.anp;
+  pdlSheet.f6.data.rural  = c.rural;
+  pdlSheet.f6.data.urban  = c.urban;
+  const total = c.phh + c.nphh + c.aay + c.police + (pdlSheet.f6.data.forest||0) + (pdlSheet.f6.data.n_cards||0) + c.oap + c.anp + (pdlSheet.f6.data.others||0);
+  pdlSheet.f6.data.total  = total;
+
+  // Update Form 1 card counts per commodity row
+  const cardMap = {
+    'Rice-NPHH (M.T)': c.nphh,
+    'Rice-PHH (M.T)':  c.phh,
+    'Sugar (M.T)':     c.rice,  // Sugar uses rice card count (all cardholders)
+    'Sugar AAY (M.T)': c.aay,
+    'Wheat (M.T)':     c.total,
+    'Kerosene (K.L)':  c.total,
+    'Toordhall (M.T)': c.total,
+    'Palmoil (K.L)':   c.total,
+    'AAY Rice (M.T)':  c.aay,
+    'OAP rice (M.T)':  c.oap,
+    'ANP rice (M.T)':  c.anp,
+    'Ooty tea (M.T)':  c.total,
+  };
+  pdlSheet.f1.rows.forEach(row=>{ if(cardMap[row.name]!==undefined) row.cards = cardMap[row.name]; });
+}
+
+// ── BASIC DATA UPLOAD ────────────────────────────────────────
+async function pdlUploadBasicData(input){
+  const file = input.files[0]; if(!file) return;
+  const nameEl = document.getElementById('pdl-basic-name');
+  const statusEl = document.getElementById('pdl-basic-status');
+  nameEl.textContent = '⏳ Reading '+file.name+'...';
+  statusEl.textContent = '';
+  try{
+    const wb = await readExcel(file);
+    // Detect format
+    let format = null, rows = [];
+    for(const shName of wb.SheetNames){
+      const sh = wb.Sheets[shName];
+      const data = XLSX.utils.sheet_to_json(sh, {header:1});
+      if(!data || data.length < 2) continue;
+      const h = data[0];
+      // New format: has 'FPS_Data' sheet or 'கடை குறியீடு எண்' at col 10
+      if(shName === 'FPS_Data' || (h[9] && String(h[9]).includes('குறியீடு'))){
+        format = 'new';
+        rows = data.slice(1).filter(r=>r[9]&&String(r[9]).trim()); // col 10 = shop code
+        break;
+      }
+      // Old format: shop code at col 2, FT/PT at col 10
+      if(h[1] && String(h[1]).includes('குறியீடு') && h[9] && String(h[9]).includes('நேரம்')){
+        format = 'old';
+        rows = data.slice(1).filter(r=>r[1]&&String(r[1]).trim());
+        break;
+      }
+      // Fallback: try to detect by column count/content
+      if(data[1] && data[1].length >= 10){
+        const sample = data[1];
+        if(String(sample[1]||'').match(/^\d{2}[A-Z]/)){
+          format = 'old'; rows = data.slice(1).filter(r=>r[1]); break;
+        }
+        if(String(sample[9]||'').match(/^\d{2}[A-Z]/)){
+          format = 'new'; rows = data.slice(1).filter(r=>r[9]); break;
+        }
+      }
+    }
+    if(!format || rows.length === 0){ toast('Could not detect basic data format', true); return; }
+
+    pdlSheet.basicLoaded = true;
+    pdlSheet.basicFormat = format;
+    pdlSheet.basicRows = rows;
+
+    // Parse and populate form data
+    pdlParseBasicData(rows, format);
+
+    const totalShops = rows.length;
+    nameEl.innerHTML = `<span style="color:#34d399">✓</span> ${file.name}`;
+    statusEl.innerHTML = `<span style="color:#34d399">✓ ${totalShops} shops loaded (${format === 'new' ? 'New FPS_Data format' : 'Old format'})</span>`;
+
+    // Show summary
+    const d5 = pdlSheet.f5.data;
+    const d10 = pdlSheet.f10.data;
+    const ftTotal = d5.rural_ft+d5.urban_ft+d5.shg_ft+d5.tncsc_ft;
+    const ptTotal = d5.rural_pt+d5.urban_pt+d5.shg_pt+d5.tncsc_pt;
+    const sumEl = document.getElementById('pdl-basic-summary');
+    sumEl.style.display = 'block';
+    sumEl.innerHTML = `
+      <div style="font-weight:700;color:#34d399;margin-bottom:6px">✓ Basic Data Loaded — ${totalShops} shops</div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:4px 16px">
+        <div>🏪 Full Time: <b style="color:#93c5fd">${ftTotal}</b></div>
+        <div>🏪 Part Time: <b style="color:#fbbf24">${ptTotal}</b></div>
+        <div>🌾 Rural: <b style="color:#6ee7b7">${d5.rural_ft+d5.rural_pt}</b></div>
+        <div>🏙️ Urban: <b style="color:#c4b5fd">${d5.urban_ft+d5.urban_pt}</b></div>
+        <div>🏗️ Govt buildings: <b style="color:#93c5fd">${d10.ft_govt+d10.pt_govt}</b></div>
+        <div>🏠 Own buildings: <b style="color:#6ee7b7">${d10.ft_own+d10.pt_own}</b></div>
+      </div>
+      <div style="margin-top:6px;font-size:10px;color:var(--muted)">Forms 5, 10, 11 auto-populated. Click any form card below to view.</div>
+    `;
+
+    // Re-render if any form is open
+    if(pdlSheet.activeForm) pdlOpenForm(pdlSheet.activeForm);
+    toast(`Basic data loaded: ${totalShops} shops`);
+
+  }catch(e){ nameEl.textContent='✗ Error'; statusEl.textContent=e.message; toast('Upload failed: '+e.message,true); }
+  input.value='';
+}
+
+function pdlParseBasicData(rows, format){
+  // Column mapping
+  const col = format === 'new' ? {
+    shopCode:9, shopName:10, ftpt:11, cards:12, building:16, urban:8, agency:6
+  } : {
+    shopCode:1, shopName:7, ftpt:9, cards:10, building:12, urban:19, agency:5
+  };
+
+  let rural_ft=0,rural_pt=0,urban_ft=0,urban_pt=0,shg_ft=0,shg_pt=0,tncsc_ft=0,tncsc_pt=0;
+  let ft_own=0,ft_govt=0,ft_rent=0,ft_free=0,pt_own=0,pt_govt=0,pt_rent=0,pt_free=0;
+  const cardBuckets = {
+    '1-100':0,'101-200':0,'201-300':0,'301-400':0,'401-500':0,
+    '501-600':0,'601-700':0,'701-800':0,'801-900':0,'901-1000':0,'>1000':0
+  };
+
+  rows.forEach(r=>{
+    const ftpt  = String(r[col.ftpt]||'').trim();
+    const isFT  = ftpt.includes('முழு');
+    const cards = +r[col.cards]||0;
+    const bldg  = String(r[col.building]||'').trim();
+    const urban = String(r[col.urban]||'').trim();
+    const isUrban = urban.includes('நகர்');
+    const agency = format==='new' ? String(r[col.agency]||'').trim() : '';
+
+    // FT/PT × Rural/Urban counts
+    if(isFT){ if(isUrban) urban_ft++; else rural_ft++; }
+    else     { if(isUrban) urban_pt++; else rural_pt++; }
+
+    // Agency grouping (new format only)
+    if(format==='new'){
+      if(agency.toLowerCase().includes('shg') || agency.toLowerCase().includes('women')){ isFT?shg_ft++:shg_pt++; }
+      else if(agency.toLowerCase().includes('tncsc')){ isFT?tncsc_ft++:tncsc_pt++; }
+    }
+
+    // Building type
+    const bld = bldg.toLowerCase();
+    const isGovtFree  = bld.includes('அரசு') && (bld.includes('இலவச')||bld.includes('free'));
+    const isOwnFree   = bld.includes('தனியார்') && bld.includes('இலவச');
+    const isRent      = bld.includes('வாடகை');
+    const isOwn       = bld.includes('சொந்த');
+    const isGovtRent  = bld.includes('அரசு') && bld.includes('வாடகை');
+
+    if(isFT){
+      if(isOwn) ft_own++;
+      else if(isGovtFree||isGovtRent) ft_govt++;
+      else if(isRent) ft_rent++;
+      else if(isOwnFree) ft_free++;
+      else ft_govt++; // default
+    } else {
+      if(isOwn) pt_own++;
+      else if(isGovtFree||isGovtRent) pt_govt++;
+      else if(isRent) pt_rent++;
+      else if(isOwnFree) pt_free++;
+      else pt_govt++;
+    }
+
+    // Card strength buckets
+    if(cards>0){
+      if(cards<=100) cardBuckets['1-100']++;
+      else if(cards<=200) cardBuckets['101-200']++;
+      else if(cards<=300) cardBuckets['201-300']++;
+      else if(cards<=400) cardBuckets['301-400']++;
+      else if(cards<=500) cardBuckets['401-500']++;
+      else if(cards<=600) cardBuckets['501-600']++;
+      else if(cards<=700) cardBuckets['601-700']++;
+      else if(cards<=800) cardBuckets['701-800']++;
+      else if(cards<=900) cardBuckets['801-900']++;
+      else if(cards<=1000) cardBuckets['901-1000']++;
+      else cardBuckets['>1000']++;
+    }
+  });
+
+  // Update Form 5 data
+  pdlSheet.f5.data = {
+    rural_ft, rural_pt, urban_ft, urban_pt,
+    shg_ft, shg_pt, tncsc_ft, tncsc_pt,
+    kerosene: pdlSheet.f5.data.kerosene||0,
+    mobile: pdlSheet.f5.data.mobile||0,
+    newMonth: pdlSheet.f5.data.newMonth||0
+  };
+
+  // Update Form 10 data
+  pdlSheet.f10.data = {ft_own,ft_govt,ft_rent,ft_free,pt_own,pt_govt,pt_rent,pt_free};
+
+  // Update Form 11 rows
+  pdlSheet.f11.rows = Object.entries(cardBuckets).map(([range, count])=>{
+    // We only have total per bucket, split rural/urban later if needed
+    return {range, ft_r:0, ft_u:0, pt_r:0, pt_u:0, total:count};
+  });
+  // For now fill ft_r with FT total proportionally (exact split needs Urban flag per bucket)
+  // Re-scan for FT/PT × urban breakdown per bucket
+  const bucketData = {};
+  Object.keys(cardBuckets).forEach(k=>bucketData[k]={ft_r:0,ft_u:0,pt_r:0,pt_u:0});
+  rows.forEach(r=>{
+    const ftpt = String(r[col.ftpt]||'').trim();
+    const isFT = ftpt.includes('முழு');
+    const cards = +r[col.cards]||0;
+    const urban = String(r[col.urban]||'').trim();
+    const isUrban = urban.includes('நகர்');
+    let bucket = null;
+    if(cards<=100&&cards>0) bucket='1-100';
+    else if(cards<=200) bucket='101-200';
+    else if(cards<=300) bucket='201-300';
+    else if(cards<=400) bucket='301-400';
+    else if(cards<=500) bucket='401-500';
+    else if(cards<=600) bucket='501-600';
+    else if(cards<=700) bucket='601-700';
+    else if(cards<=800) bucket='701-800';
+    else if(cards<=900) bucket='801-900';
+    else if(cards<=1000) bucket='901-1000';
+    else if(cards>1000) bucket='>1000';
+    if(bucket){
+      if(isFT){ if(isUrban) bucketData[bucket].ft_u++; else bucketData[bucket].ft_r++; }
+      else     { if(isUrban) bucketData[bucket].pt_u++; else bucketData[bucket].pt_r++; }
+    }
+  });
+  pdlSheet.f11.rows = Object.entries(bucketData).map(([range,b])=>({range,...b}));
+}
+
+// ── MIS OFFTAKE UPLOAD ───────────────────────────────────────
+async function pdlUploadOfftake(input){
+  const file = input.files[0]; if(!file) return;
+  try{
+    const wb = await readExcel(file);
+    const sh = wb.Sheets[wb.SheetNames[0]];
+    const data = XLSX.utils.sheet_to_json(sh, {header:1});
+
+    // Detect commodity from header rows (rows 0-8)
+    let commodity = null;
+    for(let i=0;i<Math.min(9,data.length);i++){
+      const rowText = data[i].join(' ');
+      commodity = pdlDetectCommodity(rowText);
+      if(commodity) break;
+    }
+    // Also check filename
+    if(!commodity) commodity = pdlDetectCommodity(file.name);
+    if(!commodity){ toast('Could not detect commodity. Rename file to include commodity name.', true); input.value=''; return; }
+
+    // Find header row (contains 'Taluks' or '#')
+    let hIdx = data.findIndex(r=>r.some&&r.some(c=>String(c||'').trim()==='#'));
+    if(hIdx===-1) hIdx = data.findIndex(r=>r.some&&r.some(c=>String(c||'').toLowerCase().includes('taluk')));
+    if(hIdx===-1){ toast('Cannot find data header row in '+file.name, true); input.value=''; return; }
+
+    const dataRows = data.slice(hIdx+1).filter(r=>r[0]&&String(r[0]).trim()&&!isNaN(+r[0]));
+    const totalRow = data.slice(hIdx+1).find(r=>String(r[1]||'').toLowerCase().includes('total'));
+
+    const talukRows = dataRows.map(r=>({
+      sl:+r[0], taluk:String(r[1]||'').trim(),
+      entitle:+r[2]||0, allot:+r[3]||0, ob:+r[4]||0,
+      totalAllot:+r[5]||0, receipts:+r[6]||0, adj:+r[7]||0,
+      total:+r[8]||0, sales:+r[9]||0, cb:+r[10]||0,
+      advance:+r[11]||0, actualBal:+r[12]||0, offtakePct:+r[13]||0
+    }));
+
+    const district = totalRow ? {
+      entitle:+totalRow[2]||0, allot:+totalRow[3]||0, ob:+totalRow[4]||0,
+      receipts:+totalRow[6]||0, adj:+totalRow[7]||0, total:+totalRow[8]||0,
+      sales:+totalRow[9]||0, cb:+totalRow[10]||0, offtakePct:+totalRow[13]||0
+    } : null;
+
+    pdlSheet.offtake[commodity] = {talukRows, district, filename:file.name};
+
+    // Update Form 1 row for this commodity
+    pdlUpdateF1FromOfftake(commodity);
+    renderPDLOfftakeGrid();
+    if(pdlSheet.activeForm==='f1') pdlOpenForm('f1');
+    toast(`✓ ${commodity} offtake loaded (${talukRows.length} taluks)`);
+  }catch(e){ toast('Offtake upload failed: '+e.message, true); }
+  input.value='';
+}
+
+function pdlUpdateF1FromOfftake(commodity){
+  const o = pdlSheet.offtake[commodity];
+  if(!o||!o.district) return;
+  const d = o.district;
+  // Map commodity key to Form 1 row name
+  const nameMap = {
+    'Rice':      ['Rice-NPHH (M.T)','Rice-PHH (M.T)'], // Rice splits into PHH+NPHH
+    'AAY Rice':  'AAY Rice (M.T)',
+    'Sugar':     'Sugar (M.T)',
+    'Sugar AAY': 'Sugar AAY (M.T)',
+    'Wheat':     'Wheat (M.T)',
+    'Kerosene':  'Kerosene (K.L)',
+    'Toordhall': 'Toordhall (M.T)',
+    'Palmoil':   'Palmoil   ( K.L)',
+    'OAP Rice':  'OAP rice (M.T)',
+    'ANP Rice':  'ANP rice (M.T)',
+    'Ooty Tea':  'Ooty tea (M.T)',
+  };
+  const targetName = nameMap[commodity];
+  if(!targetName) return;
+
+  // Convert Kg → MT (÷1000), KL stays as is for Kerosene
+  const isKg = !['Kerosene','Palmoil'].includes(commodity);
+  const div = isKg ? 1000 : 1000; // MIS gives in Kg, forms need MT
+  const entitle = +(d.entitle/div).toFixed(2);
+  const allot   = +(d.allot/div).toFixed(2);
+  const ob      = +(d.ob/div).toFixed(2);
+  const lift    = +(d.receipts/div).toFixed(2);
+  const offtake = +(d.sales/div).toFixed(2);
+  const cb      = +(d.cb/div).toFixed(2);
+
+  if(Array.isArray(targetName)){
+    // Rice: single MIS row splits — we can't split PHH/NPHH from combined total
+    // Mark both rows as sourced, leave individual editing
+    pdlSheet.f1.rows.forEach(row=>{
+      if(targetName.includes(row.name)){
+        row._fromMIS = true; row._misTotal = {entitle,allot,ob,lift,offtake,cb};
+      }
+    });
+  } else {
+    const row = pdlSheet.f1.rows.find(r=>r.name===targetName);
+    if(row){ row.entitle=entitle; row.allot=allot; row.ob=ob; row.lift=lift; row.offtake=offtake; row.cb=cb; row.uploaded=true; }
+  }
+}
+
+function renderPDLOfftakeGrid(){
+  const grid = document.getElementById('pdl-offtake-grid');
+  if(!grid) return;
+  grid.innerHTML = PDL_COMMODITIES_LIST.map(c=>{
+    const loaded = pdlSheet.offtake[c.key];
+    return `<div style="background:${loaded?'rgba(52,211,153,.08)':'rgba(15,23,42,.4)'};border:1px solid ${loaded?'rgba(52,211,153,.3)':'var(--border)'};border-radius:8px;padding:10px;text-align:center">
+      <div style="font-size:10px;font-weight:700;color:${loaded?'#34d399':'var(--muted)'};margin-bottom:4px">${loaded?'✓':''} ${c.label}</div>
+      <div style="font-size:10px;color:var(--muted)">${loaded?'Loaded':'Not uploaded'}</div>
+      ${loaded?`<div style="font-size:9px;color:#4ade80;margin-top:2px">${loaded.talukRows.length} taluks</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+
+// ── INIT ────────────────────────────────────────────────────
+function initPDL(){
+  // Set default month to current
+  const now = new Date();
+  const ym = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  const monthEl = document.getElementById('pdl-month');
+  if(monthEl){ monthEl.value = ym; pdlSheet.month = ym; }
+  monthEl?.addEventListener('change', e=>{ pdlSheet.month=e.target.value; });
+  document.getElementById('pdl-region')?.addEventListener('input', e=>{ pdlSheet.region=e.target.value; });
+  renderPDLGrid();
+  renderPDLOfftakeGrid();
+  updatePDLStats();
+}
+
+function renderPDLGrid(){
+  const grid = document.getElementById('pdl-form-grid');
+  if(!grid) return;
+  // Count stats
+  let auto=0,partial=0,manual=0;
+  PDL_FORMS.forEach(f=>{
+    if(f.badge==='auto') auto++;
+    else if(f.badge==='semi') partial++;
+    else manual++;
+  });
+  document.getElementById('pdl-stat-auto').textContent = auto;
+  document.getElementById('pdl-stat-partial').textContent = partial;
+  document.getElementById('pdl-stat-manual').textContent = manual;
+
+  grid.innerHTML = PDL_FORMS.map(f=>`
+    <div class="pdl-form-card status-${f.badge==='auto'?'ready':f.badge==='semi'?'partial':'manual'} ${pdlSheet.activeForm===f.id?'active':''}"
+         onclick="pdlOpenForm('${f.id}')">
+      <span class="form-badge badge-${f.badge}">${f.badge==='auto'?'Auto':f.badge==='semi'?'Upload':'Manual'}</span>
+      <div class="form-num">${f.num} ${f.icon}</div>
+      <div class="form-title">${f.title}</div>
+      <div class="form-src">
+        ${f.src==='mis'?'📥 MIS Download':f.src==='basic'?'🗄️ Basic Data':f.src==='gsheet'?'🔗 Google Sheet':'✏️ Manual Entry'}
+      </div>
+    </div>
+  `).join('');
+}
+
+function updatePDLStats(){ renderPDLGrid(); }
+
+function pdlOpenForm(id){
+  pdlSheet.activeForm = id;
+  renderPDLGrid();
+  const panel = document.getElementById('pdl-active-form');
+  panel.style.display = 'block';
+  const fn = PDL_FORM_RENDERERS[id];
+  if(fn) fn(panel);
+  else panel.innerHTML = `<div class="pdl-panel"><div class="pdl-empty-state"><div class="icon">🚧</div><div>Coming soon</div></div></div>`;
+  panel.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+// ── COMMODITY LIST (Form 1) ─────────────────────────────────
+const PDL_COMMODITIES = [
+  {name:'Rice-NPHH (M.T)',   unit:'MT'},
+  {name:'Rice-PHH (M.T)',    unit:'MT'},
+  {name:'Sugar (M.T)',       unit:'MT'},
+  {name:'Sugar AAY (M.T)',   unit:'MT'},
+  {name:'Wheat (M.T)',       unit:'MT'},
+  {name:'Kerosene (K.L)',    unit:'KL'},
+  {name:'Toordhall (M.T)',   unit:'MT'},
+  {name:'Palmoil (K.L)',     unit:'KL'},
+  {name:'AAY Rice (M.T)',    unit:'MT'},
+  {name:'OAP rice (M.T)',    unit:'MT'},
+  {name:'ANP rice (M.T)',    unit:'MT'},
+  {name:'Ooty tea (M.T)',    unit:'MT'},
+];
+
+// Default Form 1 data (from sample)
+if(pdlSheet.f1.rows.length===0){
+  pdlSheet.f1.rows = [
+    {name:'Rice-NPHH (M.T)',shops:1730,cards:252195,entitle:5746,allot:4594,ob:285,lift:4594,offtake:4594,cb:285},
+    {name:'Rice-PHH (M.T)', shops:1730,cards:408755,entitle:6587,allot:5803,ob:348,lift:5803,offtake:5803,cb:348},
+    {name:'Sugar (M.T)',    shops:1730,cards:663854,entitle:993, allot:864, ob:554,lift:864, offtake:864, cb:554},
+    {name:'Sugar AAY (M.T)',shops:1730,cards:76902, entitle:127, allot:119, ob:59, lift:119, offtake:119, cb:59},
+    {name:'Wheat (M.T)',    shops:1730,cards:737852,entitle:3894,allot:194, ob:93, lift:194, offtake:194, cb:93},
+    {name:'Kerosene (K.L)', shops:1730,cards:391954,entitle:1200,allot:20,  ob:0,  lift:20,  offtake:20,  cb:0},
+    {name:'Toordhall (M.T)',shops:1730,cards:789827,entitle:740, allot:625, ob:336,lift:625, offtake:625, cb:336},
+    {name:'Palmoil (K.L)',  shops:1730,cards:789827,entitle:740, allot:626, ob:34, lift:626, offtake:626, cb:34},
+    {name:'AAY Rice (M.T)', shops:1730,cards:76902, entitle:2690,allot:2523,ob:1377,lift:2523,offtake:2523,cb:1377},
+    {name:'OAP rice (M.T)', shops:1730,cards:46639, entitle:233, allot:195, ob:7,  lift:195, offtake:195, cb:7},
+    {name:'ANP rice (M.T)', shops:1730,cards:472,   entitle:4,   allot:3,   ob:2,  lift:3,   offtake:3,   cb:2},
+    {name:'Ooty tea (M.T)', shops:1730,cards:789827,entitle:8,   allot:6,   ob:8,  lift:6,   offtake:6,   cb:8},
+  ];
+}
+
+// Default Form 11 rows
+if(pdlSheet.f11.rows.length===0){
+  pdlSheet.f11.rows = [
+    {range:'1-100',ft_r:4,ft_u:0,pt_r:37,pt_u:0},
+    {range:'101-200',ft_r:60,ft_u:0,pt_r:209,pt_u:0},
+    {range:'201-300',ft_r:138,ft_u:0,pt_r:159,pt_u:5},
+    {range:'301-400',ft_r:150,ft_u:1,pt_r:80,pt_u:1},
+    {range:'401-500',ft_r:161,ft_u:6,pt_r:48,pt_u:3},
+    {range:'501-600',ft_r:144,ft_u:12,pt_r:18,pt_u:2},
+    {range:'601-700',ft_r:120,ft_u:9,pt_r:17,pt_u:2},
+    {range:'701-800',ft_r:81,ft_u:19,pt_r:5,pt_u:0},
+    {range:'801-900',ft_r:49,ft_u:15,pt_r:2,pt_u:0},
+    {range:'901-1000',ft_r:48,ft_u:17,pt_r:0,pt_u:0},
+    {range:'>1000',ft_r:147,ft_u:65,pt_r:13,pt_u:0},
+  ];
+}
+
+// ── HELPER: editable number input ──────────────────────────
+function pdlNum(val,path,cls=''){
+  return `<input type="number" value="${val}" class="${cls}" onchange="pdlSet('${path}',+this.value)" style="background:transparent;border:none;color:#fcd34d;width:80px;text-align:right;font-size:12px;font-family:inherit;outline:none">`;
+}
+function pdlSet(path, val){
+  const parts = path.split('.');
+  let obj = pdl;
+  for(let i=0;i<parts.length-1;i++) obj=obj[parts[i]];
+  obj[parts[parts.length-1]] = val;
+}
+
+// ── UPLOAD MIS CSV helper ───────────────────────────────────
+function pdlTriggerUpload(inputId){ document.getElementById(inputId)?.click(); }
+
+async function pdlReadCsvFile(file){
+  return new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=e=>res(e.target.result);
+    r.onerror=()=>rej(new Error('Read failed'));
+    r.readAsText(file);
+  });
+}
+
+// Parse MIS CSV for Form 1 (commodity rows)
+async function pdlUploadForm1(input){
+  const file = input.files[0]; if(!file) return;
+  try{
+    const wb = await readExcel(file);
+    const sh = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sh, {header:1});
+    // Find header row
+    const hIdx = rows.findIndex(r=>r.some&&r.some(c=>String(c||'').includes('Commodity')||String(c||'').includes('commodity')));
+    if(hIdx===-1){toast('Cannot find commodity column',true);return;}
+    const dataRows = rows.slice(hIdx+1).filter(r=>r[0]&&String(r[0]).trim());
+    pdlSheet.f1.rows = dataRows.map(r=>({
+      name:String(r[0]||'').trim(),
+      shops:+r[1]||0, cards:+r[2]||0, entitle:+r[3]||0,
+      allot:+r[4]||0, ob:+r[5]||0, lift:+r[6]||0,
+      offtake:+r[8]||0, cb:+r[9]||0
+    })).filter(r=>r.name);
+    pdlSheet.f1.uploaded=true;
+    pdlOpenForm('f1');
+    toast('Form 1 MIS data loaded — '+pdlSheet.f1.rows.length+' rows');
+  }catch(e){toast('Upload failed: '+e.message,true);}
+}
+
+// ── FORM RENDERERS ──────────────────────────────────────────
+const PDL_FORM_RENDERERS = {
+
+  f1(panel){
+    const mon = pdlMonthLabel();
+    const r = pdlSheet.f1.rows;
+    const d5 = pdlSheet.f5.data;
+    const fpsCount = pdlSheet.basicLoaded
+      ? (d5.rural_ft+d5.rural_pt+d5.urban_ft+d5.urban_pt+d5.shg_ft+d5.shg_pt+d5.tncsc_ft+d5.tncsc_pt)
+      : null;
+    panel.innerHTML=`
+    <div class="pdl-panel">
+      <h3>📦 Form 1 — Liftment, Offtake & Closing Balance <span style="margin-left:auto;font-size:11px;color:var(--muted);font-weight:400">${mon}</span></h3>
+      <div class="pdl-source-box">
+        <span class="pdl-source-label">📥 MIS Source</span>
+        <span style="font-size:11px;color:var(--muted);flex:1">Upload offtake files in Step 3 above. 🔵 = MIS upload. ⚪ = previous/default value.</span>
+        <button class="btn-tiny" onclick="pdlExportForm1()" style="background:rgba(52,211,153,.15);border-color:rgba(52,211,153,.4);color:#6ee7b7">📥 Download Form 1</button>
+      </div>
+      ${!pdlSheet.basicLoaded ? '<div style="background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);border-radius:6px;padding:8px 12px;font-size:11px;color:#fcd34d;margin-bottom:10px">⚠ Upload Basic Data (Step 1) to get correct FPS count</div>' : ''}
+      ${!pdlSheet.cardsLoaded ? '<div style="background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.3);border-radius:6px;padding:8px 12px;font-size:11px;color:#a5b4fc;margin-bottom:10px">ℹ Upload Cards file (Step 2) to populate card counts</div>' : ''}
+      <div style="overflow-x:auto">
+      <table class="pdls-table">
+        <thead>
+          <tr>
+            <th style="min-width:140px">Commodity</th>
+            <th class="num">FPS</th>
+            <th class="num">Cards</th>
+            <th class="num">Entitlement</th>
+            <th class="num">Allotment</th>
+            <th class="num">OB</th>
+            <th class="num">Liftment</th>
+            <th class="num">Total</th>
+            <th class="num">Offtake</th>
+            <th class="num">CB</th>
+            <th class="num">Lift%</th>
+            <th class="num">Offtake%</th>
+            <th class="num" style="background:rgba(255,255,255,.03);color:#64748b;font-size:10px">Src</th>
+          </tr>
+        </thead>
+        <tbody id="pdl-f1-body">
+          ${r.map((row,i)=>{
+            const fps = fpsCount || row.shops || 1730;
+            const total=+((row.ob||0)+(row.lift||0)).toFixed(3);
+            const lPct=row.allot>0?((row.lift/row.allot)*100).toFixed(1):'—';
+            const oPct=row.entitle>0?((row.offtake/row.entitle)*100).toFixed(1):'—';
+            const src = (row.uploaded||false) ? '<span style="color:#34d399;font-size:11px">🔵</span>' : '<span style="color:#475569;font-size:11px">⚪</span>';
+            return `<tr>
+              <td style="font-weight:600">${row.name}</td>
+              <td class="num" style="color:${fpsCount?'#93c5fd':'#64748b'}">${fps}</td>
+              <td class="num" style="color:${pdlSheet.cardsLoaded?'#6ee7b7':'#64748b'}">${(row.cards||0).toLocaleString()}</td>
+              <td class="num editable">${pdlNum(row.entitle,'f1.rows.'+i+'.entitle')}</td>
+              <td class="num editable">${pdlNum(row.allot,'f1.rows.'+i+'.allot')}</td>
+              <td class="num editable">${pdlNum(row.ob,'f1.rows.'+i+'.ob')}</td>
+              <td class="num editable">${pdlNum(row.lift,'f1.rows.'+i+'.lift')}</td>
+              <td class="num" style="color:#93c5fd">${total}</td>
+              <td class="num editable">${pdlNum(row.offtake,'f1.rows.'+i+'.offtake')}</td>
+              <td class="num editable">${pdlNum(row.cb,'f1.rows.'+i+'.cb')}</td>
+              <td class="num ${lPct>=95?'pct-good':lPct>=80?'pct-warn':''}">${lPct}%</td>
+              <td class="num ${oPct>=80?'pct-good':oPct>=60?'pct-warn':''}">${oPct}%</td>
+              <td class="num">${src}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+      </div>
+      <div style="font-size:10px;color:#475569;margin-top:8px">🔵 = uploaded from MIS this session &nbsp;|&nbsp; ⚪ = previous/default value. Src column not in Excel download.</div>
+    </div>`;
+  },
+
+  f2(panel){
+    const d=pdlSheet.f2;
+    panel.innerHTML=`
+    <div class="pdl-panel">
+      <h3>🍚 Form 2 — Boiled & Raw Rice Particulars</h3>
+      <div class="pdl-source-box">
+        <span class="pdl-source-label">📥 MIS Source</span>
+        <span style="font-size:11px;color:var(--muted);flex:1">Enter OB, Receipt and Offtake — totals auto-calculated</span>
+        <button class="btn-tiny" onclick="pdlExportForm2()" style="background:rgba(52,211,153,.15);border-color:rgba(52,211,153,.4);color:#6ee7b7">📥 Download</button>
+      </div>
+      <table class="pdls-table" style="max-width:600px">
+        <thead><tr><th>Type</th><th class="num">OB</th><th class="num">Receipt</th><th class="num">Total</th><th class="num">Offtake</th><th class="num">Closing</th></tr></thead>
+        <tbody>
+          ${['boiled','raw'].map(t=>{
+            const row=d[t]; const total=(row.ob||0)+(row.receipt||0); const cb=total-(row.offtake||0);
+            return `<tr>
+              <td style="font-weight:600">${t==='boiled'?'Boiled Rice':'Raw Rice'}</td>
+              <td class="num editable">${pdlNum(row.ob,'f2.'+t+'.ob')}</td>
+              <td class="num editable">${pdlNum(row.receipt,'f2.'+t+'.receipt')}</td>
+              <td class="num" style="color:#93c5fd">${total}</td>
+              <td class="num editable">${pdlNum(row.offtake,'f2.'+t+'.offtake')}</td>
+              <td class="num" style="color:#fca5a5">${cb}</td>
+            </tr>`;
+          }).join('')}
+          <tr style="background:rgba(30,58,138,.3);font-weight:700">
+            <td>Total Rice</td>
+            ${['ob','receipt'].map(k=>`<td class="num">${(d.boiled[k]||0)+(d.raw[k]||0)}</td>`).join('')}
+            <td class="num" style="color:#93c5fd">${(d.boiled.ob+d.boiled.receipt+d.raw.ob+d.raw.receipt)}</td>
+            <td class="num">${(d.boiled.offtake||0)+(d.raw.offtake||0)}</td>
+            <td class="num" style="color:#fca5a5">${((d.boiled.ob+d.boiled.receipt)-(d.boiled.offtake||0))+((d.raw.ob+d.raw.receipt)-(d.raw.offtake||0))}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>`;
+  },
+
+  f4(panel){
+    const r=pdlSheet.f1.rows;
+    panel.innerHTML=`
+    <div class="pdl-panel">
+      <h3>📊 Form 4 — Annual Turnover <span style="font-size:11px;color:#34d399;font-weight:400;margin-left:8px">✓ Auto-derived from Form 1</span></h3>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px">Values below are taken from Form 1 liftment. "Cumulative from April" column — enter manually or will remain as shown.</div>
+      <table class="pdls-table" style="max-width:640px">
+        <thead><tr><th>#</th><th>Commodity</th><th class="num">This Month Qty</th><th class="num">This Month Value</th><th class="num editable" style="color:#fcd34d">Apr–YTD Qty</th><th class="num">Apr–YTD Value</th></tr></thead>
+        <tbody>
+          ${r.map((row,i)=>`<tr>
+            <td>${i+1}</td>
+            <td>${row.name}</td>
+            <td class="num commodity-highlight">${row.lift||0}</td>
+            <td class="num" style="color:var(--muted)">—</td>
+            <td class="num editable">${pdlNum(row.lift,'f1.rows.'+i+'.lift')}</td>
+            <td class="num" style="color:var(--muted)">—</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  },
+
+  f5(panel){
+    const d=pdlSheet.f5.data;
+    panel.innerHTML=`
+    <div class="pdl-panel">
+      <h3>🏪 Form 5 — நியாய விலைக் கடை விவரங்கள் (FPS Details)</h3>
+      <div class="pdl-source-box">
+        <span class="pdl-source-label">🗄️ Basic Data</span>
+        <span style="font-size:11px;color:var(--muted);flex:1">Update from master data. Figures below are as per last month.</span>
+        <button class="btn-tiny" onclick="pdlExportForm5()" style="background:rgba(52,211,153,.15);border-color:rgba(52,211,153,.4);color:#6ee7b7">📥 Download</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:14px">
+        ${[
+          ['Rural FT (முழு நேர)',d.rural_ft,'f5.data.rural_ft'],
+          ['Rural PT (பகுதி நேர)',d.rural_pt,'f5.data.rural_pt'],
+          ['Urban FT',d.urban_ft,'f5.data.urban_ft'],
+          ['Urban PT',d.urban_pt,'f5.data.urban_pt'],
+          ['Women / SHG FT',d.shg_ft,'f5.data.shg_ft'],
+          ['Women / SHG PT',d.shg_pt,'f5.data.shg_pt'],
+          ['TNCSC FT',d.tncsc_ft,'f5.data.tncsc_ft'],
+          ['TNCSC PT',d.tncsc_pt,'f5.data.tncsc_pt'],
+          ['Kerosene Depots',d.kerosene,'f5.data.kerosene'],
+          ['Mobile Vans',d.mobile,'f5.data.mobile'],
+          ['New this month',d.newMonth,'f5.data.newMonth'],
+        ].map(([lbl,val,path])=>`
+          <div style="background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px;padding:12px">
+            <div style="font-size:10px;color:var(--muted);margin-bottom:4px">${lbl}</div>
+            <input type="number" value="${val}" onchange="pdlSet('${path}',+this.value);pdlOpenForm('f5')" 
+              style="background:transparent;border:none;border-bottom:1px solid rgba(99,102,241,.4);color:#fcd34d;width:100%;font-size:18px;font-weight:700;outline:none;padding-bottom:2px">
+          </div>
+        `).join('')}
+      </div>
+      <div style="background:rgba(30,58,138,.2);border-radius:8px;padding:12px;font-size:13px">
+        <span style="color:var(--muted)">Grand Total FPS: </span>
+        <span style="font-size:20px;font-weight:800;color:#93c5fd">${(d.rural_ft+d.rural_pt+d.urban_ft+d.urban_pt+d.shg_ft+d.shg_pt+d.tncsc_ft+d.tncsc_pt)}</span>
+        <span style="color:var(--muted);margin-left:16px">FT: </span>
+        <span style="font-weight:700;color:#6ee7b7">${d.rural_ft+d.urban_ft+d.shg_ft+d.tncsc_ft}</span>
+        <span style="color:var(--muted);margin-left:10px">PT: </span>
+        <span style="font-weight:700;color:#fbbf24">${d.rural_pt+d.urban_pt+d.shg_pt+d.tncsc_pt}</span>
+      </div>
+    </div>`;
+  },
+
+  f6(panel){
+    const d=pdlSheet.f6.data;
+    const fields=[
+      ['PHH Rice Cards',d.phh,'f6.data.phh'],
+      ['NPHH Rice Cards',d.nphh,'f6.data.nphh'],
+      ['AAY Cards',d.aay,'f6.data.aay'],
+      ['Sugar Option',d.sugar_opt,'f6.data.sugar_opt'],
+      ['Police Cards',d.police,'f6.data.police'],
+      ['Forest Cards',d.forest,'f6.data.forest'],
+      ['N Cards',d.n_cards,'f6.data.n_cards'],
+      ['OAP Cards',d.oap,'f6.data.oap'],
+      ['AP Cards',d.ap,'f6.data.ap'],
+      ['Others',d.others,'f6.data.others'],
+      ['Ceylon Refugees',d.ceylon,'f6.data.ceylon'],
+      ['Kerosene Cards',d.kerosene,'f6.data.kerosene'],
+      ['Rural Cards',d.rural,'f6.data.rural'],
+      ['Urban Cards',d.urban,'f6.data.urban'],
+    ];
+    const total=d.phh+d.nphh+d.aay+d.police+d.forest+d.n_cards+d.oap+d.ap+d.others;
+    panel.innerHTML=`
+    <div class="pdl-panel">
+      <h3>🪪 Form 6 — Family Card Details</h3>
+      <div class="pdl-source-box">
+        <span class="pdl-source-label">🗄️ Basic Data</span>
+        <span style="font-size:11px;color:var(--muted);flex:1">Update these from TNPDS portal or FPS master data</span>
+        <button class="btn-tiny" onclick="pdlExportForm6()" style="background:rgba(52,211,153,.15);border-color:rgba(52,211,153,.4);color:#6ee7b7">📥 Download</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:14px">
+        ${fields.map(([lbl,val,path])=>`
+          <div style="background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px;padding:12px">
+            <div style="font-size:10px;color:var(--muted);margin-bottom:4px">${lbl}</div>
+            <input type="number" value="${val}" onchange="pdlSet('${path}',+this.value)" 
+              style="background:transparent;border:none;border-bottom:1px solid rgba(99,102,241,.4);color:#fcd34d;width:100%;font-size:16px;font-weight:700;outline:none">
+          </div>
+        `).join('')}
+      </div>
+      <div style="background:rgba(30,58,138,.2);border-radius:8px;padding:12px">
+        <span style="color:var(--muted)">Total Cards: </span>
+        <span style="font-size:22px;font-weight:800;color:#93c5fd">${total.toLocaleString()}</span>
+        <span style="color:var(--muted);margin-left:20px">Rural: </span><span style="font-weight:700;color:#6ee7b7">${d.rural.toLocaleString()}</span>
+        <span style="color:var(--muted);margin-left:12px">Urban: </span><span style="font-weight:700;color:#fbbf24">${d.urban.toLocaleString()}</span>
+      </div>
+    </div>`;
+  },
+
+  f10(panel){
+    const d=pdlSheet.f10.data;
+    const ftTotal=d.ft_own+d.ft_govt+d.ft_rent+d.ft_free;
+    const ptTotal=d.pt_own+d.pt_govt+d.pt_rent+d.pt_free;
+    panel.innerHTML=`
+    <div class="pdl-panel">
+      <h3>🏗️ Form 10 — Building Particulars</h3>
+      <div class="pdl-source-box">
+        <span class="pdl-source-label">🗄️ Basic Data</span>
+        <span style="font-size:11px;color:var(--muted);flex:1">Update when new buildings are added/changed</span>
+        <button class="btn-tiny" onclick="pdlExportForm10()" style="background:rgba(52,211,153,.15);border-color:rgba(52,211,153,.4);color:#6ee7b7">📥 Download</button>
+      </div>
+      <table class="pdls-table" style="max-width:700px">
+        <thead>
+          <tr><th>Type</th><th class="num">Own</th><th class="num">Govt.</th><th class="num">Rental</th><th class="num">Rent-free</th><th class="num">Total</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="font-weight:600">Full Time FPS</td>
+            ${['ft_own','ft_govt','ft_rent','ft_free'].map(k=>`<td class="num editable">${pdlNum(d[k],'f10.data.'+k)}</td>`).join('')}
+            <td class="num" style="color:#93c5fd;font-weight:700">${ftTotal}</td>
+          </tr>
+          <tr>
+            <td style="font-weight:600">Part Time FPS</td>
+            ${['pt_own','pt_govt','pt_rent','pt_free'].map(k=>`<td class="num editable">${pdlNum(d[k],'f10.data.'+k)}</td>`).join('')}
+            <td class="num" style="color:#93c5fd;font-weight:700">${ptTotal}</td>
+          </tr>
+          <tr style="background:rgba(30,58,138,.3);font-weight:700">
+            <td>Total</td>
+            ${['own','govt','rent','free'].map(k=>`<td class="num">${d['ft_'+k]+d['pt_'+k]}</td>`).join('')}
+            <td class="num" style="color:#34d399;font-size:14px">${ftTotal+ptTotal}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>`;
+  },
+
+  f11(panel){
+    const rows=pdlSheet.f11.rows;
+    panel.innerHTML=`
+    <div class="pdl-panel">
+      <h3>📈 Form 11 — Card Strength Particulars</h3>
+      <div class="pdl-source-box">
+        <span class="pdl-source-label">🗄️ Basic Data</span>
+        <span style="font-size:11px;color:var(--muted);flex:1">Card strength distribution across shops</span>
+        <button class="btn-tiny" onclick="pdlExportForm11()" style="background:rgba(52,211,153,.15);border-color:rgba(52,211,153,.4);color:#6ee7b7">📥 Download</button>
+      </div>
+      <table class="pdls-table" style="max-width:680px">
+        <thead>
+          <tr><th>Card Strength</th><th class="num">FTS Rural</th><th class="num">FTS Urban</th><th class="num">FTS Total</th><th class="num">PTS Rural</th><th class="num">PTS Urban</th><th class="num">PTS Total</th></tr>
+        </thead>
+        <tbody>
+          ${rows.map((r,i)=>{
+            const ftTot=(r.ft_r||0)+(r.ft_u||0); const ptTot=(r.pt_r||0)+(r.pt_u||0);
+            return `<tr>
+              <td style="font-weight:600">${r.range}</td>
+              <td class="num editable">${pdlNum(r.ft_r,'f11.rows.'+i+'.ft_r')}</td>
+              <td class="num editable">${pdlNum(r.ft_u,'f11.rows.'+i+'.ft_u')}</td>
+              <td class="num" style="color:#93c5fd">${ftTot}</td>
+              <td class="num editable">${pdlNum(r.pt_r,'f11.rows.'+i+'.pt_r')}</td>
+              <td class="num editable">${pdlNum(r.pt_u,'f11.rows.'+i+'.pt_u')}</td>
+              <td class="num" style="color:#fbbf24">${ptTot}</td>
+            </tr>`;
+          }).join('')}
+          <tr style="background:rgba(30,58,138,.3);font-weight:700">
+            <td>Total</td>
+            <td class="num">${rows.reduce((s,r)=>s+(r.ft_r||0),0)}</td>
+            <td class="num">${rows.reduce((s,r)=>s+(r.ft_u||0),0)}</td>
+            <td class="num" style="color:#34d399">${rows.reduce((s,r)=>s+(r.ft_r||0)+(r.ft_u||0),0)}</td>
+            <td class="num">${rows.reduce((s,r)=>s+(r.pt_r||0),0)}</td>
+            <td class="num">${rows.reduce((s,r)=>s+(r.pt_u||0),0)}</td>
+            <td class="num" style="color:#34d399">${rows.reduce((s,r)=>s+(r.pt_r||0)+(r.pt_u||0),0)}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>`;
+  },
+
+  f12(panel){
+    const d=pdlSheet.f12.data;
+    const total=(d.ob||0)+(d.receipt||0);
+    const cb=total-(d.sales||0);
+    panel.innerHTML=`
+    <div class="pdl-panel">
+      <h3>🍵 Form 12 — Ooty Tea Indent Details</h3>
+      <div class="pdl-source-box">
+        <span class="pdl-source-label">✏️ Manual Entry</span>
+        <span style="font-size:11px;color:var(--muted);flex:1">Enter monthly Ooty tea figures from Indcoserve records</span>
+        <button class="btn-tiny" onclick="pdlExportForm12()" style="background:rgba(52,211,153,.15);border-color:rgba(52,211,153,.4);color:#6ee7b7">📥 Download</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px">
+        ${[
+          ['Target',d.target,'f12.data.target'],
+          ['OB (MT)',d.ob,'f12.data.ob'],
+          ['Receipt',d.receipt,'f12.data.receipt'],
+          ['Total (auto)',total,null],
+          ['Sales',d.sales,'f12.data.sales'],
+          ['Closing (auto)',cb,null],
+          ['Upto Month',d.upto,'f12.data.upto'],
+          ['Next Month Indent',d.indent,'f12.data.indent'],
+          ['Dues (₹)',d.dues,'f12.data.dues'],
+          ['Remitted (₹)',d.remitted,'f12.data.remitted'],
+        ].map(([lbl,val,path])=>`
+          <div style="background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px;padding:12px">
+            <div style="font-size:10px;color:var(--muted);margin-bottom:4px">${lbl}</div>
+            ${path
+              ? `<input type="number" step="0.01" value="${val}" onchange="pdlSet('${path}',+this.value);pdlOpenForm('f12')"
+                   style="background:transparent;border:none;border-bottom:1px solid rgba(99,102,241,.4);color:#fcd34d;width:100%;font-size:18px;font-weight:700;outline:none">`
+              : `<div style="font-size:18px;font-weight:700;color:#93c5fd">${val}</div>`
+            }
+          </div>
+        `).join('')}
+      </div>
+    </div>`;
+  },
+
+  f13(panel){
+    const d=pdlSheet.f13;
+    panel.innerHTML=`
+    <div class="pdl-panel">
+      <h3>🆕 Form 13 — புதியதாக துவங்கப்பட்ட நியாயவிலைக் கடைகள்</h3>
+      <div class="pdl-source-box">
+        <span class="pdl-source-label">🔗 Google Sheet</span>
+        <span style="font-size:11px;color:var(--muted);flex:1">Block staff submit new shop details via Google Sheet</span>
+        <button class="btn-tiny" onclick="pdlFetchForm13()" style="background:rgba(99,102,241,.2);border-color:rgba(99,102,241,.5);color:#a5b4fc">🔄 Fetch from Sheet</button>
+        <button class="btn-tiny" onclick="pdlExportForm13()" style="background:rgba(52,211,153,.15);border-color:rgba(52,211,153,.4);color:#6ee7b7">📥 Download</button>
+      </div>
+      <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
+        <input type="text" id="pdl-f13-url" value="${d.gsheet_url}" placeholder="Google Sheet published CSV URL"
+          style="flex:1;background:rgba(15,23,42,.7);border:1px solid var(--border);color:var(--ink);padding:7px 12px;border-radius:6px;font-size:12px"
+          oninput="pdlSheet.f13.gsheet_url=this.value;localStorage.setItem('pdlsht_f13_url',this.value)">
+      </div>
+      <div style="margin-bottom:14px;background:rgba(15,23,42,.4);border:1px solid var(--border);border-radius:8px;padding:12px">
+        <div style="font-size:11px;color:#fbbf24;margin-bottom:10px;font-weight:600">➕ Add new shop manually:</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <input id="pdl-f13-name" type="text" placeholder="கடை பெயர்" style="flex:2;min-width:140px;background:rgba(15,23,42,.7);border:1px solid var(--border);color:var(--ink);padding:6px 10px;border-radius:6px;font-size:12px">
+          <input id="pdl-f13-type" type="text" placeholder="முழு/பகுதி நேரம்" style="flex:1;min-width:100px;background:rgba(15,23,42,.7);border:1px solid var(--border);color:var(--ink);padding:6px 10px;border-radius:6px;font-size:12px">
+          <input id="pdl-f13-order" type="text" placeholder="G.O./Letter No." style="flex:2;min-width:120px;background:rgba(15,23,42,.7);border:1px solid var(--border);color:var(--ink);padding:6px 10px;border-radius:6px;font-size:12px">
+          <button class="btn-tiny" onclick="pdlAddF13Row()">➕ Add</button>
+        </div>
+      </div>
+      ${d.rows.length===0
+        ? `<div class="pdl-empty-state"><div class="icon">🆕</div><div style="color:var(--muted)">No new shops this month — add manually or fetch from sheet</div></div>`
+        : `<table class="pdls-table">
+            <thead><tr><th>#</th><th>கடை பெயர்</th><th>வகை</th><th>G.O./Letter</th><th style="width:60px">நீக்கு</th></tr></thead>
+            <tbody>${d.rows.map((r,i)=>`<tr>
+              <td>${i+1}</td>
+              <td>${r.name}</td>
+              <td>${r.type}</td>
+              <td>${r.order||'—'}</td>
+              <td><button class="btn-tiny" style="background:rgba(239,68,68,.15);border-color:rgba(239,68,68,.4);color:#fca5a5;font-size:10px" onclick="pdlSheet.f13.rows.splice(${i},1);pdlOpenForm('f13')">✕</button></td>
+            </tr>`).join('')}</tbody>
+          </table>`
+      }
+    </div>`;
+    // Restore saved URL
+    const saved=localStorage.getItem('pdlsht_f13_url');
+    if(saved && !d.gsheet_url){ d.gsheet_url=saved; document.getElementById('pdl-f13-url').value=saved; }
+  },
+
+  f14(panel){
+    const d=pdlSheet.f14.data;
+    panel.innerHTML=`
+    <div class="pdl-panel">
+      <h3>📝 Form 14 — புதிய கடை கோரிக்கைகள் (New Shop Applications)</h3>
+      <div class="pdl-source-box">
+        <span class="pdl-source-label">🗄️ Basic Data</span>
+        <span style="font-size:11px;color:var(--muted);flex:1">Cumulative application status — update when new applications received/processed</span>
+        <button class="btn-tiny" onclick="pdlExportForm14()" style="background:rgba(52,211,153,.15);border-color:rgba(52,211,153,.4);color:#6ee7b7">📥 Download</button>
+      </div>
+      <table class="pdls-table" style="max-width:700px">
+        <thead><tr><th>Category</th><th class="num">Received FT</th><th class="num">Received PT</th><th class="num">Fulfilled FT</th><th class="num">Fulfilled PT</th><th class="num">Rejected FT</th><th class="num">Rejected PT</th><th class="num">Pending FT</th><th class="num">Pending PT</th></tr></thead>
+        <tbody>
+          <tr>
+            <td style="font-weight:600">திருவண்ணாமலை</td>
+            ${['ft_req','pt_req','ft_done','pt_done','ft_reject','pt_reject','ft_pend','pt_pend'].map(k=>`<td class="num editable">${pdlNum(d[k],'f14.data.'+k)}</td>`).join('')}
+          </tr>
+        </tbody>
+      </table>
+      <div style="margin-top:10px;font-size:11px;color:var(--muted)">Note: Received = Fulfilled + Rejected + Pending</div>
+    </div>`;
+  },
+
+  f17(panel){
+    const d=pdlSheet.f17.data;
+    panel.innerHTML=`
+    <div class="pdl-panel">
+      <h3>📐 Form 17 — கட்டட கோரிக்கைகள் விவரம் (Building Construction Requests)</h3>
+      <div class="pdl-source-box">
+        <span class="pdl-source-label">🗄️ Basic Data</span>
+        <span style="font-size:11px;color:var(--muted);flex:1">Cumulative building construction request status</span>
+        <button class="btn-tiny" onclick="pdlExportForm17()" style="background:rgba(52,211,153,.15);border-color:rgba(52,211,153,.4);color:#6ee7b7">📥 Download</button>
+      </div>
+      <table class="pdls-table" style="max-width:700px">
+        <thead><tr><th>Region</th><th class="num">Received FT</th><th class="num">Received PT</th><th class="num">Fulfilled FT</th><th class="num">Fulfilled PT</th><th class="num">Rejected FT</th><th class="num">Rejected PT</th><th class="num">Pending FT</th><th class="num">Pending PT</th></tr></thead>
+        <tbody>
+          <tr>
+            <td style="font-weight:600">திருவண்ணாமலை</td>
+            ${['ft_req','pt_req','ft_done','pt_done','ft_reject','pt_reject','ft_pend','pt_pend'].map(k=>`<td class="num editable">${pdlNum(d[k],'f17.data.'+k)}</td>`).join('')}
+          </tr>
+        </tbody>
+      </table>
+    </div>`;
+  },
+
+};
+
+// Stubs for not-yet-rendered forms
+['f3','f7','f8','f9','f15','f16'].forEach(id=>{
+  if(!PDL_FORM_RENDERERS[id]){
+    PDL_FORM_RENDERERS[id] = (panel)=>{
+      const f=PDL_FORMS.find(x=>x.id===id);
+      panel.innerHTML=`<div class="pdl-panel">
+        <h3>${f?.icon||'📋'} ${f?.num} — ${f?.title}</h3>
+        <div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);border-radius:8px;padding:16px;text-align:center">
+          <div style="font-size:24px;margin-bottom:8px">🚧</div>
+          <div style="color:#fbbf24;font-weight:600;margin-bottom:4px">Under Development</div>
+          <div style="font-size:11px;color:var(--muted)">This form editor will be added in the next update. Basic data from the sample file has been noted.</div>
+        </div>
+      </div>`;
+    };
+  }
+});
+
+// ── HELPERS ─────────────────────────────────────────────────
+function pdlMonthLabel(){
+  if(!pdlSheet.month) return '';
+  const [y,m]=pdlSheet.month.split('-');
+  return new Date(+y,+m-1,1).toLocaleString('en-IN',{month:'long',year:'numeric'});
+}
+
+function pdlAddF13Row(){
+  const name=document.getElementById('pdl-f13-name')?.value.trim();
+  const type=document.getElementById('pdl-f13-type')?.value.trim();
+  const order=document.getElementById('pdl-f13-order')?.value.trim();
+  if(!name){toast('Enter shop name',true);return;}
+  pdlSheet.f13.rows.push({name, type:type||'பகுதி நேரம்', order});
+  pdlOpenForm('f13');
+}
+
+async function pdlFetchForm13(){
+  const url=document.getElementById('pdl-f13-url')?.value.trim();
+  if(!url){toast('Enter Google Sheet CSV URL',true);return;}
+  try{
+    const resp=await safeFetch(url);
+    if(!resp.ok) throw new Error('HTTP '+resp.status);
+    const txt=await resp.text();
+    const rows=parseCSV(txt);
+    if(rows.length<2){throw new Error('No data rows');}
+    pdlSheet.f13.rows=rows.slice(1).filter(r=>r[0]?.trim()).map(r=>({
+      name:String(r[0]||'').trim(),
+      type:String(r[1]||'பகுதி நேரம்').trim(),
+      order:String(r[2]||'').trim()
+    }));
+    pdlOpenForm('f13');
+    toast('Form 13: '+pdlSheet.f13.rows.length+' shops loaded from sheet');
+  }catch(e){toast('Fetch failed: '+e.message,true);}
+}
+
+// ── EXCEL EXPORT — individual forms ─────────────────────────
+function pdlExportForm1(){
+  const wb=XLSX.utils.book_new();
+  const mon=pdlMonthLabel();
+  const hdr=[['Name of the Region: '+pdlSheet.region],
+    ['Liftment, Offtake and Closing Balance Particulars for '+mon],
+    ['Name of the Commodity','No of FPS','No of Cards','Entitlement','Allotment','OB','Liftment','Total','Offtake','Closing Balance','Liftment %','Offtake %']];
+  const rows=pdlSheet.f1.rows.map(r=>{
+    const total=(r.ob||0)+(r.lift||0);
+    const lPct=r.allot>0?+(r.lift/r.allot).toFixed(4):1;
+    const oPct=r.entitle>0?+(r.offtake/r.entitle).toFixed(4):0;
+    return [r.name,r.shops||1730,r.cards||0,r.entitle,r.allot,r.ob,r.lift,total,r.offtake,r.cb,lPct,oPct];
+  });
+  const ws=XLSX.utils.aoa_to_sheet([...hdr,...rows]);
+  ws['!cols']=[{wch:22},{wch:8},{wch:10},{wch:12},{wch:12},{wch:10},{wch:10},{wch:10},{wch:10},{wch:10},{wch:10},{wch:10}];
+  XLSX.utils.book_append_sheet(wb,ws,'Form 1');
+  XLSX.writeFile(wb,`PDL_Form1_${pdlSheet.month||'draft'}.xlsx`);
+  toast('Form 1 downloaded');
+}
+
+function pdlExportForm2(){
+  const d=pdlSheet.f2; const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet([
+    ['Form 2 — Boiled & Raw Rice | '+pdlMonthLabel()],
+    ['Type','OB','Receipt','Total','Offtake','Closing'],
+    ['Boiled Rice',d.boiled.ob,d.boiled.receipt,d.boiled.ob+d.boiled.receipt,d.boiled.offtake,(d.boiled.ob+d.boiled.receipt)-d.boiled.offtake],
+    ['Raw Rice',d.raw.ob,d.raw.receipt,d.raw.ob+d.raw.receipt,d.raw.offtake,(d.raw.ob+d.raw.receipt)-d.raw.offtake],
+    ['Total',d.boiled.ob+d.raw.ob,d.boiled.receipt+d.raw.receipt,
+     d.boiled.ob+d.boiled.receipt+d.raw.ob+d.raw.receipt,
+     d.boiled.offtake+d.raw.offtake,
+     (d.boiled.ob+d.boiled.receipt-d.boiled.offtake)+(d.raw.ob+d.raw.receipt-d.raw.offtake)]
+  ]);
+  XLSX.utils.book_append_sheet(wb,ws,'Form 2');
+  XLSX.writeFile(wb,`PDL_Form2_${pdlSheet.month||'draft'}.xlsx`);
+  toast('Form 2 downloaded');
+}
+
+function pdlExportForm5(){
+  const d=pdlSheet.f5.data; const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet([
+    ['Form 5 — FPS Details | '+pdlMonthLabel()],
+    ['Category','FT','PT'],
+    ['Rural',d.rural_ft,d.rural_pt],['Urban',d.urban_ft,d.urban_pt],
+    ['Women/SHG',d.shg_ft,d.shg_pt],['TNCSC',d.tncsc_ft,d.tncsc_pt],
+    ['Total',d.rural_ft+d.urban_ft+d.shg_ft+d.tncsc_ft,d.rural_pt+d.urban_pt+d.shg_pt+d.tncsc_pt],
+    ['Kerosene Depots',d.kerosene,''],['Mobile Vans',d.mobile,''],
+    ['New this month',d.newMonth,'']
+  ]);
+  XLSX.utils.book_append_sheet(wb,ws,'Form 5');
+  XLSX.writeFile(wb,`PDL_Form5_${pdlSheet.month||'draft'}.xlsx`);
+  toast('Form 5 downloaded');
+}
+
+function pdlExportForm6(){
+  const d=pdlSheet.f6.data; const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet([
+    ['Form 6 — Family Card Details | '+pdlMonthLabel()],
+    ['Card Type','Count'],
+    ['PHH',d.phh],['NPHH',d.nphh],['AAY',d.aay],['Sugar Option',d.sugar_opt],
+    ['Police',d.police],['Forest',d.forest],['N Cards',d.n_cards],['OAP',d.oap],
+    ['AP',d.ap],['Others',d.others],['Total',d.phh+d.nphh+d.aay+d.police+d.forest+d.n_cards+d.oap+d.ap+d.others],
+    ['Ceylon Refugees',d.ceylon],['Kerosene Cards',d.kerosene],
+    ['Rural',d.rural],['Urban',d.urban]
+  ]);
+  XLSX.utils.book_append_sheet(wb,ws,'Form 6');
+  XLSX.writeFile(wb,`PDL_Form6_${pdlSheet.month||'draft'}.xlsx`);
+  toast('Form 6 downloaded');
+}
+
+function pdlExportForm10(){
+  const d=pdlSheet.f10.data; const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet([
+    ['Form 10 — Building Particulars | '+pdlMonthLabel()],
+    ['','Own','Govt.','Rental','Rent-free','Total'],
+    ['Full Time',d.ft_own,d.ft_govt,d.ft_rent,d.ft_free,d.ft_own+d.ft_govt+d.ft_rent+d.ft_free],
+    ['Part Time',d.pt_own,d.pt_govt,d.pt_rent,d.pt_free,d.pt_own+d.pt_govt+d.pt_rent+d.pt_free],
+    ['Total',d.ft_own+d.pt_own,d.ft_govt+d.pt_govt,d.ft_rent+d.pt_rent,d.ft_free+d.pt_free,
+     d.ft_own+d.ft_govt+d.ft_rent+d.ft_free+d.pt_own+d.pt_govt+d.pt_rent+d.pt_free]
+  ]);
+  XLSX.utils.book_append_sheet(wb,ws,'Form 10');
+  XLSX.writeFile(wb,`PDL_Form10_${pdlSheet.month||'draft'}.xlsx`);
+  toast('Form 10 downloaded');
+}
+
+function pdlExportForm11(){
+  const rows=pdlSheet.f11.rows; const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet([
+    ['Form 11 — Card Strength Particulars | '+pdlMonthLabel()],
+    ['Card Strength','FTS Rural','FTS Urban','FTS Total','PTS Rural','PTS Urban','PTS Total'],
+    ...rows.map(r=>[ r.range,r.ft_r,r.ft_u,(r.ft_r||0)+(r.ft_u||0),r.pt_r,r.pt_u,(r.pt_r||0)+(r.pt_u||0)]),
+    ['Total',
+      rows.reduce((s,r)=>s+(r.ft_r||0),0),rows.reduce((s,r)=>s+(r.ft_u||0),0),
+      rows.reduce((s,r)=>s+(r.ft_r||0)+(r.ft_u||0),0),
+      rows.reduce((s,r)=>s+(r.pt_r||0),0),rows.reduce((s,r)=>s+(r.pt_u||0),0),
+      rows.reduce((s,r)=>s+(r.pt_r||0)+(r.pt_u||0),0)]
+  ]);
+  XLSX.utils.book_append_sheet(wb,ws,'Form 11');
+  XLSX.writeFile(wb,`PDL_Form11_${pdlSheet.month||'draft'}.xlsx`);
+  toast('Form 11 downloaded');
+}
+
+function pdlExportForm12(){
+  const d=pdlSheet.f12.data; const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet([
+    ['Form 12 — Ooty Tea Indent | '+pdlMonthLabel()],
+    ['Region','Target','OB','Receipt','Total','Sales','Closing','Upto Month','Next Month Indent','Dues','Remitted'],
+    [pdlSheet.region,d.target,d.ob,d.receipt,d.ob+d.receipt,d.sales,(d.ob+d.receipt)-d.sales,d.upto,d.indent,d.dues,d.remitted]
+  ]);
+  XLSX.utils.book_append_sheet(wb,ws,'Form 12');
+  XLSX.writeFile(wb,`PDL_Form12_${pdlSheet.month||'draft'}.xlsx`);
+  toast('Form 12 downloaded');
+}
+
+function pdlExportForm13(){
+  const rows=pdlSheet.f13.rows; const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet([
+    ['Form 13 — New FPS Opened | '+pdlMonthLabel()],
+    ['#','கடை பெயர்','வகை (முழு/பகுதி)','G.O./Letter No.'],
+    ...rows.map((r,i)=>[i+1,r.name,r.type,r.order||''])
+  ]);
+  XLSX.utils.book_append_sheet(wb,ws,'Form 13');
+  XLSX.writeFile(wb,`PDL_Form13_${pdlSheet.month||'draft'}.xlsx`);
+  toast('Form 13 downloaded');
+}
+
+function pdlExportForm14(){
+  const d=pdlSheet.f14.data; const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet([
+    ['Form 14 — New Shop Applications | '+pdlMonthLabel()],
+    ['','Received FT','Received PT','Fulfilled FT','Fulfilled PT','Rejected FT','Rejected PT','Pending FT','Pending PT'],
+    [pdlSheet.region,d.ft_req,d.pt_req,d.ft_done,d.pt_done,d.ft_reject,d.pt_reject,d.ft_pend,d.pt_pend]
+  ]);
+  XLSX.utils.book_append_sheet(wb,ws,'Form 14');
+  XLSX.writeFile(wb,`PDL_Form14_${pdlSheet.month||'draft'}.xlsx`);
+  toast('Form 14 downloaded');
+}
+
+function pdlExportForm17(){
+  const d=pdlSheet.f17.data; const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet([
+    ['Form 17 — Building Construction Requests | '+pdlMonthLabel()],
+    ['','Received FT','Received PT','Fulfilled FT','Fulfilled PT','Rejected FT','Rejected PT','Pending FT','Pending PT'],
+    [pdlSheet.region,d.ft_req,d.pt_req,d.ft_done,d.pt_done,d.ft_reject,d.pt_reject,d.ft_pend,d.pt_pend]
+  ]);
+  XLSX.utils.book_append_sheet(wb,ws,'Form 17');
+  XLSX.writeFile(wb,`PDL_Form17_${pdlSheet.month||'draft'}.xlsx`);
+  toast('Form 17 downloaded');
+}
+
+// ── MASTER EXCEL DOWNLOAD (all available forms) ─────────────
+function pdlDownloadExcel(){
+  const wb=XLSX.utils.book_new();
+  const mon=pdlMonthLabel();
+
+  // Form 1
+  const hdr=[['Name of the Region: '+pdlSheet.region],['Liftment, Offtake and Closing Balance — '+mon],
+    ['Commodity','FPS','Cards','Entitlement','Allotment','OB','Liftment','Total','Offtake','CB','Lift%','Offtake%']];
+  const f1rows=pdlSheet.f1.rows.map(r=>[r.name,r.shops||1730,r.cards||0,r.entitle,r.allot,r.ob,r.lift,(r.ob||0)+(r.lift||0),r.offtake,r.cb,
+    r.allot>0?+(r.lift/r.allot).toFixed(4):1, r.entitle>0?+(r.offtake/r.entitle).toFixed(4):0]);
+  const ws1=XLSX.utils.aoa_to_sheet([...hdr,...f1rows]);
+  XLSX.utils.book_append_sheet(wb,ws1,'Form 1');
+
+  // Form 2
+  const d2=pdlSheet.f2;
+  const ws2=XLSX.utils.aoa_to_sheet([['Form 2 — '+mon],['Type','OB','Receipt','Total','Offtake','CB'],
+    ['Boiled Rice',d2.boiled.ob,d2.boiled.receipt,d2.boiled.ob+d2.boiled.receipt,d2.boiled.offtake,(d2.boiled.ob+d2.boiled.receipt)-d2.boiled.offtake],
+    ['Raw Rice',d2.raw.ob,d2.raw.receipt,d2.raw.ob+d2.raw.receipt,d2.raw.offtake,(d2.raw.ob+d2.raw.receipt)-d2.raw.offtake]]);
+  XLSX.utils.book_append_sheet(wb,ws2,'Form 2');
+
+  // Form 5
+  const d5=pdlSheet.f5.data;
+  const ws5=XLSX.utils.aoa_to_sheet([['Form 5 — '+mon],['Category','FT','PT'],
+    ['Rural',d5.rural_ft,d5.rural_pt],['Urban',d5.urban_ft,d5.urban_pt],
+    ['SHG/Women',d5.shg_ft,d5.shg_pt],['TNCSC',d5.tncsc_ft,d5.tncsc_pt],
+    ['Total',d5.rural_ft+d5.urban_ft+d5.shg_ft+d5.tncsc_ft,d5.rural_pt+d5.urban_pt+d5.shg_pt+d5.tncsc_pt]]);
+  XLSX.utils.book_append_sheet(wb,ws5,'Form 5');
+
+  // Form 6
+  const d6=pdlSheet.f6.data;
+  const ws6=XLSX.utils.aoa_to_sheet([['Form 6 — '+mon],['PHH',d6.phh],['NPHH',d6.nphh],
+    ['AAY',d6.aay],['Police',d6.police],['OAP',d6.oap],['Total',d6.phh+d6.nphh+d6.aay+d6.police+d6.forest+d6.n_cards+d6.oap+d6.ap+d6.others],
+    ['Rural',d6.rural],['Urban',d6.urban]]);
+  XLSX.utils.book_append_sheet(wb,ws6,'Form 6');
+
+  // Form 12
+  const d12=pdlSheet.f12.data;
+  const ws12=XLSX.utils.aoa_to_sheet([['Form 12 — Ooty Tea — '+mon],
+    ['Target','OB','Receipt','Sales','Closing','Indent','Dues','Remitted'],
+    [d12.target,d12.ob,d12.receipt,d12.sales,(d12.ob+d12.receipt)-d12.sales,d12.indent,d12.dues,d12.remitted]]);
+  XLSX.utils.book_append_sheet(wb,ws12,'Form 12');
+
+  // Form 13
+  if(pdlSheet.f13.rows.length>0){
+    const ws13=XLSX.utils.aoa_to_sheet([['Form 13 — '+mon],['#','கடை பெயர்','வகை','G.O.'],
+      ...pdlSheet.f13.rows.map((r,i)=>[i+1,r.name,r.type,r.order||''])]);
+    XLSX.utils.book_append_sheet(wb,ws13,'Form 13');
+  }
+
+  XLSX.writeFile(wb,`PDL_AllForms_${pdlSheet.month||'draft'}_${pdlSheet.region}.xlsx`);
+  toast('All available forms downloaded');
+}
+
+// ── PDL TAB INIT ────────────────────────────────────────────
+const _pdlTabOrig = document.querySelector('[data-tab="pdlsheet"]');
+if(_pdlTabOrig){
+  _pdlTabOrig.addEventListener('click', ()=>{
+    if(!pdlSheet._inited){ pdlSheet._inited=true; initPDL(); }
+  });
+}
+setTimeout(()=>{ if(document.getElementById('tab-pdlsheet')?.classList.contains('active')){ if(!pdlSheet._inited){pdlSheet._inited=true;initPDL();} } }, 300);
+
 // Init
 initReminder();
+
 
 // ============================================================
 // e-KYC FILTER LOGIC
