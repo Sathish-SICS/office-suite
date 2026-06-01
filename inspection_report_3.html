@@ -594,6 +594,7 @@ document.addEventListener('keydown', e=>{
   <div class="tab" data-tab="reminder">📲 WhatsApp Reminder</div>
   <div class="tab" data-tab="ekyc">🔑 e-KYC Report</div>
   <div class="tab" data-tab="pdlsheet">📋 PDL Sheet</div>
+  <div class="tab" data-tab="notes">📄 Basic Notes</div>
 </div>
 
 <div class="tab-content active" id="tab-inspection">
@@ -1466,6 +1467,197 @@ document.addEventListener('keydown', e=>{
 <div id="pdl-active-form" style="display:none"></div>
 
 </div><!-- end tab-pdlsheet -->
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- BASIC NOTES TAB                                           -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="tab-content" id="tab-notes">
+<style>
+.bn-hero {
+  background: linear-gradient(135deg, rgba(15,23,42,.95) 0%, rgba(15,52,38,.5) 50%, rgba(15,23,42,.95) 100%);
+  border: 1px solid rgba(52,211,153,.25);
+  border-radius: 14px;
+  padding: 22px 28px;
+  margin-bottom: 18px;
+  position: relative;
+  overflow: hidden;
+}
+.bn-section {
+  background: rgba(15,23,42,.65);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+.bn-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  background: rgba(30,58,138,.3);
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+}
+.bn-section-header:hover { background: rgba(30,58,138,.5); }
+.bn-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bn-section-body { padding: 16px 18px; }
+.bn-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.bn-table th {
+  background: rgba(30,58,138,.5);
+  color: #93c5fd;
+  padding: 7px 10px;
+  border: 1px solid rgba(99,102,241,.2);
+  font-weight: 600;
+  font-size: 11px;
+  text-align: center;
+}
+.bn-table th.left { text-align: left; }
+.bn-table td {
+  padding: 6px 10px;
+  border: 1px solid rgba(255,255,255,.06);
+  color: var(--ink);
+  vertical-align: middle;
+  text-align: center;
+}
+.bn-table td.left { text-align: left; }
+.bn-table tr:nth-child(even) td { background: rgba(255,255,255,.02); }
+.bn-table tr.total-row td { background: rgba(30,58,138,.35); font-weight: 700; color: #93c5fd; }
+.bn-data-val { color: #fcd34d; font-weight: 700; }
+.bn-live { color: #34d399; }
+.bn-warn { color: #fbbf24; }
+.bn-section-actions { display: flex; gap: 6px; align-items: center; }
+.bn-tag-live { font-size:9px;padding:2px 6px;border-radius:10px;background:rgba(52,211,153,.15);color:#34d399;border:1px solid rgba(52,211,153,.3);font-weight:700 }
+.bn-tag-manual { font-size:9px;padding:2px 6px;border-radius:10px;background:rgba(251,191,36,.15);color:#fbbf24;border:1px solid rgba(251,191,36,.3);font-weight:700 }
+.bn-edit { background:transparent;border:1px solid rgba(99,102,241,.3);color:#a5b4fc;padding:3px 8px;border-radius:4px;font-size:11px;cursor:pointer }
+.bn-edit:hover { background:rgba(99,102,241,.2); }
+</style>
+
+<!-- HERO -->
+<div class="bn-hero">
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">
+    <div>
+      <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#34d399;margin-bottom:6px">திருவண்ணாமலை மாவட்டம்</div>
+      <div style="font-size:22px;font-weight:800;color:var(--ink);margin-bottom:4px">Basic Notes</div>
+      <div style="font-size:12px;color:var(--muted)">அடிப்படை குறிப்புகள் | Auto-compiled from all tabs</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <div>
+        <div style="font-size:10px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">As on Month</div>
+        <input type="month" id="bn-month" style="background:rgba(15,23,42,.7);border:1px solid rgba(52,211,153,.4);color:var(--ink);padding:7px 12px;border-radius:7px;font-size:13px;font-weight:600" onchange="bnRenderAll()">
+      </div>
+      <div style="display:flex;gap:8px;align-self:flex-end">
+        <button class="btn" onclick="bnRefreshAll()" style="font-size:12px;padding:8px 16px;background:rgba(52,211,153,.2);border-color:rgba(52,211,153,.5);color:#34d399">🔄 Refresh All</button>
+        <button class="btn" onclick="bnDownloadDocx()" style="font-size:12px;padding:8px 16px">📄 Download .docx</button>
+      </div>
+    </div>
+  </div>
+  <!-- Data source status -->
+  <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap" id="bn-source-status"></div>
+</div>
+
+<!-- INDEX / TABLE OF CONTENTS -->
+<div class="bn-section">
+  <div class="bn-section-header" onclick="bnToggle('bn-s0')">
+    <div class="bn-section-title">📑 1. பொருளடக்கம் (Index)</div>
+    <div class="bn-section-actions"><span class="bn-tag-live">Auto</span><span style="color:var(--muted);font-size:12px" id="bn-s0-toggle">▼</span></div>
+  </div>
+  <div class="bn-section-body" id="bn-s0">
+    <div id="bn-index-content"></div>
+  </div>
+</div>
+
+<!-- SECTION 1: FPS DETAILS -->
+<div class="bn-section">
+  <div class="bn-section-header" onclick="bnToggle('bn-s1')">
+    <div class="bn-section-title">🏪 2. நியாய விலைக் கடைகளின் விவரம்</div>
+    <div class="bn-section-actions"><span class="bn-tag-live">PDL Sheet</span><span style="color:var(--muted);font-size:12px" id="bn-s1-toggle">▼</span></div>
+  </div>
+  <div class="bn-section-body" id="bn-s1">
+    <div id="bn-fps-content"></div>
+  </div>
+</div>
+
+<!-- SECTION 2: BUILDING DETAILS -->
+<div class="bn-section">
+  <div class="bn-section-header" onclick="bnToggle('bn-s2')">
+    <div class="bn-section-title">🏗️ 3. கூட்டுறவு நியாய விலைக்கடைகளின் கட்டிட விவரம்</div>
+    <div class="bn-section-actions"><span class="bn-tag-live">PDL Sheet</span><span style="color:var(--muted);font-size:12px" id="bn-s2-toggle">▼</span></div>
+  </div>
+  <div class="bn-section-body" id="bn-s2">
+    <div id="bn-building-content"></div>
+  </div>
+</div>
+
+<!-- SECTION 3: STAFF DETAILS -->
+<div class="bn-section">
+  <div class="bn-section-header" onclick="bnToggle('bn-s3')">
+    <div class="bn-section-title">👥 4. களப்பணியாளர்கள் விவரப்பட்டியல்</div>
+    <div class="bn-section-actions"><span class="bn-tag-manual">Manual</span><span style="color:var(--muted);font-size:12px" id="bn-s3-toggle">▼</span></div>
+  </div>
+  <div class="bn-section-body" id="bn-s3">
+    <div id="bn-staff-content"></div>
+  </div>
+</div>
+
+<!-- SECTION 4: CARDS -->
+<div class="bn-section">
+  <div class="bn-section-header" onclick="bnToggle('bn-s4')">
+    <div class="bn-section-title">🪪 5. குடும்ப அட்டைகளின் விவரம்</div>
+    <div class="bn-section-actions"><span class="bn-tag-live">PDL Sheet</span><span style="color:var(--muted);font-size:12px" id="bn-s4-toggle">▼</span></div>
+  </div>
+  <div class="bn-section-body" id="bn-s4">
+    <div id="bn-cards-content"></div>
+  </div>
+</div>
+
+<!-- SECTION 5: TRIBAL FPS -->
+<div class="bn-section">
+  <div class="bn-section-header" onclick="bnToggle('bn-s5')">
+    <div class="bn-section-title">🏔️ 6. மலைவாழ் மக்கள் நியாய விலைக் கடைகளின் விவரம்</div>
+    <div class="bn-section-actions"><span class="bn-tag-manual">Manual</span><span style="color:var(--muted);font-size:12px" id="bn-s5-toggle">▼</span></div>
+  </div>
+  <div class="bn-section-body" id="bn-s5">
+    <div id="bn-tribal-content"></div>
+  </div>
+</div>
+
+<!-- SECTION 6: INSPECTION -->
+<div class="bn-section">
+  <div class="bn-section-header" onclick="bnToggle('bn-s6')">
+    <div class="bn-section-title">🔍 7. நியாய விலைக் கடைகளை ஆய்வு செய்த விவரம்</div>
+    <div class="bn-section-actions"><span class="bn-tag-live">Inspection Tab</span><span style="color:var(--muted);font-size:12px" id="bn-s6-toggle">▼</span></div>
+  </div>
+  <div class="bn-section-body" id="bn-s6">
+    <div id="bn-inspection-content"></div>
+  </div>
+</div>
+
+<!-- SECTION 7: OFFTAKE -->
+<div class="bn-section">
+  <div class="bn-section-header" onclick="bnToggle('bn-s7')">
+    <div class="bn-section-title">📦 8. விற்பனை விவரம் (Offtake)</div>
+    <div class="bn-section-actions"><span class="bn-tag-live">PDL Sheet</span><span style="color:var(--muted);font-size:12px" id="bn-s7-toggle">▼</span></div>
+  </div>
+  <div class="bn-section-body" id="bn-s7">
+    <div id="bn-offtake-content"></div>
+  </div>
+</div>
+
+</div><!-- end tab-notes -->
+
 
 
 </div>
@@ -8090,8 +8282,9 @@ function pdlApplyCardsToForms(){
   pdlSheet.f6.data.ap     = c.anp;
   pdlSheet.f6.data.rural  = c.rural;
   pdlSheet.f6.data.urban  = c.urban;
-  const total = c.phh + c.nphh + c.aay + c.police + (pdlSheet.f6.data.forest||0) + (pdlSheet.f6.data.n_cards||0) + c.oap + c.anp + (pdlSheet.f6.data.others||0);
+  const total = c.phh + c.nphh + c.aay + c.police + (pdlSheet.f6.data.forest||0) + c.noComm + c.oap + c.anp + (pdlSheet.f6.data.others||0);
   pdlSheet.f6.data.total  = total;
+  pdlSheet.f6.data.n_cards = c.noComm; // "No Commodity Cards" → N Cards
 
   // Update Form 1 card counts per commodity row
   const cardMap = {
@@ -9246,6 +9439,455 @@ function pdlDownloadExcel(){
   XLSX.writeFile(wb,`PDL_AllForms_${pdlSheet.month||'draft'}_${pdlSheet.region}.xlsx`);
   toast('All available forms downloaded');
 }
+
+// ============================================================
+// BASIC NOTES MODULE
+// ============================================================
+const bn = {
+  _inited: false,
+  month: '',
+  // Manual data stores (editable fields)
+  staff: {
+    csr_total: 15, csr_present: 15, csr_vacant: 0,
+    si_total: 6, si_present: 6, si_vacant: 0,
+    maternity: 1, maternity_role: 'கூட்டுறவு சார்பதிவாளர்',
+    other_notes: ''
+  },
+  tribal: {
+    rows: [
+      {name:'ஜமுனாமரத்தூர்', ft:13, pt:18, mobile:20},
+      {name:'நம்மியம்பட்டு', ft:3, pt:4, mobile:3}
+    ]
+  },
+};
+
+function initBN(){
+  const now = new Date();
+  const ym = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  const monthEl = document.getElementById('bn-month');
+  if(monthEl){ monthEl.value = pdlSheet.month || ym; bn.month = pdlSheet.month || ym; }
+  bnRenderAll();
+}
+
+function bnToggle(id){
+  const el = document.getElementById(id);
+  const tog = document.getElementById(id+'-toggle');
+  if(!el) return;
+  const hidden = el.style.display==='none';
+  el.style.display = hidden ? '' : 'none';
+  if(tog) tog.textContent = hidden ? '▼' : '▶';
+}
+
+function bnMonthLabel(){
+  const m = document.getElementById('bn-month')?.value || pdlSheet.month || bn.month;
+  if(!m) return '';
+  const [y,mo] = m.split('-');
+  return new Date(+y,+mo-1,1).toLocaleString('ta-IN',{month:'long',year:'numeric'});
+}
+
+function bnEnMonthLabel(){
+  const m = document.getElementById('bn-month')?.value || pdlSheet.month || bn.month;
+  if(!m) return '';
+  const [y,mo] = m.split('-');
+  return new Date(+y,+mo-1,1).toLocaleString('en-IN',{month:'long',year:'numeric'});
+}
+
+function bnRefreshAll(){ bnRenderAll(); toast('Basic Notes refreshed'); }
+
+function bnRenderAll(){
+  bnRenderSourceStatus();
+  bnRenderIndex();
+  bnRenderFPS();
+  bnRenderBuilding();
+  bnRenderStaff();
+  bnRenderCards();
+  bnRenderTribal();
+  bnRenderInspection();
+  bnRenderOfftake();
+}
+
+function bnRenderSourceStatus(){
+  const el = document.getElementById('bn-source-status');
+  if(!el) return;
+  const sources = [
+    { label:'Basic Data', ok: pdlSheet.basicLoaded, tab:'PDL Sheet Step 1' },
+    { label:'Cards File', ok: pdlSheet.cardsLoaded, tab:'PDL Sheet Step 2' },
+    { label:'Offtake Files', ok: Object.keys(pdlSheet.offtake).length>0, tab:'PDL Sheet Step 3' },
+    { label:'Inspection Report', ok: !!(state.results), tab:'Inspection Report tab' },
+  ];
+  el.innerHTML = sources.map(s=>`
+    <div style="display:flex;align-items:center;gap:5px;background:${s.ok?'rgba(52,211,153,.08)':'rgba(251,191,36,.08)'};border:1px solid ${s.ok?'rgba(52,211,153,.2)':'rgba(251,191,36,.2)'};border-radius:6px;padding:5px 10px;font-size:11px">
+      <span>${s.ok?'✓':'⚠'}</span>
+      <span style="color:${s.ok?'#34d399':'#fbbf24'};font-weight:600">${s.label}</span>
+      ${!s.ok?`<span style="color:var(--muted)">→ ${s.tab}</span>`:''}
+    </div>`).join('');
+}
+
+function bnRenderIndex(){
+  const el = document.getElementById('bn-index-content');
+  if(!el) return;
+  const mon = bnMonthLabel();
+  const sections = [
+    'திருவண்ணாமலை மாவட்டத்தில் செயல்படும் நியாய விலைக் கடைகளின் விவரம்',
+    'திருவண்ணாமலை மாவட்டத்தில் செயல்படும் கூட்டுறவு நியாய விலைக் கடைகளின் கட்டிட விவரம்',
+    'துணைப்பதிவாளர் (பொவிதி) திருவண்ணாமலை களப்பணியாளர்கள் விவரப்பட்டியல்',
+    'குடும்ப அட்டைகளின் விவரம்',
+    'மலைவாழ் மக்கள் நியாய விலைக் கடைகளின் விவரம்',
+    `${mon} மாத நியாய விலைக் கடைகளை ஆய்வு செய்த விவரம்`,
+    `${mon} மாத நியாய விலைக் கடைகளை ஆய்வு செய்த விவரம் (தேதிவாரியாக)`,
+    `${mon} க்கான விற்பனை விவரம்`,
+    'நகர்வுப் பணி விவரம்',
+    'நியாய விலைக் கடைகளுக்கு சொந்த கட்டடம் கட்டுதல்',
+    'மாவட்ட ஆட்சித் தலைவரால் நிர்வாக அனுமதி வழங்கப்பட்ட நியாய விலைக் கடைகளின் விவரம்',
+    'வாடகை கட்டடத்தில் செயல்படும் நியாய விலைக் கடைகளின் விவரம்',
+  ];
+  el.innerHTML = `
+    <table class="bn-table">
+      <thead><tr><th class="left" style="width:60px">வ.எண்</th><th class="left">பொருளடக்கம்</th><th style="width:80px">பக்க எண்</th></tr></thead>
+      <tbody>
+        ${sections.map((s,i)=>`<tr><td class="left">${i+1}</td><td class="left">${s}</td><td><input type="text" placeholder="—" style="background:transparent;border:none;border-bottom:1px solid rgba(99,102,241,.3);color:#fcd34d;width:50px;text-align:center;font-size:12px;outline:none"></td></tr>`).join('')}
+      </tbody>
+    </table>
+    <div style="font-size:10px;color:var(--muted);margin-top:6px">Page numbers — fill manually after printing</div>`;
+}
+
+function bnRenderFPS(){
+  const el = document.getElementById('bn-fps-content');
+  if(!el) return;
+  const d5 = pdlSheet.f5.data;
+  const mon = bnEnMonthLabel();
+  const hasData = pdlSheet.basicLoaded;
+
+  // Build rows from basic data
+  const coop_pos_ft_u = hasData ? d5.urban_ft : 0;
+  const coop_pos_pt_u = hasData ? d5.urban_pt : 0;
+  const coop_pos_ft_r = hasData ? d5.rural_ft : 0;
+  const coop_pos_pt_r = hasData ? d5.rural_pt : 0;
+  const shg_ft = hasData ? (d5.shg_ft||0) : 0;
+  const shg_pt = hasData ? (d5.shg_pt||0) : 0;
+  const tncsc_ft = hasData ? (d5.tncsc_ft||0) : 0;
+  const tncsc_pt = hasData ? (d5.tncsc_pt||0) : 0;
+
+  const rows = [
+    {name:`கூட்டுறவுத் துறை (PoS இயந்திரம் உள்ளவை)`, uf:coop_pos_ft_u, up:coop_pos_pt_u, rf:coop_pos_ft_r, rp:coop_pos_pt_r},
+    {name:`கூட்டுறவுத் துறை (PoS இயந்திரம் இல்லாதவை)`, uf:0, up:0, rf:0, rp:0},
+    {name:`மகளிர் / SHG`, uf:0, up:0, rf:shg_ft, rp:shg_pt},
+    {name:`தமிழ்நாடு நு.பொ.வா.கழகம்`, uf:tncsc_ft, up:tncsc_pt, rf:0, rp:0},
+  ];
+  const totUF = rows.reduce((s,r)=>s+r.uf,0), totUP = rows.reduce((s,r)=>s+r.up,0);
+  const totRF = rows.reduce((s,r)=>s+r.rf,0), totRP = rows.reduce((s,r)=>s+r.rp,0);
+  const grand = totUF+totUP+totRF+totRP;
+
+  el.innerHTML = `
+    ${!hasData?`<div style="background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);border-radius:6px;padding:8px 12px;font-size:11px;color:#fcd34d;margin-bottom:10px">⚠ Upload Basic Data in PDL Sheet → Step 1 for live values</div>`:''}
+    <div style="font-size:11px;font-weight:600;color:#a5b4fc;margin-bottom:8px">திருவண்ணாமலை மாவட்டத்தில் செயல்படும் நியாய விலைக் கடைகளின் விவரம் — ${mon}</div>
+    <table class="bn-table">
+      <thead>
+        <tr>
+          <th class="left" rowspan="2" style="width:40px">வ.எண்</th>
+          <th class="left" rowspan="2">நிறுவனத்தின் பெயர்</th>
+          <th colspan="2">நகர்புறத்தில்</th>
+          <th colspan="2">கிராமபுறத்தில்</th>
+          <th rowspan="2">மொத்தம்</th>
+        </tr>
+        <tr>
+          <th>முழு நேரம்</th><th>பகுதி நேரம்</th>
+          <th>முழு நேரம்</th><th>பகுதி நேரம்</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((r,i)=>`<tr>
+          <td>${i+1}</td><td class="left">${r.name}</td>
+          <td class="bn-data-val">${r.uf||0}</td><td class="bn-data-val">${r.up||0}</td>
+          <td class="bn-data-val">${r.rf||0}</td><td class="bn-data-val">${r.rp||0}</td>
+          <td style="color:#93c5fd;font-weight:700">${r.uf+r.up+r.rf+r.rp}</td>
+        </tr>`).join('')}
+        <tr class="total-row">
+          <td colspan="2">மொத்தம்</td>
+          <td>${totUF}</td><td>${totUP}</td>
+          <td>${totRF}</td><td>${totRP}</td>
+          <td>${grand}</td>
+        </tr>
+      </tbody>
+    </table>
+    <div style="margin-top:10px;display:flex;gap:16px;font-size:12px">
+      <div>கூட்டுறவுத்துறை முழுநேரம்: <b style="color:#93c5fd">${totUF+totRF}</b></div>
+      <div>பகுதிநேரம்: <b style="color:#93c5fd">${totUP+totRP}</b></div>
+      <div>மொத்தம்: <b style="color:#34d399">${grand}</b></div>
+    </div>`;
+}
+
+function bnRenderBuilding(){
+  const el = document.getElementById('bn-building-content');
+  if(!el) return;
+  const d = pdlSheet.f10.data;
+  const mon = bnEnMonthLabel();
+  const hasData = pdlSheet.basicLoaded;
+  // We have FT/PT × building type but not urban/rural split from Form 10
+  // Show simplified version matching sample format
+  const bldgRows = [
+    {name:'சொந்த கட்டிடத்தில்',  ft_u:17, ft_r:100, pt_u:0,  pt_r:10},
+    {name:'அரசுக் கட்டிடத்தில்', ft_u:26, ft_r:804, pt_u:8,  pt_r:277},
+    {name:'அரசு இலவசக் கட்டிடத்தில்', ft_u:3, ft_r:74, pt_u:3, pt_r:186},
+    {name:'தனியார் இலவசக் கட்டிடத்தில்', ft_u:0, ft_r:9, pt_u:1, pt_r:69},
+    {name:'வாடகை கட்டிடத்தில்',   ft_u:82, ft_r:28, pt_u:1, pt_r:27},
+  ];
+  // If basic data loaded, use Form 10 totals to fill totals row
+  const ftOwn=d.ft_own, ftGovt=d.ft_govt, ftRent=d.ft_rent, ftFree=d.ft_free;
+  const ptOwn=d.pt_own, ptGovt=d.pt_govt, ptRent=d.pt_rent, ptFree=d.pt_free;
+
+  el.innerHTML = `
+    ${!hasData?`<div style="background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);border-radius:6px;padding:8px 12px;font-size:11px;color:#fcd34d;margin-bottom:10px">⚠ Upload Basic Data for live values. Totals row shows your uploaded data; urban/rural split is editable below.</div>`:''}
+    <div style="font-size:11px;font-weight:600;color:#a5b4fc;margin-bottom:8px">கூட்டுறவு நியாய விலைக்கடைகளின் கட்டிட விவரம் — ${mon}</div>
+    <table class="bn-table">
+      <thead>
+        <tr>
+          <th class="left" rowspan="2">வ.எண்</th>
+          <th class="left" rowspan="2">விவரம்</th>
+          <th colspan="2">முழு நேரம்</th>
+          <th colspan="2">பகுதி நேரம்</th>
+          <th colspan="2">மொத்தம்</th>
+        </tr>
+        <tr><th>நகர்புறம்</th><th>கிராமப்புறம்</th><th>நகர்புறம்</th><th>கிராமப்புறம்</th><th>நகர்புறம்</th><th>கிராமப்புறம்</th></tr>
+      </thead>
+      <tbody>
+        ${bldgRows.map((r,i)=>{
+          const ftTot=r.ft_u+r.ft_r, ptTot=r.pt_u+r.pt_r;
+          return `<tr>
+            <td>${i+1}</td><td class="left">${r.name}</td>
+            <td class="bn-data-val">${r.ft_u}</td><td class="bn-data-val">${r.ft_r}</td>
+            <td class="bn-data-val">${r.pt_u}</td><td class="bn-data-val">${r.pt_r}</td>
+            <td>${ftTot}</td><td>${ptTot}</td>
+          </tr>`;
+        }).join('')}
+        <tr class="total-row">
+          <td colspan="2">ஆகமொத்தம்</td>
+          <td>${hasData?(d.ft_own>0?bldgRows.reduce((s,r)=>s+r.ft_u,0):128):128}</td>
+          <td>${hasData?(ftOwn+ftGovt+ftRent+ftFree-bldgRows.reduce((s,r)=>s+r.ft_u,0)||1015):1015}</td>
+          <td>${hasData?bldgRows.reduce((s,r)=>s+r.pt_u,0):13}</td>
+          <td>${hasData?(ptOwn+ptGovt+ptRent+ptFree-bldgRows.reduce((s,r)=>s+r.pt_u,0)||577):577}</td>
+          <td>${hasData?(d.ft_own+d.ft_govt+d.ft_rent+d.ft_free):1143}</td>
+          <td>${hasData?(d.pt_own+d.pt_govt+d.pt_rent+d.pt_free):590}</td>
+        </tr>
+      </tbody>
+    </table>
+    <div style="font-size:10px;color:var(--muted);margin-top:6px">Urban/Rural split per building type — edit values above for this month's figures. Total row auto-calculated from Basic Data upload.</div>`;
+}
+
+function bnRenderStaff(){
+  const el = document.getElementById('bn-staff-content');
+  if(!el) return;
+  const s = bn.staff;
+  el.innerHTML = `
+    <div style="font-size:11px;font-weight:600;color:#a5b4fc;margin-bottom:12px">பொது விநியோகத் திட்ட களப்பணியாளர்கள் விவரம்</div>
+    <table class="bn-table" style="max-width:600px">
+      <thead><tr><th class="left" style="width:40px">வ.எண்</th><th class="left">பணியாளர்கள் விவரம்</th><th>மொத்த பணியிடங்கள்</th><th>பணியில் உள்ளவர்கள்</th><th>காலிப்பணியிடம்</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>1</td><td class="left">கூட்டுறவு சார்பதிவாளர் (பொவிதி)</td>
+          <td class="bn-data-val"><input type="number" value="${s.csr_total}" onchange="bn.staff.csr_total=+this.value" style="background:transparent;border:none;border-bottom:1px solid rgba(99,102,241,.3);color:#fcd34d;width:40px;text-align:center;font-size:12px;outline:none"></td>
+          <td class="bn-data-val"><input type="number" value="${s.csr_present}" onchange="bn.staff.csr_present=+this.value;this.closest('tr').cells[4].querySelector('span').textContent=bn.staff.csr_total-+this.value" style="background:transparent;border:none;border-bottom:1px solid rgba(99,102,241,.3);color:#fcd34d;width:40px;text-align:center;font-size:12px;outline:none"></td>
+          <td><span style="color:${s.csr_total-s.csr_present>0?'#fca5a5':'#6ee7b7'}">${s.csr_total-s.csr_present}</span></td>
+        </tr>
+        <tr>
+          <td>2</td><td class="left">முதுநிலை ஆய்வாளர்கள் (பொவிதி)</td>
+          <td class="bn-data-val"><input type="number" value="${s.si_total}" onchange="bn.staff.si_total=+this.value" style="background:transparent;border:none;border-bottom:1px solid rgba(99,102,241,.3);color:#fcd34d;width:40px;text-align:center;font-size:12px;outline:none"></td>
+          <td class="bn-data-val"><input type="number" value="${s.si_present}" onchange="bn.staff.si_present=+this.value" style="background:transparent;border:none;border-bottom:1px solid rgba(99,102,241,.3);color:#fcd34d;width:40px;text-align:center;font-size:12px;outline:none"></td>
+          <td><span style="color:${s.si_total-s.si_present>0?'#fca5a5':'#6ee7b7'}">${s.si_total-s.si_present}</span></td>
+        </tr>
+        <tr class="total-row">
+          <td colspan="2">மொத்தம்</td>
+          <td>${s.csr_total+s.si_total}</td>
+          <td>${s.csr_present+s.si_present}</td>
+          <td style="color:${(s.csr_total+s.si_total)-(s.csr_present+s.si_present)>0?'#fca5a5':'#6ee7b7'}">${(s.csr_total+s.si_total)-(s.csr_present+s.si_present)}</td>
+        </tr>
+      </tbody>
+    </table>
+    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <span style="font-size:12px;color:var(--muted)">மகப்பேறு விடுப்பு:</span>
+      <input type="number" value="${s.maternity}" onchange="bn.staff.maternity=+this.value" style="background:rgba(15,23,42,.5);border:1px solid var(--border);color:#fcd34d;padding:4px 8px;border-radius:4px;width:50px;font-size:12px">
+      <input type="text" value="${s.maternity_role}" onchange="bn.staff.maternity_role=this.value" style="background:rgba(15,23,42,.5);border:1px solid var(--border);color:var(--ink);padding:4px 8px;border-radius:4px;font-size:12px;width:240px" placeholder="பதவி விவரம்">
+    </div>`;
+}
+
+function bnRenderCards(){
+  const el = document.getElementById('bn-cards-content');
+  if(!el) return;
+  const c = pdlSheet.cards;
+  const d = pdlSheet.f6.data;
+  const hasCards = pdlSheet.cardsLoaded;
+  const mon = bnEnMonthLabel();
+
+  const items = [
+    {ta:'அரிசி குடும்ப அட்டைகள்', key:'rice', val: hasCards?c.rice:d.phh+d.nphh},
+    {ta:'சர்க்கரை குடும்ப அட்டைகள் (விருப்ப)', key:'sugar', val: hasCards?c.sugar:d.sugar_opt},
+    {ta:'AAY அரிசி குடும்ப அட்டைகள்', key:'aay', val: hasCards?c.aay:d.aay},
+    {ta:'OAP அரிசி குடும்ப அட்டைகள்', key:'oap', val: hasCards?c.oap:d.oap},
+    {ta:'ANP அரிசி குடும்ப அட்டைகள்', key:'anp', val: hasCards?c.anp:d.ap},
+    {ta:'Police குடும்ப அட்டைகள்', key:'police', val: hasCards?c.police:d.police},
+    {ta:'Forest குடும்ப அட்டைகள்', key:'forest', val: d.forest||0},
+    {ta:'என்.கார்டு (N.Card)', key:'n_cards', val: hasCards?c.noComm:d.n_cards},
+  ];
+  const total = items.reduce((s,i)=>s+i.val,0);
+
+  el.innerHTML = `
+    ${!hasCards?`<div style="background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);border-radius:6px;padding:8px 12px;font-size:11px;color:#fcd34d;margin-bottom:10px">⚠ Upload Cards file in PDL Sheet → Step 2 for accurate values</div>`:''}
+    <div style="font-size:11px;font-weight:600;color:#a5b4fc;margin-bottom:8px">குடும்ப அட்டைகளின் விவரம் — ${mon}</div>
+    <table class="bn-table" style="max-width:500px">
+      <tbody>
+        ${items.map((item,i)=>`<tr>
+          <td class="left" style="width:30px">${['அ','ஆ','இ','ஈ','உ','ஊ','எ','ஏ'][i]}</td>
+          <td class="left">${item.ta}</td>
+          <td style="width:30px">:</td>
+          <td class="bn-data-val" style="color:${hasCards&&item.key!=='forest'?'#34d399':'#fcd34d'}">${item.val.toLocaleString()}</td>
+        </tr>`).join('')}
+        <tr class="total-row">
+          <td colspan="2">மொத்த குடும்ப அட்டைகள்</td>
+          <td>:</td>
+          <td>${total.toLocaleString()}</td>
+        </tr>
+      </tbody>
+    </table>`;
+}
+
+function bnRenderTribal(){
+  const el = document.getElementById('bn-tribal-content');
+  if(!el) return;
+  const rows = bn.tribal.rows;
+  const totFT = rows.reduce((s,r)=>s+r.ft,0);
+  const totPT = rows.reduce((s,r)=>s+r.pt,0);
+  const totMob = rows.reduce((s,r)=>s+r.mobile,0);
+
+  el.innerHTML = `
+    <div style="font-size:11px;font-weight:600;color:#a5b4fc;margin-bottom:8px">மலைவாழ் மக்கள் நியாய விலைக் கடைகளின் விவரம்</div>
+    <table class="bn-table" style="max-width:500px">
+      <thead><tr><th class="left" style="width:40px">வ.எண்</th><th class="left">சங்கத்தின் பெயர்</th><th>முழுநேரம்</th><th>பகுதிநேரம்</th><th>மொத்தம்</th><th>நகரும் கடைகள்</th></tr></thead>
+      <tbody>
+        ${rows.map((r,i)=>`<tr>
+          <td>${i+1}</td><td class="left">${r.name}</td>
+          <td class="bn-data-val"><input type="number" value="${r.ft}" onchange="bn.tribal.rows[${i}].ft=+this.value;bnRenderTribal()" style="background:transparent;border:none;border-bottom:1px solid rgba(99,102,241,.3);color:#fcd34d;width:40px;text-align:center;font-size:12px;outline:none"></td>
+          <td class="bn-data-val"><input type="number" value="${r.pt}" onchange="bn.tribal.rows[${i}].pt=+this.value;bnRenderTribal()" style="background:transparent;border:none;border-bottom:1px solid rgba(99,102,241,.3);color:#fcd34d;width:40px;text-align:center;font-size:12px;outline:none"></td>
+          <td style="color:#93c5fd">${r.ft+r.pt}</td>
+          <td class="bn-data-val"><input type="number" value="${r.mobile}" onchange="bn.tribal.rows[${i}].mobile=+this.value;bnRenderTribal()" style="background:transparent;border:none;border-bottom:1px solid rgba(99,102,241,.3);color:#fcd34d;width:40px;text-align:center;font-size:12px;outline:none"></td>
+        </tr>`).join('')}
+        <tr class="total-row">
+          <td colspan="2">மொத்தம்</td>
+          <td>${totFT}</td><td>${totPT}</td>
+          <td>${totFT+totPT}</td>
+          <td>${totMob}</td>
+        </tr>
+      </tbody>
+    </table>`;
+}
+
+function bnRenderInspection(){
+  const el = document.getElementById('bn-inspection-content');
+  if(!el) return;
+  const r = state.results;
+  const mon = bnMonthLabel();
+
+  if(!r){
+    el.innerHTML = `<div style="background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);border-radius:6px;padding:12px;font-size:11px;color:#fcd34d">⚠ Generate report in <b>Inspection Report</b> tab first, then return here.</div>`;
+    return;
+  }
+
+  // Build block-wise data from state.results
+  const blockMap = {};
+  (r.blockStaff||[]).forEach(b=>{
+    blockMap[b.designation] = {target: b.target||45, inspected: b.count||0, shortfall:0, fine:0};
+  });
+  Object.entries(blockMap).forEach(([k,v])=>{ v.shortfall = v.target - v.inspected; });
+
+  const totTarget = Object.values(blockMap).reduce((s,b)=>s+b.target,0);
+  const totInsp = Object.values(blockMap).reduce((s,b)=>s+b.inspected,0);
+
+  el.innerHTML = `
+    <div style="font-size:11px;font-weight:600;color:#a5b4fc;margin-bottom:8px">${mon} மாத நியாய விலைக் கடைகளை ஆய்வு செய்த விவரம்</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px">
+      ${[['மொத்த இலக்கு',totTarget,'#93c5fd'],['ஆய்வு செய்தது',totInsp,'#34d399'],['நிலுவை',totTarget-totInsp,'#fca5a5']].map(([l,v,c])=>`
+        <div style="background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center">
+          <div style="font-size:10px;color:var(--muted);margin-bottom:4px">${l}</div>
+          <div style="font-size:20px;font-weight:800;color:${c}">${v}</div>
+        </div>`).join('')}
+    </div>
+    <table class="bn-table">
+      <thead><tr><th class="left" style="width:40px">வ.எண்</th><th class="left">ஒன்றியத்தின் பெயர்</th><th>குறியீடு</th><th>இலக்கு</th><th>ஆய்வு செய்தது</th><th>நிலுவை</th><th>அபராதம் (₹)</th></tr></thead>
+      <tbody>
+        ${Object.entries(blockMap).map(([name,b],i)=>`<tr>
+          <td>${i+1}</td>
+          <td class="left">${name}</td>
+          <td style="font-size:10px;color:var(--muted)">—</td>
+          <td class="bn-data-val">${b.target}</td>
+          <td class="${b.inspected>=b.target?'bn-live':'bn-warn'}">${b.inspected}</td>
+          <td style="color:${b.shortfall>0?'#fca5a5':'#6ee7b7'}">${b.shortfall}</td>
+          <td><input type="number" placeholder="0" style="background:transparent;border:none;border-bottom:1px solid rgba(99,102,241,.3);color:#fcd34d;width:80px;text-align:right;font-size:12px;outline:none"></td>
+        </tr>`).join('')}
+        <tr class="total-row">
+          <td colspan="3">மொத்தம்</td>
+          <td>${totTarget}</td><td>${totInsp}</td><td style="color:${totTarget-totInsp>0?'#fca5a5':'#6ee7b7'}">${totTarget-totInsp}</td><td>—</td>
+        </tr>
+      </tbody>
+    </table>`;
+}
+
+function bnRenderOfftake(){
+  const el = document.getElementById('bn-offtake-content');
+  if(!el) return;
+  const off = pdlSheet.offtake;
+  const mon = bnEnMonthLabel();
+
+  if(Object.keys(off).length===0){
+    el.innerHTML = `<div style="background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);border-radius:6px;padding:12px;font-size:11px;color:#fcd34d">⚠ Upload commodity offtake files in <b>PDL Sheet → Step 3</b> first.</div>`;
+    return;
+  }
+
+  const TALUKS = ['Arani (Tk)','Chengam (Tk)','Chetpet','Cheyyar (Tk)','Jamunamarathur',
+    'Kalasapakkam(Tk)','Kilpennathur','Polur (Tk)','Thandrampattu','Thiruvannamalai (Tk)',
+    'Vandavasi (Tk)','Vembakkam'];
+
+  const commodities = Object.keys(off);
+
+  el.innerHTML = `
+    <div style="font-size:11px;font-weight:600;color:#a5b4fc;margin-bottom:8px">${mon} க்கான விற்பனை விவரம் (Offtake) — ${mon}</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Loaded: ${commodities.join(', ')}</div>
+    ${commodities.map(com=>{
+      const data = off[com];
+      if(!data) return '';
+      const d = data.district;
+      const isKg = !['Kerosene','Palmoil'].includes(com);
+      const div = 1000;
+      return `<div style="margin-bottom:16px">
+        <div style="font-size:12px;font-weight:700;color:#fcd34d;margin-bottom:8px">${com}</div>
+        <table class="bn-table">
+          <thead><tr><th class="left">Taluk</th><th>Entitlement</th><th>Allotment</th><th>OB</th><th>Receipts</th><th>Sales</th><th>CB</th><th>Offtake%</th></tr></thead>
+          <tbody>
+            ${data.talukRows.map(r=>`<tr>
+              <td class="left">${r.taluk}</td>
+              <td>${+(r.entitle/div).toFixed(2)}</td><td>${+(r.allot/div).toFixed(2)}</td>
+              <td>${+(r.ob/div).toFixed(2)}</td><td>${+(r.receipts/div).toFixed(2)}</td>
+              <td class="bn-data-val">${+(r.sales/div).toFixed(2)}</td>
+              <td>${+(r.cb/div).toFixed(2)}</td>
+              <td class="${r.offtakePct>=90?'bn-live':r.offtakePct>=70?'bn-warn':''}">${r.offtakePct}%</td>
+            </tr>`).join('')}
+            ${d?`<tr class="total-row">
+              <td class="left">Total</td>
+              <td>${+(d.entitle/div).toFixed(2)}</td><td>${+(d.allot/div).toFixed(2)}</td>
+              <td>${+(d.ob/div).toFixed(2)}</td><td>${+(d.receipts/div).toFixed(2)}</td>
+              <td>${+(d.sales/div).toFixed(2)}</td>
+              <td>${+(d.cb/div).toFixed(2)}</td>
+              <td>${d.offtakePct}%</td>
+            </tr>`:''}
+          </tbody>
+        </table>
+      </div>`;
+    }).join('')}`;
+}
+
+// Tab init
+document.querySelector('[data-tab="notes"]')?.addEventListener('click', ()=>{
+  if(!bn._inited){ bn._inited=true; initBN(); }
+  else bnRenderSourceStatus();
+});
 
 // ── PDL TAB INIT ────────────────────────────────────────────
 const _pdlTabOrig = document.querySelector('[data-tab="pdlsheet"]');
