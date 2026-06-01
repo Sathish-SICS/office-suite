@@ -1451,11 +1451,11 @@ document.addEventListener('keydown', e=>{
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px" id="pdl-offtake-grid">
   </div>
   <div style="margin-top:10px">
-    <input type="file" id="pdl-offtake-file" accept=".xlsx,.xls" style="display:none" onchange="pdlUploadOfftake(this)">
+    <input type="file" id="pdl-offtake-file" accept=".xlsx,.xls" style="display:none" multiple onchange="pdlUploadOfftakeMultiple(this)">
     <button class="btn" onclick="document.getElementById('pdl-offtake-file').click()" style="font-size:12px;padding:8px 18px">
-      📂 Upload Offtake File
+      📂 Upload Offtake File(s)
     </button>
-    <span style="font-size:11px;color:var(--muted);margin-left:10px">Commodity is auto-detected from file header</span>
+    <span style="font-size:11px;color:var(--muted);margin-left:10px">Select one or multiple files — commodity auto-detected from each file header</span>
   </div>
 </div>
 
@@ -1560,7 +1560,8 @@ document.addEventListener('keydown', e=>{
       </div>
       <div style="display:flex;gap:8px;align-self:flex-end">
         <button class="btn" onclick="bnRefreshAll()" style="font-size:12px;padding:8px 16px;background:rgba(52,211,153,.2);border-color:rgba(52,211,153,.5);color:#34d399">🔄 Refresh All</button>
-        <button class="btn" onclick="bnDownloadDocx()" style="font-size:12px;padding:8px 16px">📄 Download .docx</button>
+        <button class="btn" onclick="bnDownloadExcel()" style="font-size:12px;padding:8px 16px;background:rgba(52,211,153,.15);border-color:rgba(52,211,153,.4);color:#6ee7b7">📊 Excel</button>
+        <button class="btn" onclick="bnDownloadDocx()" style="font-size:12px;padding:8px 16px">📄 Download .txt</button>
       </div>
     </div>
   </div>
@@ -7112,7 +7113,7 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
         ${hasComp?`<button class="btn-tiny" id="sort-btn-added" onclick="ekycShopSetSort('added')" style="${ekyc.shopSort.col==='added'?'background:#059669;color:white;':''}">Added ${ekyc.shopSort.col==='added'?(ekyc.shopSort.dir==='desc'?'▼':'▲'):'⇅'}</button>`:''}
         <button class="btn-tiny" onclick="copyEkycTableImg('ekyc-shop-wrap')">📸 Copy</button>
         <button class="btn-tiny" onclick="downloadEkycShopExcel()">📥 Excel</button>
-        <button class="btn-tiny" onclick="printEkycShopwise()">🖨️ Print / PDF</button>
+        <button class="btn-tiny" onclick="showEkycPrintDialog()">🖨️ Print / PDF</button>
       </div>
     </div>
     <div style="overflow-x:auto;background:white;border-radius:8px;border:1px solid #cbd5e1;color:#1e293b;max-height:500px;overflow-y:auto" id="ekyc-shop-wrap">
@@ -7279,13 +7280,61 @@ function filterEkycShops(){
   });
 }
 
-function printEkycShopwise(){
+function showEkycPrintDialog(){
+  // Small inline dialog
+  const existing = document.getElementById('ekyc-print-dialog');
+  if(existing){ existing.remove(); return; }
+  const dlg = document.createElement('div');
+  dlg.id = 'ekyc-print-dialog';
+  dlg.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#0f172a;border:1px solid rgba(99,102,241,.5);border-radius:12px;padding:24px;z-index:9999;min-width:280px;box-shadow:0 20px 60px rgba(0,0,0,.6)';
+  dlg.innerHTML = `
+    <div style="font-size:14px;font-weight:700;color:var(--ink);margin-bottom:16px">🖨️ Print / PDF Options</div>
+    <div style="margin-bottom:12px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Orientation</div>
+      <div style="display:flex;gap:8px">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:8px 14px;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.4);border-radius:6px;font-size:12px;color:#a5b4fc">
+          <input type="radio" name="ekyc-orient" value="portrait" checked> Portrait
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:8px 14px;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.4);border-radius:6px;font-size:12px;color:#a5b4fc">
+          <input type="radio" name="ekyc-orient" value="landscape"> Landscape
+        </label>
+      </div>
+    </div>
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Active filter will be applied to PDF output</div>
+      <div id="ekyc-print-filter-note" style="font-size:11px;color:#fcd34d"></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" onclick="const o=document.querySelector('input[name=ekyc-orient]:checked').value;document.getElementById('ekyc-print-dialog').remove();printEkycShopwise(o);" style="flex:1;font-size:12px;padding:8px">Generate PDF</button>
+      <button class="btn secondary" onclick="document.getElementById('ekyc-print-dialog').remove()" style="font-size:12px;padding:8px">Cancel</button>
+    </div>`;
+  document.body.appendChild(dlg);
+  // Show current filter status
+  const filterNote = document.getElementById('ekyc-print-filter-note');
+  const filterStatus = document.getElementById('ekyc-filter-status')?.textContent;
+  if(filterNote) filterNote.textContent = filterStatus || '⚪ No filter active — all rows included';
+  // Click outside to close
+  setTimeout(()=>{
+    document.addEventListener('click', function handler(e){
+      if(!dlg.contains(e.target)){ dlg.remove(); document.removeEventListener('click',handler); }
+    });
+  }, 100);
+}
+
+function printEkycShopwise(orientation){
   if(typeof window.jspdf === 'undefined' && typeof jspdf === 'undefined'){
     toast('PDF library not loaded. Check internet and retry.',true); return;
   }
   const hasComp=!!ekyc.oldBlocks;
-  const filter=document.getElementById('ekyc-block-filter')?.value||'';
-  const allRows=filter?ekyc.processedRows2.filter(r=>r.block===filter):ekyc.processedRows2;
+  const blockFilter=document.getElementById('ekyc-block-filter')?.value||'';
+
+  // Get rows respecting BOTH block filter AND numeric filter
+  let allRows = blockFilter ? ekyc.processedRows2.filter(r=>r.block===blockFilter) : ekyc.processedRows2.slice();
+  // Apply numeric filter if active
+  if(ekyc.filter && ekyc.filter.active){
+    allRows = allRows.filter(r=>ekycBlockPassesFilter(r.total_cons||0, r.total_comp||0));
+  }
+
   const oldShopMapPrint={};
   if(ekyc.oldData) parseEkycRows(ekyc.oldData).forEach(r=>{ oldShopMapPrint[r.shopcode]=r; });
 
@@ -7297,24 +7346,36 @@ function printEkycShopwise(){
   const {col,dir}=ekyc.shopSort||{col:'pend',dir:'desc'};
   const sortLabel={'pend':'Pending','pct':'%','added':'Added','pct_old':'Old %'}[col]||col;
   const sortDesc=`Sorted by: ${sortLabel} ${dir==='desc'?'High → Low':'Low → High'}`;
-  const title=filter?`${filter}`:'All Blocks';
+  const title=blockFilter?`${blockFilter}`:'All Blocks';
+
+  // Filter note for PDF
+  let filterNote = '';
+  if(ekyc.filter && ekyc.filter.active){
+    const parts=[];
+    if(ekyc.filter.pctVal!==null) parts.push(`% ${ekyc.filter.pctOp==='lt'?'<':'≥'} ${ekyc.filter.pctVal}%`);
+    if(ekyc.filter.pendVal!==null) parts.push(`Pending ${ekyc.filter.pendOp==='gt'?'>':'≤'} ${ekyc.filter.pendVal}`);
+    filterNote = ` | Filter: ${parts.join(' AND ')} (${allRows.length} shops)`;
+  }
 
   // Build autoTable rows
   const tableBody=[];
   let si=1;
   blockNames.forEach(blockName=>{
     const bb=ekyc.blocks.find(b=>b.block===blockName)||{};
-    const bpend=Math.max(0,(bb.total_cons||0)-(bb.total_comp||0));
-    const bpct=bb.pct||0;
-    // Block header row: old % blank, new % shown
+    // For filtered view, recalculate block totals from filtered rows
+    const filteredBlockRows = blockGroups[blockName] || [];
+    const bCons = filteredBlockRows.reduce((s,r)=>s+(r.total_cons||0),0);
+    const bComp = filteredBlockRows.reduce((s,r)=>s+(r.total_comp||0),0);
+    const bpend = Math.max(0, bCons - bComp);
+    const bpct = bCons>0 ? bComp/bCons : 0;
     const bRow=[String(si++), '⬛ '+blockName,'','',
-      String(bb.total_cons||0), String(bb.total_comp||0), String(bpend)];
-    if(hasComp) bRow.push(''); // old % blank for block header
-    bRow.push(fmtPct(bpct));  // current %
-    if(hasComp) bRow.push(''); // Added blank for block header
+      String(bCons), String(bComp), String(bpend)];
+    if(hasComp) bRow.push('');
+    bRow.push(fmtPct(bpct));
+    if(hasComp) bRow.push('');
     tableBody.push({data:bRow, isBlock:true, pct:bpct});
 
-    const sorted=sortShopsWithinBlock(blockGroups[blockName]);
+    const sorted=sortShopsWithinBlock(filteredBlockRows);
     sorted.forEach(r=>{
       const pend=Math.max(0,r.total_cons-r.total_comp);
       const oldR=oldShopMapPrint[r.shopcode];
@@ -7322,30 +7383,28 @@ function printEkycShopwise(){
       const added=oldR?r.total_comp-oldR.total_comp:null;
       const row=[String(si++), '', r.shopcode, r.shop_name,
         String(r.total_cons), String(r.total_comp), String(pend)];
-      if(hasComp) row.push(oldPct!==null?fmtPct(oldPct):'—'); // old %
-      row.push(fmtPct(r.total_pct)); // current %
+      if(hasComp) row.push(oldPct!==null?fmtPct(oldPct):'—');
+      row.push(fmtPct(r.total_pct));
       if(hasComp) row.push(added!==null?(added>0?'+':'')+String(added):'—');
       tableBody.push({data:row, isBlock:false, pct:r.total_pct, oldPct, added});
     });
   });
 
-  // jsPDF
   const { jsPDF } = window.jspdf;
-  const orient = hasComp ? 'landscape' : 'portrait';
+  // Use user-selected orientation; default: landscape if comparison, portrait otherwise
+  const orient = orientation || (hasComp ? 'landscape' : 'portrait');
   const doc = new jsPDF({orientation:orient, unit:'mm', format:'a4'});
 
-  // Title
   doc.setFontSize(11);
   doc.setFont('helvetica','bold');
   doc.text(`e-KYC Progress — Shop-wise — ${title}`, 10, 12);
   doc.setFontSize(8);
   doc.setFont('helvetica','normal');
   doc.setTextColor(100);
-  const subLine = `Thiruvannamalai District | As on ${ekyc.date}${hasComp?' | Compared from: '+ekyc.oldDate:''} | ${sortDesc}`;
+  const subLine = `Thiruvannamalai District | As on ${ekyc.date}${hasComp?' | Compared from: '+ekyc.oldDate:''} | ${sortDesc}${filterNote}`;
   doc.text(subLine, 10, 18);
   doc.setTextColor(0);
 
-  // Gradient colour helper → RGB for jsPDF
   function pctRgb(p){
     const pct=Math.max(0,Math.min(1,p||0));
     let r,g,b;
@@ -7359,10 +7418,11 @@ function printEkycShopwise(){
   cols.push(ekyc.date+' %');
   if(hasComp) cols.push('Added');
 
-  // Column widths (mm) — portrait or landscape
+  // Adjust column widths based on orientation
+  const isLandscape = orient === 'landscape';
   const cw = hasComp
-    ? [7,32,16,40,14,14,12,12,12,11]  // landscape with 2 date cols + Added
-    : [7,35,18,45,17,17,14,14];       // portrait: total ~173mm
+    ? (isLandscape ? [7,32,16,40,14,14,12,12,12,11] : [6,28,14,35,13,13,11,11,11,10])
+    : (isLandscape ? [7,40,18,55,18,18,16,16] : [7,35,18,45,17,17,14,14]);
 
   doc.autoTable({
     startY:22,
@@ -7382,11 +7442,9 @@ function printEkycShopwise(){
         data.cell.styles.textColor=[30,58,138];
         return;
       }
-      // Column indices: 0=#, 1=Block, 2=ShopCode, 3=ShopName, 4=Cons, 5=Comp, 6=Pend, 7=old%(if comp) or %,  8=%(if comp), 9=Added(if comp)
       const pctCol = hasComp ? 8 : 7;
       const oldPctCol = hasComp ? 7 : -1;
       const addedCol = hasComp ? 9 : -1;
-      // Colour current % column
       if(data.column.index===pctCol){
         const [r,g,b]=pctRgb(row.pct);
         data.cell.styles.fillColor=[r,g,b];
@@ -7394,7 +7452,6 @@ function printEkycShopwise(){
         data.cell.styles.fontStyle='bold';
         data.cell.styles.halign='center';
       }
-      // Colour old % column
       if(oldPctCol>=0 && data.column.index===oldPctCol && row.oldPct!=null){
         const [r,g,b]=pctRgb(row.oldPct);
         data.cell.styles.fillColor=[r,g,b];
@@ -7402,23 +7459,19 @@ function printEkycShopwise(){
         data.cell.styles.fontStyle='bold';
         data.cell.styles.halign='center';
       }
-      // Colour Added column
       if(addedCol>=0 && data.column.index===addedCol && row.added!=null){
         data.cell.styles.textColor=row.added>0?[5,150,105]:row.added<0?[220,38,38]:[100,116,139];
         data.cell.styles.fontStyle='bold';
         data.cell.styles.halign='center';
       }
-      // Pending in red
       if(data.column.index===6){
         const pend=parseInt(data.cell.raw||0);
         if(pend>0) data.cell.styles.textColor=[220,38,38];
         data.cell.styles.halign='center';
       }
-      // Center numeric columns
       if(data.column.index>=4) data.cell.styles.halign='center';
     },
     didDrawPage(data){
-      // Footer with page number
       const pageCount=doc.getNumberOfPages();
       doc.setFontSize(7);
       doc.setTextColor(150);
@@ -7429,7 +7482,7 @@ function printEkycShopwise(){
     }
   });
 
-  const fname=`eKYC_Shopwise_${filter||'AllBlocks'}_${ekyc.date.replace(/\./g,'')}.pdf`;
+  const fname=`eKYC_Shopwise_${blockFilter||'AllBlocks'}_${ekyc.date.replace(/\./g,'')}.pdf`;
   doc.save(fname);
   toast('✓ PDF downloaded: '+fname);
 }
@@ -8504,56 +8557,72 @@ function pdlParseBasicData(rows, format){
 }
 
 // ── MIS OFFTAKE UPLOAD ───────────────────────────────────────
+async function pdlUploadOfftakeMultiple(input){
+  const files = Array.from(input.files||[]);
+  if(!files.length) return;
+  let loaded=0, failed=[];
+  for(const file of files){
+    try{ await pdlUploadOfftakeSingle(file); loaded++; }
+    catch(e){ failed.push(file.name.substring(0,30)+': '+e.message); }
+  }
+  input.value='';
+  renderPDLOfftakeGrid();
+  if(pdlSheet.activeForm==='f1') pdlOpenForm('f1');
+  if(failed.length) toast(`${loaded} loaded, ${failed.length} failed`, true);
+  else toast(`✓ ${loaded} offtake file${loaded>1?'s':''} loaded`);
+}
+
+async function pdlUploadOfftakeSingle(file){
+  const wb = await readExcel(file);
+  const sh = wb.Sheets[wb.SheetNames[0]];
+  const data = XLSX.utils.sheet_to_json(sh, {header:1});
+
+  let commodity = null;
+  for(let i=0;i<Math.min(9,data.length);i++){
+    const rowText = data[i].join(' ');
+    commodity = pdlDetectCommodity(rowText);
+    if(commodity) break;
+  }
+  if(!commodity) commodity = pdlDetectCommodity(file.name);
+  if(!commodity) throw new Error('Could not detect commodity — rename file to include commodity name');
+
+  let hIdx = data.findIndex(r=>r.some&&r.some(c=>String(c||'').trim()==='#'));
+  if(hIdx===-1) hIdx = data.findIndex(r=>r.some&&r.some(c=>String(c||'').toLowerCase().includes('taluk')));
+  if(hIdx===-1) throw new Error('Cannot find data header row in '+file.name);
+
+  const dataRows = data.slice(hIdx+1).filter(r=>r[0]&&String(r[0]).trim()&&!isNaN(+r[0]));
+  const totalRow = data.slice(hIdx+1).find(r=>String(r[1]||'').toLowerCase().includes('total'));
+
+  const talukRows = dataRows.map(r=>({
+    sl:+r[0], taluk:String(r[1]||'').trim(),
+    entitle:+r[2]||0, allot:+r[3]||0, ob:+r[4]||0,
+    totalAllot:+r[5]||0, receipts:+r[6]||0, adj:+r[7]||0,
+    total:+r[8]||0, sales:+r[9]||0, cb:+r[10]||0,
+    advance:+r[11]||0, actualBal:+r[12]||0, offtakePct:+r[13]||0
+  }));
+
+  const district = totalRow ? {
+    entitle:+totalRow[2]||0, allot:+totalRow[3]||0, ob:+totalRow[4]||0,
+    receipts:+totalRow[6]||0, adj:+totalRow[7]||0, total:+totalRow[8]||0,
+    sales:+totalRow[9]||0, cb:+totalRow[10]||0, offtakePct:+totalRow[13]||0
+  } : null;
+
+  pdlSheet.offtake[commodity] = {talukRows, district, filename:file.name};
+  pdlUpdateF1FromOfftake(commodity);
+}
+
+// Legacy single-file wrapper
 async function pdlUploadOfftake(input){
   const file = input.files[0]; if(!file) return;
   try{
-    const wb = await readExcel(file);
-    const sh = wb.Sheets[wb.SheetNames[0]];
-    const data = XLSX.utils.sheet_to_json(sh, {header:1});
-
-    // Detect commodity from header rows (rows 0-8)
-    let commodity = null;
-    for(let i=0;i<Math.min(9,data.length);i++){
-      const rowText = data[i].join(' ');
-      commodity = pdlDetectCommodity(rowText);
-      if(commodity) break;
-    }
-    // Also check filename
-    if(!commodity) commodity = pdlDetectCommodity(file.name);
-    if(!commodity){ toast('Could not detect commodity. Rename file to include commodity name.', true); input.value=''; return; }
-
-    // Find header row (contains 'Taluks' or '#')
-    let hIdx = data.findIndex(r=>r.some&&r.some(c=>String(c||'').trim()==='#'));
-    if(hIdx===-1) hIdx = data.findIndex(r=>r.some&&r.some(c=>String(c||'').toLowerCase().includes('taluk')));
-    if(hIdx===-1){ toast('Cannot find data header row in '+file.name, true); input.value=''; return; }
-
-    const dataRows = data.slice(hIdx+1).filter(r=>r[0]&&String(r[0]).trim()&&!isNaN(+r[0]));
-    const totalRow = data.slice(hIdx+1).find(r=>String(r[1]||'').toLowerCase().includes('total'));
-
-    const talukRows = dataRows.map(r=>({
-      sl:+r[0], taluk:String(r[1]||'').trim(),
-      entitle:+r[2]||0, allot:+r[3]||0, ob:+r[4]||0,
-      totalAllot:+r[5]||0, receipts:+r[6]||0, adj:+r[7]||0,
-      total:+r[8]||0, sales:+r[9]||0, cb:+r[10]||0,
-      advance:+r[11]||0, actualBal:+r[12]||0, offtakePct:+r[13]||0
-    }));
-
-    const district = totalRow ? {
-      entitle:+totalRow[2]||0, allot:+totalRow[3]||0, ob:+totalRow[4]||0,
-      receipts:+totalRow[6]||0, adj:+totalRow[7]||0, total:+totalRow[8]||0,
-      sales:+totalRow[9]||0, cb:+totalRow[10]||0, offtakePct:+totalRow[13]||0
-    } : null;
-
-    pdlSheet.offtake[commodity] = {talukRows, district, filename:file.name};
-
-    // Update Form 1 row for this commodity
-    pdlUpdateF1FromOfftake(commodity);
+    await pdlUploadOfftakeSingle(file);
     renderPDLOfftakeGrid();
     if(pdlSheet.activeForm==='f1') pdlOpenForm('f1');
-    toast(`✓ ${commodity} offtake loaded (${talukRows.length} taluks)`);
+    toast('✓ Offtake loaded: '+file.name);
   }catch(e){ toast('Offtake upload failed: '+e.message, true); }
   input.value='';
 }
+
 
 function pdlUpdateF1FromOfftake(commodity){
   const o = pdlSheet.offtake[commodity];
@@ -9787,19 +9856,21 @@ function bnRenderInspection(){
   const mon = bnMonthLabel();
 
   if(!r){
-    el.innerHTML = `<div style="background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);border-radius:6px;padding:12px;font-size:11px;color:#fcd34d">⚠ Generate report in <b>Inspection Report</b> tab first, then return here.</div>`;
+    el.innerHTML = `<div style="background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);border-radius:6px;padding:12px;font-size:11px;color:#fcd34d">⚠ Generate report in <b>Inspection Report</b> tab first for <b>${mon||'this month'}</b>, then return here.</div>`;
     return;
   }
 
-  // Build block-wise data from state.results
   const blockMap = {};
   (r.blockStaff||[]).forEach(b=>{
-    blockMap[b.designation] = {target: b.target||45, inspected: b.count||0, shortfall:0, fine:0};
+    const name = b.designation||b.block||'Unknown';
+    blockMap[name] = {target: b.target||45, inspected: b.count||0};
   });
-  Object.entries(blockMap).forEach(([k,v])=>{ v.shortfall = v.target - v.inspected; });
+  Object.values(blockMap).forEach(v=>{ v.shortfall = v.target - v.inspected; });
+  if(!bn.inspFines) bn.inspFines = {};
 
   const totTarget = Object.values(blockMap).reduce((s,b)=>s+b.target,0);
-  const totInsp = Object.values(blockMap).reduce((s,b)=>s+b.inspected,0);
+  const totInsp   = Object.values(blockMap).reduce((s,b)=>s+b.inspected,0);
+  const totFine   = Object.values(bn.inspFines).reduce((s,v)=>s+(+v||0),0);
 
   el.innerHTML = `
     <div style="font-size:11px;font-weight:600;color:#a5b4fc;margin-bottom:8px">${mon} மாத நியாய விலைக் கடைகளை ஆய்வு செய்த விவரம்</div>
@@ -9811,7 +9882,7 @@ function bnRenderInspection(){
         </div>`).join('')}
     </div>
     <table class="bn-table">
-      <thead><tr><th class="left" style="width:40px">வ.எண்</th><th class="left">ஒன்றியத்தின் பெயர்</th><th>குறியீடு</th><th>இலக்கு</th><th>ஆய்வு செய்தது</th><th>நிலுவை</th><th>அபராதம் (₹)</th></tr></thead>
+      <thead><tr><th class="left" style="width:35px">வ.எண்</th><th class="left">ஒன்றியத்தின் பெயர்</th><th>குறியீடு</th><th>இலக்கு</th><th>ஆய்வு செய்தது</th><th>நிலுவை</th><th>அபராதம் (₹)</th></tr></thead>
       <tbody>
         ${Object.entries(blockMap).map(([name,b],i)=>`<tr>
           <td>${i+1}</td>
@@ -9820,11 +9891,15 @@ function bnRenderInspection(){
           <td class="bn-data-val">${b.target}</td>
           <td class="${b.inspected>=b.target?'bn-live':'bn-warn'}">${b.inspected}</td>
           <td style="color:${b.shortfall>0?'#fca5a5':'#6ee7b7'}">${b.shortfall}</td>
-          <td><input type="number" placeholder="0" style="background:transparent;border:none;border-bottom:1px solid rgba(99,102,241,.3);color:#fcd34d;width:80px;text-align:right;font-size:12px;outline:none"></td>
+          <td><input type="number" placeholder="0" value="${bn.inspFines[name]||''}"
+            onchange="if(!bn.inspFines)bn.inspFines={};bn.inspFines['${name}']=+this.value"
+            style="background:transparent;border:none;border-bottom:1px solid rgba(99,102,241,.3);color:#fcd34d;width:90px;text-align:right;font-size:12px;outline:none"></td>
         </tr>`).join('')}
         <tr class="total-row">
           <td colspan="3">மொத்தம்</td>
-          <td>${totTarget}</td><td>${totInsp}</td><td style="color:${totTarget-totInsp>0?'#fca5a5':'#6ee7b7'}">${totTarget-totInsp}</td><td>—</td>
+          <td>${totTarget}</td><td>${totInsp}</td>
+          <td style="color:${totTarget-totInsp>0?'#fca5a5':'#6ee7b7'}">${totTarget-totInsp}</td>
+          <td style="color:#fcd34d">${totFine>0?totFine.toFixed(2):'—'}</td>
         </tr>
       </tbody>
     </table>`;
@@ -9841,47 +9916,173 @@ function bnRenderOfftake(){
     return;
   }
 
-  const TALUKS = ['Arani (Tk)','Chengam (Tk)','Chetpet','Cheyyar (Tk)','Jamunamarathur',
-    'Kalasapakkam(Tk)','Kilpennathur','Polur (Tk)','Thandrampattu','Thiruvannamalai (Tk)',
-    'Vandavasi (Tk)','Vembakkam'];
-
   const commodities = Object.keys(off);
+  const div = 1000;
+
+  const rows = commodities.map(com=>{
+    const data = off[com];
+    if(!data||!data.district) return null;
+    const d = data.district;
+    return { com,
+      entitle: +(d.entitle/div).toFixed(2),
+      allot:   +(d.allot/div).toFixed(2),
+      ob:      +(d.ob/div).toFixed(2),
+      receipts:+(d.receipts/div).toFixed(2),
+      sales:   +(d.sales/div).toFixed(2),
+      cb:      +(d.cb/div).toFixed(2),
+      pct:     d.offtakePct
+    };
+  }).filter(Boolean);
 
   el.innerHTML = `
-    <div style="font-size:11px;font-weight:600;color:#a5b4fc;margin-bottom:8px">${mon} க்கான விற்பனை விவரம் (Offtake) — ${mon}</div>
+    <div style="font-size:11px;font-weight:600;color:#a5b4fc;margin-bottom:8px">${mon} க்கான விற்பனை விவரம் (Offtake) — District Total</div>
     <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Loaded: ${commodities.join(', ')}</div>
-    ${commodities.map(com=>{
-      const data = off[com];
-      if(!data) return '';
-      const d = data.district;
-      const isKg = !['Kerosene','Palmoil'].includes(com);
-      const div = 1000;
-      return `<div style="margin-bottom:16px">
-        <div style="font-size:12px;font-weight:700;color:#fcd34d;margin-bottom:8px">${com}</div>
-        <table class="bn-table">
-          <thead><tr><th class="left">Taluk</th><th>Entitlement</th><th>Allotment</th><th>OB</th><th>Receipts</th><th>Sales</th><th>CB</th><th>Offtake%</th></tr></thead>
-          <tbody>
-            ${data.talukRows.map(r=>`<tr>
-              <td class="left">${r.taluk}</td>
-              <td>${+(r.entitle/div).toFixed(2)}</td><td>${+(r.allot/div).toFixed(2)}</td>
-              <td>${+(r.ob/div).toFixed(2)}</td><td>${+(r.receipts/div).toFixed(2)}</td>
-              <td class="bn-data-val">${+(r.sales/div).toFixed(2)}</td>
-              <td>${+(r.cb/div).toFixed(2)}</td>
-              <td class="${r.offtakePct>=90?'bn-live':r.offtakePct>=70?'bn-warn':''}">${r.offtakePct}%</td>
-            </tr>`).join('')}
-            ${d?`<tr class="total-row">
-              <td class="left">Total</td>
-              <td>${+(d.entitle/div).toFixed(2)}</td><td>${+(d.allot/div).toFixed(2)}</td>
-              <td>${+(d.ob/div).toFixed(2)}</td><td>${+(d.receipts/div).toFixed(2)}</td>
-              <td>${+(d.sales/div).toFixed(2)}</td>
-              <td>${+(d.cb/div).toFixed(2)}</td>
-              <td>${d.offtakePct}%</td>
-            </tr>`:''}
-          </tbody>
-        </table>
-      </div>`;
-    }).join('')}`;
+    <table class="bn-table">
+      <thead>
+        <tr>
+          <th class="left" style="min-width:120px">Commodity</th>
+          <th>Entitlement</th><th>Allotment</th><th>OB</th>
+          <th>Liftment</th><th>Sales (Offtake)</th><th>CB</th><th>Offtake %</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(r=>`<tr>
+          <td class="left" style="font-weight:600">${r.com}</td>
+          <td style="text-align:center">${r.entitle}</td>
+          <td style="text-align:center">${r.allot}</td>
+          <td style="text-align:center">${r.ob}</td>
+          <td style="text-align:center">${r.receipts}</td>
+          <td style="text-align:center" class="bn-data-val">${r.sales}</td>
+          <td style="text-align:center">${r.cb}</td>
+          <td style="text-align:center" class="${r.pct>=90?'bn-live':r.pct>=70?'bn-warn':''}">${r.pct}%</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+    <div style="font-size:10px;color:var(--muted);margin-top:6px">Values in MT (grains/pulses) or KL (Kerosene) | District total across all taluks.</div>`;
 }
+
+// ── Basic Notes Downloads ────────────────────────────────────
+function bnDownloadExcel(){
+  const wb = XLSX.utils.book_new();
+  const mon = bnEnMonthLabel();
+
+  // Sheet 1: FPS Details
+  const d5 = pdlSheet.f5.data;
+  const ws1 = XLSX.utils.aoa_to_sheet([
+    [`நியாய விலைக் கடைகளின் விவரம் — ${mon}`],
+    ['நிறுவனம்','நகர் FT','நகர் PT','கிராம FT','கிராம PT','மொத்தம்'],
+    ['கூட்டுறவுத் துறை (PoS உள்ளவை)',d5.urban_ft,d5.urban_pt,d5.rural_ft,d5.rural_pt,d5.urban_ft+d5.urban_pt+d5.rural_ft+d5.rural_pt],
+    ['மகளிர் / SHG',0,0,d5.shg_ft,d5.shg_pt,d5.shg_ft+d5.shg_pt],
+    ['TNCSC',d5.tncsc_ft,d5.tncsc_pt,0,0,d5.tncsc_ft+d5.tncsc_pt],
+    ['மொத்தம்',d5.urban_ft,d5.urban_pt,d5.rural_ft+d5.shg_ft,d5.rural_pt+d5.shg_pt,
+     d5.urban_ft+d5.urban_pt+d5.rural_ft+d5.rural_pt+d5.shg_ft+d5.shg_pt+d5.tncsc_ft+d5.tncsc_pt],
+  ]);
+  XLSX.utils.book_append_sheet(wb, ws1, 'FPS Details');
+
+  // Sheet 2: Cards
+  const c = pdlSheet.cards;
+  const d6 = pdlSheet.f6.data;
+  const ws2 = XLSX.utils.aoa_to_sheet([
+    [`குடும்ப அட்டைகளின் விவரம் — ${mon}`],
+    ['வகை','எண்ணிக்கை'],
+    ['அரிசி குடும்ப அட்டைகள்', pdlSheet.cardsLoaded?c.rice:d6.phh+d6.nphh],
+    ['சர்க்கரை குடும்ப அட்டைகள்', pdlSheet.cardsLoaded?c.sugar:d6.sugar_opt],
+    ['AAY அரிசி குடும்ப அட்டைகள்', pdlSheet.cardsLoaded?c.aay:d6.aay],
+    ['OAP அரிசி குடும்ப அட்டைகள்', pdlSheet.cardsLoaded?c.oap:d6.oap],
+    ['ANP அரிசி குடும்ப அட்டைகள்', pdlSheet.cardsLoaded?c.anp:d6.ap],
+    ['Police குடும்ப அட்டைகள்', pdlSheet.cardsLoaded?c.police:d6.police],
+    ['Forest குடும்ப அட்டைகள்', d6.forest||0],
+    ['என்.கார்டு (N.Card)', pdlSheet.cardsLoaded?c.noComm:d6.n_cards],
+    ['மொத்தம்',''],
+    ['Rural', pdlSheet.cardsLoaded?c.rural:d6.rural],
+    ['Urban', pdlSheet.cardsLoaded?c.urban:d6.urban],
+  ]);
+  XLSX.utils.book_append_sheet(wb, ws2, 'Cards');
+
+  // Sheet 3: Inspection
+  const r = state.results;
+  if(r){
+    const blockMap = {};
+    (r.blockStaff||[]).forEach(b=>{ blockMap[b.designation||b.block||'?']={target:b.target||45,inspected:b.count||0}; });
+    const inspRows = [
+      [`ஆய்வு விவரம் — ${mon}`],
+      ['#','Block','Code','Target','Inspected','Shortfall','Fine (Rs)'],
+      ...Object.entries(blockMap).map(([name,b],i)=>[i+1,name,'',b.target,b.inspected,b.target-b.inspected,(bn.inspFines||{})[name]||0]),
+    ];
+    const totT=Object.values(blockMap).reduce((s,b)=>s+b.target,0);
+    const totI=Object.values(blockMap).reduce((s,b)=>s+b.inspected,0);
+    inspRows.push(['','மொத்தம்','',totT,totI,totT-totI,'']);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(inspRows), 'Inspection');
+  }
+
+  // Sheet 4: Offtake
+  const off = pdlSheet.offtake;
+  if(Object.keys(off).length>0){
+    const offRows = [
+      [`விற்பனை விவரம் — ${mon}`],
+      ['Commodity','Entitlement','Allotment','OB','Liftment','Sales','CB','Offtake %'],
+    ];
+    Object.keys(off).forEach(com=>{
+      const d = off[com]?.district;
+      if(!d) return;
+      const div=1000;
+      offRows.push([com,+(d.entitle/div).toFixed(2),+(d.allot/div).toFixed(2),+(d.ob/div).toFixed(2),+(d.receipts/div).toFixed(2),+(d.sales/div).toFixed(2),+(d.cb/div).toFixed(2),d.offtakePct+'%']);
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(offRows), 'Offtake');
+  }
+
+  const fname = `BasicNotes_${(pdlSheet.month||'').replace('-','')}_TVM.xlsx`;
+  XLSX.writeFile(wb, fname);
+  toast('Basic Notes Excel downloaded');
+}
+
+function bnDownloadDocx(){
+  // Basic text download as fallback (full docx generation requires server)
+  toast('Preparing Basic Notes summary...');
+  const mon = bnEnMonthLabel();
+  const d5 = pdlSheet.f5.data;
+  const c = pdlSheet.cards;
+  const d6 = pdlSheet.f6.data;
+  const off = pdlSheet.offtake;
+  const r = state.results;
+
+  const lines = [
+    `BASIC NOTES — THIRUVANNAMALAI DISTRICT — ${mon.toUpperCase()}`,
+    '='.repeat(60),
+    '',
+    '1. FPS DETAILS',
+    `Full Time Shops: ${d5.rural_ft+d5.urban_ft+d5.shg_ft+d5.tncsc_ft}`,
+    `Part Time Shops: ${d5.rural_pt+d5.urban_pt+d5.shg_pt+d5.tncsc_pt}`,
+    `Total: ${d5.rural_ft+d5.rural_pt+d5.urban_ft+d5.urban_pt+d5.shg_ft+d5.shg_pt+d5.tncsc_ft+d5.tncsc_pt}`,
+    '',
+    '2. FAMILY CARDS',
+    `PHH: ${pdlSheet.cardsLoaded?c.phh:d6.phh}`,
+    `NPHH: ${pdlSheet.cardsLoaded?c.nphh:d6.nphh}`,
+    `AAY: ${pdlSheet.cardsLoaded?c.aay:d6.aay}`,
+    `OAP: ${pdlSheet.cardsLoaded?c.oap:d6.oap}`,
+    `Total: ${pdlSheet.cardsLoaded?c.total:(d6.phh+d6.nphh+d6.aay+d6.police+d6.oap+d6.ap)}`,
+    '',
+    '3. OFFTAKE (MT/KL)',
+  ];
+  Object.keys(off).forEach(com=>{
+    const d=off[com]?.district;
+    if(d) lines.push(`${com}: Allot=${+(d.allot/1000).toFixed(2)}, Sales=${+(d.sales/1000).toFixed(2)}, Offtake%=${d.offtakePct}%`);
+  });
+  if(r){
+    const bm={};(r.blockStaff||[]).forEach(b=>{bm[b.designation||'?']={t:b.target||45,i:b.count||0};});
+    const tt=Object.values(bm).reduce((s,b)=>s+b.t,0);
+    const ti=Object.values(bm).reduce((s,b)=>s+b.i,0);
+    lines.push('','4. INSPECTION',`Target: ${tt}, Inspected: ${ti}, Shortfall: ${tt-ti}`);
+  }
+
+  const blob = new Blob([lines.join('\n')], {type:'text/plain;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download=`BasicNotes_${(pdlSheet.month||'').replace('-','')}_TVM.txt`;
+  a.click(); URL.revokeObjectURL(url);
+  toast('Basic Notes text file downloaded (full .docx coming soon)');
+}
+
 
 // Tab init
 document.querySelector('[data-tab="notes"]')?.addEventListener('click', ()=>{
@@ -9981,49 +10182,98 @@ function downloadEkycShopExcel(){
   const blockFilter = document.getElementById('ekyc-block-filter')?.value || '';
   let rows = blockFilter ? ekyc.processedRows2.filter(r=>r.block===blockFilter) : ekyc.processedRows2.slice();
 
-  // Apply filter
-  if(ekyc.filter.active){
-    rows = rows.filter(r=>{
-      const cons = r.total_cons||0, comp = r.total_comp||0;
-      return ekycBlockPassesFilter(cons, comp);
-    });
+  // Apply numeric filter if active
+  if(ekyc.filter && ekyc.filter.active){
+    rows = rows.filter(r=>ekycBlockPassesFilter(r.total_cons||0, r.total_comp||0));
   }
 
-  // Sort same as current shop sort
-  const sk = ekyc.shopSort || {col:'pend',dir:'desc'};
   const oldMap = {};
   if(hasComp && ekyc.oldData){
-    parseEkycRows(ekyc.oldData).forEach(r=>{ if(!oldMap[r.shopCode]) oldMap[r.shopCode]=r; });
+    parseEkycRows(ekyc.oldData).forEach(r=>{ if(!oldMap[r.shopcode]) oldMap[r.shopcode]=r; });
   }
-  rows.sort((a,b)=>{
-    if(sk.col==='pend'){return sk.dir==='desc'?(b.total_pend||0)-(a.total_pend||0):(a.total_pend||0)-(b.total_pend||0);}
-    if(sk.col==='pct'){const pa=a.total_cons>0?a.total_comp/a.total_cons:0,pb=b.total_cons>0?b.total_comp/b.total_cons:0;return sk.dir==='desc'?pb-pa:pa-pb;}
-    if(sk.col==='added'&&hasComp){const oa=oldMap[a.shopCode],ob=oldMap[b.shopCode];const aa=(a.total_comp||0)-(oa?oa.total_comp||0:0),ab=(b.total_comp||0)-(ob?ob.total_comp||0:0);return sk.dir==='desc'?ab-aa:aa-ab;}
-    return 0;
+
+  // Group by block (same as webapp display)
+  const blockGroups={};
+  rows.forEach(r=>{ if(!blockGroups[r.block])blockGroups[r.block]=[]; blockGroups[r.block].push(r); });
+  const blockNames=Object.keys(blockGroups).sort();
+
+  // Build header matching webapp columns: #, Block, Shop Code, FPS Name, Considered, Completed, Pending, [old%,] %, [Added]
+  const headers = ['#','Block','Shop Code','FPS Name','Considered','Completed','Pending'];
+  if(hasComp) headers.push(ekyc.oldDate+' %');
+  headers.push(ekyc.date+' %');
+  if(hasComp) headers.push('Added');
+
+  const data = [headers];
+  let si = 1;
+
+  // Filter note
+  if(ekyc.filter && ekyc.filter.active){
+    const parts=[];
+    if(ekyc.filter.pctVal!==null) parts.push(`% ${ekyc.filter.pctOp==='lt'?'<':'≥'} ${ekyc.filter.pctVal}%`);
+    if(ekyc.filter.pendVal!==null) parts.push(`Pending ${ekyc.filter.pendOp==='gt'?'>':'≤'} ${ekyc.filter.pendVal}`);
+    data.unshift([`Filter: ${parts.join(' AND ')} | ${rows.length} shops shown | Generated: ${new Date().toLocaleDateString()}`]);
+    data.unshift([`e-KYC Shop-wise Report — ${blockFilter||'All Blocks'} — As on ${ekyc.date}`]);
+    data.push([]);
+    // Re-add header after info rows
+  }
+
+  blockNames.forEach(blockName=>{
+    const blockRows = blockGroups[blockName];
+    const bCons = blockRows.reduce((s,r)=>s+(r.total_cons||0),0);
+    const bComp = blockRows.reduce((s,r)=>s+(r.total_comp||0),0);
+    const bPend = Math.max(0, bCons-bComp);
+    const bPct = bCons>0?(bComp/bCons*100).toFixed(1)+'%':'—';
+
+    // Block summary row
+    const bRow = ['', blockName, '', '', bCons, bComp, bPend];
+    if(hasComp) bRow.push('');
+    bRow.push(bPct);
+    if(hasComp) bRow.push('');
+    data.push(bRow);
+
+    // Shop rows sorted same as webapp
+    const sorted = sortShopsWithinBlock(blockRows);
+    sorted.forEach(r=>{
+      const cons=r.total_cons||0, comp=r.total_comp||0, pend=Math.max(0,cons-comp);
+      const pct = cons>0?(comp/cons*100).toFixed(1)+'%':'0%';
+      const row = [si++, '', r.shopcode, r.shop_name||'', cons, comp, pend];
+      if(hasComp){
+        const or = oldMap[r.shopcode];
+        const oPct = or&&or.total_cons>0?(or.total_comp/or.total_cons*100).toFixed(1)+'%':'—';
+        row.push(oPct);
+      }
+      row.push(pct);
+      if(hasComp){
+        const or = oldMap[r.shopcode];
+        const added = or!==undefined?comp-(or.total_comp||0):null;
+        row.push(added!==null?(added>0?'+':'')+added:'—');
+      }
+      data.push(row);
+    });
   });
 
-  const headers = ['#','Shop Code','Block','FPS Name','Considered','Completed','Pending','% Done'];
-  if(hasComp) headers.push('Old %', 'Added');
-  const data = [headers];
-  rows.forEach((r,i)=>{
-    const cons=r.total_cons||0, comp=r.total_comp||0, pend=Math.max(0,cons-comp);
-    const pct = cons>0 ? (comp/cons*100).toFixed(1)+'%' : '0%';
-    const row = [i+1, r.shopCode, r.block||'', r.fpsName||'', cons, comp, pend, pct];
-    if(hasComp){
-      const or = oldMap[r.shopCode];
-      const oPct = or&&or.total_cons>0?(or.total_comp/or.total_cons*100).toFixed(1)+'%':'—';
-      const added = or!==undefined?comp-(or.total_comp||0):null;
-      row.push(oPct, added!==null?(added>0?'+':'')+added:'—');
-    }
-    data.push(row);
-  });
+  // Total row
+  const totCons=rows.reduce((s,r)=>s+(r.total_cons||0),0);
+  const totComp=rows.reduce((s,r)=>s+(r.total_comp||0),0);
+  const totPend=Math.max(0,totCons-totComp);
+  const totPct=totCons>0?(totComp/totCons*100).toFixed(1)+'%':'—';
+  const totRow=['','TOTAL','','',totCons,totComp,totPend];
+  if(hasComp) totRow.push('');
+  totRow.push(totPct);
+  if(hasComp) totRow.push('');
+  data.push(totRow);
 
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet(data);
-  ws['!cols'] = [5,12,18,30,11,11,11,10,10,10].map(w=>({wch:w}));
+  const colWidths = [5,20,14,32,12,12,11];
+  if(hasComp) colWidths.push(11);
+  colWidths.push(12);
+  if(hasComp) colWidths.push(10);
+  ws['!cols'] = colWidths.map(w=>({wch:w}));
   XLSX.utils.book_append_sheet(wb, ws, 'Shop-wise');
-  XLSX.writeFile(wb, `ekyc_shopwise_${(ekyc.date||'').replace(/\./g,'')}.xlsx`);
-  toast('Shop-wise Excel downloaded');
+  const fname = `ekyc_shopwise_${blockFilter||'AllBlocks'}_${(ekyc.date||'').replace(/\./g,'')}.xlsx`;
+  XLSX.writeFile(wb, fname);
+  toast('Shop-wise Excel downloaded: '+fname);
 }
 
 // ============================================================
