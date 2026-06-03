@@ -6878,9 +6878,9 @@ function pctGradient(p){
   const lum=0.299*r+0.587*g+0.114*b;
   return {bg:`rgba(${r},${g},${b},0.25)`,fg:lum>130?'#1e293b':'#1e293b',solid:`rgb(${r},${g},${b})`};
 }
-function pctCell(p,extraStyle=''){
+function pctCell(p,extraStyle='',extraClass=''){
   const c=pctGradient(p);
-  return `<td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;font-weight:700;background:${c.bg};color:${c.fg};${extraStyle}">${fmtPct(p)}</td>`;
+  return `<td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;font-weight:700;background:${c.bg};color:${c.fg};${extraStyle}" class="${extraClass}">${fmtPct(p)}</td>`;
 }
 function fmtPct(p){return p===null||p===undefined||isNaN(p)?'—':(p*100).toFixed(2)+'%';}
 function fmtN(n){return n===null||isNaN(n)?'—':n.toLocaleString('en-IN');}
@@ -7024,30 +7024,69 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
           <button class="btn-tiny" id="blk-sort-pend-${cat.k}" onclick="ekycBlockSetSort('${cat.k}','pend')" style="${ekyc[catSortKey].col==='pend'?'background:#1e3a8a;color:white':''}">Pending ${ekyc[catSortKey].col==='pend'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</button>
           <button class="btn-tiny" id="blk-sort-pct-${cat.k}" onclick="ekycBlockSetSort('${cat.k}','pct')" style="${ekyc[catSortKey].col==='pct'?'background:#1e3a8a;color:white':''}">% ${ekyc[catSortKey].col==='pct'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</button>
           ${hasComp?`<button class="btn-tiny" id="blk-sort-added-${cat.k}" onclick="ekycBlockSetSort('${cat.k}','added')" style="${ekyc[catSortKey].col==='added'?'background:#059669;color:white':''}">Added ${ekyc[catSortKey].col==='added'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</button>`:''}
+          <button class="btn-tiny" onclick="showEkycColToggle('${cat.k}')" title="Choose visible columns" style="background:rgba(124,58,237,.2);border-color:rgba(124,58,237,.5);color:#c4b5fd">☰ Columns</button>
           <button class="btn-tiny" onclick="copyEkycTableImg('ekyc-block-tbl-${cat.k}-wrap')">📸 Copy</button>
           <button class="btn-tiny" onclick="downloadEkycExcel()">📥 Excel</button>
-          <button class="btn-tiny" onclick="printEkycBlockAbstract('${cat.k}')">🖨️ Print</button>
+          <button class="btn-tiny" onclick="showEkycBlockPrintDialog('${cat.k}')">🖨️ Print</button>
         </div>
       </div>
+      <!-- Column toggle panel (hidden by default) -->
+      <div id="ekyc-col-toggle-${cat.k}" style="display:none;background:rgba(15,23,42,.7);border:1px solid rgba(124,58,237,.35);border-radius:8px;padding:10px 14px;margin-bottom:10px">
+        <div style="font-size:11px;font-weight:700;color:#c4b5fd;margin-bottom:8px">☰ Column Visibility</div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:12px">
+          ${cat.k==='all'?`
+          <div style="border-right:1px solid var(--border);padding-right:12px">
+            <div style="font-size:10px;color:var(--muted);margin-bottom:4px;font-weight:700">AAY</div>
+            ${['cons','done','pend','pct'].map(c2=>`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-bottom:2px"><input type="checkbox" checked onchange="ekycToggleCol('${cat.k}','aay_${c2}',this.checked)"> ${c2==='cons'?'Considered':c2==='done'?'Completed':c2==='pend'?'Pending':'%'}</label>`).join('')}
+          </div>
+          <div style="border-right:1px solid var(--border);padding-right:12px">
+            <div style="font-size:10px;color:var(--muted);margin-bottom:4px;font-weight:700">PHH</div>
+            ${['cons','done','pend','pct'].map(c2=>`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-bottom:2px"><input type="checkbox" checked onchange="ekycToggleCol('${cat.k}','phh_${c2}',this.checked)"> ${c2==='cons'?'Considered':c2==='done'?'Completed':c2==='pend'?'Pending':'%'}</label>`).join('')}
+          </div>
+          <div style="border-right:1px solid var(--border);padding-right:12px">
+            <div style="font-size:10px;color:var(--muted);margin-bottom:4px;font-weight:700">NPHH</div>
+            ${['cons','done','pend','pct'].map(c2=>`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-bottom:2px"><input type="checkbox" checked onchange="ekycToggleCol('${cat.k}','nph_${c2}',this.checked)"> ${c2==='cons'?'Considered':c2==='done'?'Completed':c2==='pend'?'Pending':'%'}</label>`).join('')}
+          </div>
+          `:''}
+          <div>
+            <div style="font-size:10px;color:var(--muted);margin-bottom:4px;font-weight:700">Overall</div>
+            ${['cons','done','pend','pct'].map(c2=>`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-bottom:2px"><input type="checkbox" checked onchange="ekycToggleCol('${cat.k}','tot_${c2}',this.checked)"> ${c2==='cons'?'Considered':c2==='done'?'Completed':c2==='pend'?'Pending':'%'}</label>`).join('')}
+            ${hasComp?`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-bottom:2px"><input type="checkbox" checked onchange="ekycToggleCol('${cat.k}','old_pct',this.checked)"> Old %</label>`:''}
+            ${hasComp?`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-bottom:2px"><input type="checkbox" checked onchange="ekycToggleCol('${cat.k}','added',this.checked)"> Added</label>`:''}
+          </div>
+        </div>
+      </div>      </div>
       <div style="overflow-x:auto;background:white;border-radius:8px;border:1px solid #cbd5e1;color:#1e293b;margin-bottom:14px" id="ekyc-block-tbl-${cat.k}-wrap">
-        <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <table style="width:100%;border-collapse:collapse;font-size:12px" id="ekyc-blk-tbl-${cat.k}">
           <thead>
             <tr style="background:#1e3a8a;color:white">
               <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">#</th>
               <th style="padding:7px 10px;border:1px solid #1e40af;text-align:left;min-width:150px">Block</th>
-              ${cat.k==='all'?`<th style="padding:7px 5px;border:1px solid #1e40af;text-align:center" colspan="3">AAY</th><th style="padding:7px 5px;border:1px solid #1e40af;text-align:center" colspan="3">PHH</th><th style="padding:7px 5px;border:1px solid #1e40af;text-align:center" colspan="3">NPHH</th>`:''}
-              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">Considered</th>
-              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">Completed</th>
-              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','pend')">Pending ${ekyc[catSortKey].col==='pend'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th>
-              ${hasComp?`<th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#7c3aed;min-width:80px;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','pct_old')">${od} % ${ekyc[catSortKey].col==='pct_old'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th>`:''}
-              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;min-width:80px;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','pct')">${d} % ${ekyc[catSortKey].col==='pct'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th>
-              ${hasComp?`<th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#065f46;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','added')">Added ${ekyc[catSortKey].col==='added'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th>`:''}
+              ${cat.k==='all'?`
+              <th colspan="4" style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#1e5a3a" class="ekyc-col-${cat.k}-aay_cons ekyc-col-${cat.k}-aay_done ekyc-col-${cat.k}-aay_pend ekyc-col-${cat.k}-aay_pct">AAY</th>
+              <th colspan="4" style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#1e3a8a" class="ekyc-col-${cat.k}-phh_cons ekyc-col-${cat.k}-phh_done ekyc-col-${cat.k}-phh_pend ekyc-col-${cat.k}-phh_pct">PHH</th>
+              <th colspan="4" style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#3a1e5a" class="ekyc-col-${cat.k}-nph_cons ekyc-col-${cat.k}-nph_done ekyc-col-${cat.k}-nph_pend ekyc-col-${cat.k}-nph_pct">NPHH</th>
+              `:''}              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center" class="ekyc-col-${cat.k}-tot_cons">Considered</th>
+              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center" class="ekyc-col-${cat.k}-tot_done">Completed</th>
+              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','pend')" class="ekyc-col-${cat.k}-tot_pend">Pending ${ekyc[catSortKey].col==='pend'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th>
+              ${hasComp?`<th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#7c3aed;min-width:80px;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','pct_old')" class="ekyc-col-${cat.k}-old_pct">${od} % ${ekyc[catSortKey].col==='pct_old'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th>`:''}              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;min-width:80px;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','pct')" class="ekyc-col-${cat.k}-tot_pct">${d} % ${ekyc[catSortKey].col==='pct'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th>
+              ${hasComp?`<th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#065f46;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','added')" class="ekyc-col-${cat.k}-added">Added ${ekyc[catSortKey].col==='added'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th>`:''}            </tr>
             ${cat.k==='all'?`<tr style="background:#3b82f6;color:white">
               <th colspan="2" style="padding:4px;border:1px solid #1e40af"></th>
-              ${['Cons','Done','Pend','Cons','Done','Pend','Cons','Done','Pend'].map(h=>`<th style="padding:4px;border:1px solid #1e40af;font-size:10px;text-align:center">${h}</th>`).join('')}
+              <th style="padding:4px;border:1px solid #1e40af;font-size:10px;text-align:center" class="ekyc-col-${cat.k}-aay_cons">Cons</th>
+              <th style="padding:4px;border:1px solid #1e40af;font-size:10px;text-align:center" class="ekyc-col-${cat.k}-aay_done">Done</th>
+              <th style="padding:4px;border:1px solid #1e40af;font-size:10px;text-align:center" class="ekyc-col-${cat.k}-aay_pend">Pend</th>
+              <th style="padding:4px;border:1px solid #1e40af;font-size:10px;text-align:center;background:#16a34a" class="ekyc-col-${cat.k}-aay_pct">%</th>
+              <th style="padding:4px;border:1px solid #1e40af;font-size:10px;text-align:center" class="ekyc-col-${cat.k}-phh_cons">Cons</th>
+              <th style="padding:4px;border:1px solid #1e40af;font-size:10px;text-align:center" class="ekyc-col-${cat.k}-phh_done">Done</th>
+              <th style="padding:4px;border:1px solid #1e40af;font-size:10px;text-align:center" class="ekyc-col-${cat.k}-phh_pend">Pend</th>
+              <th style="padding:4px;border:1px solid #1e40af;font-size:10px;text-align:center;background:#2563eb" class="ekyc-col-${cat.k}-phh_pct">%</th>
+              <th style="padding:4px;border:1px solid #1e40af;font-size:10px;text-align:center" class="ekyc-col-${cat.k}-nph_cons">Cons</th>
+              <th style="padding:4px;border:1px solid #1e40af;font-size:10px;text-align:center" class="ekyc-col-${cat.k}-nph_done">Done</th>
+              <th style="padding:4px;border:1px solid #1e40af;font-size:10px;text-align:center" class="ekyc-col-${cat.k}-nph_pend">Pend</th>
+              <th style="padding:4px;border:1px solid #1e40af;font-size:10px;text-align:center;background:#7c3aed" class="ekyc-col-${cat.k}-nph_pct">%</th>
               <th colspan="${4+(hasComp?2:0)}" style="padding:4px;border:1px solid #1e40af"></th>
-            </tr>`:''}
-          </thead>
+            </tr>`:''}          </thead>
           <tbody>
             ${sortedB.map((b,i)=>{
               const cons=cat.consF(b),comp=cat.compF(b),pend=cat.pendF(b),pct=cons>0?comp/cons:0;
@@ -7058,14 +7097,26 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
               return `<tr>
                 <td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;color:#64748b;font-size:11px">${i+1}</td>
                 <td style="padding:6px 8px;border:1px solid #e2e8f0;font-weight:600">${b.block}</td>
-                ${cat.k==='all'?`<td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center">${fmtN(b.aay_cons)}</td><td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center">${fmtN(b.aay_comp)}</td><td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center;color:#dc2626">${fmtN(b.aay_cons-b.aay_comp)}</td><td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center">${fmtN(b.phh_cons)}</td><td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center">${fmtN(b.phh_comp)}</td><td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center;color:#dc2626">${fmtN(b.phh_cons-b.phh_comp)}</td><td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center">${fmtN(b.nph_cons)}</td><td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center">${fmtN(b.nph_comp)}</td><td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center;color:#dc2626">${fmtN(b.nph_cons-b.nph_comp)}</td>`:''}
-                <td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;font-weight:600">${fmtN(cons)}</td>
-                <td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;font-weight:600">${fmtN(comp)}</td>
-                <td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;color:#dc2626;font-weight:600">${fmtN(pend)}</td>
-                ${hasComp?pctCell(oldPct):''}
-                ${pctCell(pct)}
-                ${hasComp?`<td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;font-weight:700;color:${added>0?'#059669':added<0?'#dc2626':'#64748b'}">${added!==null?(added>0?'+':'')+fmtN(added):'—'}</td>`:''}
-              </tr>`;
+                ${cat.k==='all'?`
+              <td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center" class="ekyc-col-${cat.k}-aay_cons">${fmtN(b.aay_cons)}</td>
+              <td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center" class="ekyc-col-${cat.k}-aay_done">${fmtN(b.aay_comp)}</td>
+              <td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center;color:#dc2626" class="ekyc-col-${cat.k}-aay_pend">${fmtN(b.aay_cons-b.aay_comp)}</td>
+              <td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center;font-weight:600;background:${b.aay_cons>0&&b.aay_comp/b.aay_cons>=0.9?'#d1fae5':b.aay_cons>0&&b.aay_comp/b.aay_cons>=0.8?'#fef3c7':'#fee2e2'}" class="ekyc-col-${cat.k}-aay_pct">${b.aay_cons>0?fmtPct(b.aay_comp/b.aay_cons):'—'}</td>
+              <td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center" class="ekyc-col-${cat.k}-phh_cons">${fmtN(b.phh_cons)}</td>
+              <td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center" class="ekyc-col-${cat.k}-phh_done">${fmtN(b.phh_comp)}</td>
+              <td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center;color:#dc2626" class="ekyc-col-${cat.k}-phh_pend">${fmtN(b.phh_cons-b.phh_comp)}</td>
+              <td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center;font-weight:600;background:${b.phh_cons>0&&b.phh_comp/b.phh_cons>=0.9?'#d1fae5':b.phh_cons>0&&b.phh_comp/b.phh_cons>=0.8?'#fef3c7':'#fee2e2'}" class="ekyc-col-${cat.k}-phh_pct">${b.phh_cons>0?fmtPct(b.phh_comp/b.phh_cons):'—'}</td>
+              <td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center" class="ekyc-col-${cat.k}-nph_cons">${fmtN(b.nph_cons)}</td>
+              <td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center" class="ekyc-col-${cat.k}-nph_done">${fmtN(b.nph_comp)}</td>
+              <td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center;color:#dc2626" class="ekyc-col-${cat.k}-nph_pend">${fmtN(b.nph_cons-b.nph_comp)}</td>
+              <td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center;font-weight:600;background:${b.nph_cons>0&&b.nph_comp/b.nph_cons>=0.9?'#d1fae5':b.nph_cons>0&&b.nph_comp/b.nph_cons>=0.8?'#fef3c7':'#fee2e2'}" class="ekyc-col-${cat.k}-nph_pct">${b.nph_cons>0?fmtPct(b.nph_comp/b.nph_cons):'—'}</td>
+              `:''}
+                <td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;font<td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;font-weight:600" class="ekyc-col-${cat.k}-tot_cons">${fmtN(cons)}</td>
+                <td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;font-weight:600" class="ekyc-col-${cat.k}-tot_done">${fmtN(comp)}</td>
+                <td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;color:#dc2626;font-weight:600" class="ekyc-col-${cat.k}-tot_pend">${fmtN(pend)}</td>
+                ${hasComp?pctCell(oldPct,'','ekyc-col-'+cat.k+'-old_pct'):''}
+                ${pctCell(pct,'','ekyc-col-'+cat.k+'-tot_pct')}
+                ${hasComp?`<td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;font-weight:700;color:${added>0?'#059669':added<0?'#dc2626':'#64748b'}" class="ekyc-col-${cat.k}-added">${added!==null?(added>0?'+':'')+fmtN(added):'—'}</td>`:''}              </tr>`;
             }).join('')}
             <tr style="background:#f1f5f9;font-weight:700">
               <td colspan="2" style="padding:7px 8px;border:1px solid #94a3b8;text-align:center">TOTAL</td>
@@ -7162,12 +7213,58 @@ function ekycBlockSetSort(catK, col){
     const defaultDesc=['pend','added'];
     ekyc[key]={col, dir: defaultDesc.includes(col)?'desc':'asc'};
   }
-  // Re-render using stored data
   if(ekyc.processedRows2 && ekyc.blocks){
     const oldRows=ekyc.oldData?parseEkycRows(ekyc.oldData):null;
     renderEkycResults(ekyc.processedRows2, ekyc.blocks, oldRows, ekyc.oldBlocks);
     switchEkycTab(catK);
   }
+}
+
+// ── Column visibility toggle ─────────────────────────────────
+function showEkycColToggle(catK){
+  const panel = document.getElementById('ekyc-col-toggle-'+catK);
+  if(!panel) return;
+  panel.style.display = panel.style.display==='none' ? '' : 'none';
+}
+
+function ekycToggleCol(catK, colId, visible){
+  // Toggle all elements with class ekyc-col-{catK}-{colId}
+  const cls = 'ekyc-col-'+catK+'-'+colId;
+  document.querySelectorAll('.'+cls).forEach(el=>{
+    el.style.display = visible ? '' : 'none';
+  });
+}
+
+// ── Block Abstract Print Dialog ──────────────────────────────
+function showEkycBlockPrintDialog(catK){
+  const existing = document.getElementById('ekyc-blk-print-dialog');
+  if(existing){ existing.remove(); return; }
+  const dlg = document.createElement('div');
+  dlg.id = 'ekyc-blk-print-dialog';
+  dlg.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#0f172a;border:1px solid rgba(99,102,241,.5);border-radius:12px;padding:24px;z-index:9999;min-width:280px;box-shadow:0 20px 60px rgba(0,0,0,.6)';
+  dlg.innerHTML = `
+    <div style="font-size:14px;font-weight:700;color:var(--ink);margin-bottom:16px">🖨️ Print Block Abstract — ${catK.toUpperCase()}</div>
+    <div style="margin-bottom:12px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Orientation</div>
+      <div style="display:flex;gap:8px">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:8px 14px;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.4);border-radius:6px;font-size:12px;color:#a5b4fc">
+          <input type="radio" name="blk-orient" value="portrait" checked> Portrait
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:8px 14px;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.4);border-radius:6px;font-size:12px;color:#a5b4fc">
+          <input type="radio" name="blk-orient" value="landscape"> Landscape
+        </label>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" onclick="const o=document.querySelector('input[name=blk-orient]:checked').value;document.getElementById('ekyc-blk-print-dialog').remove();printEkycBlockAbstract('${catK}',o);" style="flex:1;font-size:12px;padding:8px">Generate PDF</button>
+      <button class="btn secondary" onclick="document.getElementById('ekyc-blk-print-dialog').remove()" style="font-size:12px;padding:8px">Cancel</button>
+    </div>`;
+  document.body.appendChild(dlg);
+  setTimeout(()=>{
+    document.addEventListener('click', function h(e){
+      if(!dlg.contains(e.target)){ dlg.remove(); document.removeEventListener('click',h); }
+    });
+  }, 100);
 }
 function ekycShopSetSort(col){
   if(!ekyc.shopSort) ekyc.shopSort={col,dir:'desc'};
@@ -8277,22 +8374,23 @@ async function pdlUploadCards(input){
     const sh2Name = wb.SheetNames.find(n=>n.toLowerCase().includes('nfsa')) || wb.SheetNames[1];
     if(sh2Name && wb.Sheets[sh2Name]){
       const d2 = XLSX.utils.sheet_to_json(wb.Sheets[sh2Name], {header:1});
+      // Row 0 = headers, Row 1 = data (as confirmed from file analysis)
       let hRow2=null, dataRow2=null;
       for(const row of d2){
         const joined = row.join(' ').toLowerCase();
-        if(joined.includes('phh') && joined.includes('nphh')){ hRow2=row; }
+        if(joined.includes('phh') && joined.includes('nphh') && joined.includes('aay')){ hRow2=row; }
         else if(row.some(v=>!isNaN(+v)&&+v>1000)){ dataRow2=row; }
       }
       if(hRow2 && dataRow2){
         hRow2.forEach((h,i)=>{
-          const hh = String(h||'').toLowerCase();
+          const hh = String(h||'').toLowerCase().replace(/\s+/g,'');
           const val = +dataRow2[i]||0;
           if(hh.includes('aay') && hh.includes('card') && !hh.includes('benefic')) c.aay = val;
           else if(hh.includes('phh') && hh.includes('card') && !hh.includes('benefic') && !hh.includes('nphh')) c.phh = val;
           else if(hh.includes('nphh') && hh.includes('card') && !hh.includes('benefic')) c.nphh = val;
-          else if(hh.includes('total') && hh.includes('card') && !hh.includes('benefic')) c.total = val;
-          else if(hh.includes('urban')) c.urban = val;
-          else if(hh.includes('rural')) c.rural = val;
+          else if(hh.includes('total') && hh.includes('card') && !hh.includes('benefic') && !hh.includes('urban') && !hh.includes('rural')) c.total = val;
+          else if(hh.includes('urban') && hh.includes('card')) c.urban = val;
+          else if(hh.includes('rural') && hh.includes('card')) c.rural = val;
         });
       }
     }
@@ -8818,19 +8916,65 @@ async function pdlUploadForm1(input){
     const wb = await readExcel(file);
     const sh = wb.Sheets[wb.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(sh, {header:1});
-    // Find header row
-    const hIdx = rows.findIndex(r=>r.some&&r.some(c=>String(c||'').includes('Commodity')||String(c||'').includes('commodity')));
+    // Find header row (contains 'Commodity' or 'Name of the Commodity')
+    const hIdx = rows.findIndex(r=>r.some&&r.some(c=>String(c||'').toLowerCase().includes('commodity')));
     if(hIdx===-1){toast('Cannot find commodity column',true);return;}
     const dataRows = rows.slice(hIdx+1).filter(r=>r[0]&&String(r[0]).trim());
-    pdlSheet.f1.rows = dataRows.map(r=>({
-      name:String(r[0]||'').trim(),
-      shops:+r[1]||0, cards:+r[2]||0, entitle:+r[3]||0,
-      allot:+r[4]||0, ob:+r[5]||0, lift:+r[6]||0,
-      offtake:+r[8]||0, cb:+r[9]||0
-    })).filter(r=>r.name);
-    pdlSheet.f1.uploaded=true;
+
+    // Map PDL commodity names to internal names
+    const nameMap = {
+      'rice':               'Rice-NPHH (M.T)',
+      'phh rice':           'Rice-PHH (M.T)',
+      'sugar':              'Sugar (M.T)',
+      'sugar aay':          'Sugar AAY (M.T)',
+      'wheat':              'Wheat (M.T)',
+      'kerosene':           'Kerosene (K.L)',
+      'toordhall':          'Toordhall (M.T)',
+      'toordhall/\nmasoor dhall': 'Toordhall (M.T)',
+      'masoor dhall':       'Toordhall (M.T)',
+      'palmoil':            'Palmoil (K.L)',
+      'aay rice':           'AAY Rice (M.T)',
+      'oap rice':           'OAP rice (M.T)',
+      'anp rice':           'ANP rice (M.T)',
+      'ooty tea':           'Ooty tea (M.T)',
+    };
+
+    const parsed = dataRows.map(r=>{
+      const rawName = String(r[0]||'').trim().toLowerCase().replace(/\s+/g,' ');
+      // Find best match
+      let mappedName = null;
+      for(const [key, val] of Object.entries(nameMap)){
+        if(rawName.includes(key.toLowerCase())){ mappedName = val; break; }
+      }
+      if(!mappedName) mappedName = String(r[0]||'').trim(); // keep original if no match
+      return {
+        name: mappedName,
+        shops: +r[1]||0,
+        cards: +r[2]||0,
+        entitle: +r[3]||0,
+        allot:   +r[4]||0,
+        ob:      +r[5]||0,
+        lift:    +r[6]||0,
+        total:   +r[7]||0,
+        offtake: +r[8]||0,
+        cb:      +r[9]||0,
+        uploaded: true,
+      };
+    }).filter(r=>r.name && r.entitle>0);
+
+    if(parsed.length===0){toast('No valid commodity rows found',true);return;}
+
+    // Merge into existing f1.rows (update matching rows, keep others)
+    const existing = pdlSheet.f1.rows;
+    parsed.forEach(p=>{
+      const idx = existing.findIndex(e=>e.name===p.name);
+      if(idx>=0) existing[idx] = {...existing[idx], ...p};
+      else existing.push(p);
+    });
+
+    pdlSheet.f1.uploaded = true;
     pdlOpenForm('f1');
-    toast('Form 1 MIS data loaded — '+pdlSheet.f1.rows.length+' rows');
+    toast(`Form 1 loaded — ${parsed.length} commodities from ${file.name}`);
   }catch(e){toast('Upload failed: '+e.message,true);}
 }
 
@@ -8849,7 +8993,9 @@ const PDL_FORM_RENDERERS = {
       <h3>📦 Form 1 — Liftment, Offtake & Closing Balance <span style="margin-left:auto;font-size:11px;color:var(--muted);font-weight:400">${mon}</span></h3>
       <div class="pdl-source-box">
         <span class="pdl-source-label">📥 MIS Source</span>
-        <span style="font-size:11px;color:var(--muted);flex:1">Upload offtake files in Step 3 above. 🔵 = MIS upload. ⚪ = previous/default value.</span>
+        <span style="font-size:11px;color:var(--muted);flex:1">Upload Form 1 Excel OR offtake files in Step 3. 🔵 = uploaded. ⚪ = default.</span>
+        <input type="file" id="pdl-f1-file" accept=".xlsx,.xls" style="display:none" onchange="pdlUploadForm1(this)">
+        <button class="btn-tiny" onclick="document.getElementById('pdl-f1-file').click()" style="background:rgba(99,102,241,.15);border-color:rgba(99,102,241,.4);color:#a5b4fc">📂 Upload Form 1 Excel</button>
         <button class="btn-tiny" onclick="pdlExportForm1()" style="background:rgba(52,211,153,.15);border-color:rgba(52,211,153,.4);color:#6ee7b7">📥 Download Form 1</button>
       </div>
       ${!pdlSheet.basicLoaded ? '<div style="background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);border-radius:6px;padding:8px 12px;font-size:11px;color:#fcd34d;margin-bottom:10px">⚠ Upload Basic Data (Step 1) to get correct FPS count</div>' : ''}
@@ -9861,8 +10007,8 @@ function bnRenderInspection(){
   }
 
   const blockMap = {};
-  (r.blockStaff||[]).forEach(b=>{
-    const name = b.designation||b.block||'Unknown';
+  (r.blockStaffList||r.blockStaff||[]).forEach(b=>{
+    const name = b.designation||b.block||b.name||'Unknown';
     blockMap[name] = {target: b.target||45, inspected: b.count||0};
   });
   Object.values(blockMap).forEach(v=>{ v.shortfall = v.target - v.inspected; });
@@ -10003,7 +10149,7 @@ function bnDownloadExcel(){
   const r = state.results;
   if(r){
     const blockMap = {};
-    (r.blockStaff||[]).forEach(b=>{ blockMap[b.designation||b.block||'?']={target:b.target||45,inspected:b.count||0}; });
+    (r.blockStaffList||r.blockStaff||[]).forEach(b=>{ blockMap[b.designation||b.block||b.name||'?']={target:b.target||45,inspected:b.count||0}; });
     const inspRows = [
       [`ஆய்வு விவரம் — ${mon}`],
       ['#','Block','Code','Target','Inspected','Shortfall','Fine (Rs)'],
@@ -10069,7 +10215,7 @@ function bnDownloadDocx(){
     if(d) lines.push(`${com}: Allot=${+(d.allot/1000).toFixed(2)}, Sales=${+(d.sales/1000).toFixed(2)}, Offtake%=${d.offtakePct}%`);
   });
   if(r){
-    const bm={};(r.blockStaff||[]).forEach(b=>{bm[b.designation||'?']={t:b.target||45,i:b.count||0};});
+    const bm={};(r.blockStaffList||r.blockStaff||[]).forEach(b=>{bm[b.designation||b.block||b.name||'?']={t:b.target||45,i:b.count||0};});
     const tt=Object.values(bm).reduce((s,b)=>s+b.t,0);
     const ti=Object.values(bm).reduce((s,b)=>s+b.i,0);
     lines.push('','4. INSPECTION',`Target: ${tt}, Inspected: ${ti}, Shortfall: ${tt-ti}`);
@@ -10279,7 +10425,7 @@ function downloadEkycShopExcel(){
 // ============================================================
 // e-KYC Block Abstract Print / PDF
 // ============================================================
-function printEkycBlockAbstract(catK){
+function printEkycBlockAbstract(catK, orientation){
   if(!ekyc.blocks){ toast('Generate report first',true); return; }
   const hasComp = !!ekyc.oldBlocks;
   const catDefs = [
@@ -10336,11 +10482,12 @@ function printEkycBlockAbstract(catK){
   const totPend=blocks.reduce((s,b)=>s+cat.pendF(b),0);
   const totPct=totCons>0?totComp/totCons:0;
 
+  const orient = orientation || 'portrait';
   const printWin = window.open('','_blank','width=800,height=600');
   printWin.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
   <title>e-KYC Block Abstract — ${cat.label}</title>
   <style>
-    @page { size: A4; margin: 15mm; }
+    @page { size: A4 ${orient}; margin: 15mm; }
     body { font-family: 'Latha','Arial Unicode MS',Arial,sans-serif; font-size:12px; color:#1e293b; margin:0; }
     .header { margin-bottom:10px; border-bottom:2px solid #1e3a8a; padding-bottom:6px; }
     table { width:100%; border-collapse:collapse; }
