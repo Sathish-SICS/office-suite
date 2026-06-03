@@ -1455,7 +1455,7 @@ document.addEventListener('keydown', e=>{
     <button class="btn" onclick="document.getElementById('pdl-offtake-file').click()" style="font-size:12px;padding:8px 18px">
       📂 Upload Offtake File(s)
     </button>
-    <span style="font-size:11px;color:var(--muted);margin-left:10px">Select one or multiple files — commodity auto-detected from each file header</span>
+    <span style="font-size:11px;color:var(--muted);margin-left:10px">Select one or multiple files — a commodity assignment dialog will appear</span>
   </div>
 </div>
 
@@ -8658,67 +8658,160 @@ function pdlParseBasicData(rows, format){
 async function pdlUploadOfftakeMultiple(input){
   const files = Array.from(input.files||[]);
   if(!files.length) return;
-  let loaded=0, failed=[];
-  for(const file of files){
-    try{ await pdlUploadOfftakeSingle(file); loaded++; }
-    catch(e){ failed.push(file.name.substring(0,30)+': '+e.message); }
-  }
   input.value='';
+
+  // Parse all files silently first
+  const parsed = [];
+  for(const file of files){
+    try{
+      const wb = await readExcel(file);
+      const sh = wb.Sheets[wb.SheetNames[0]];
+      const data = XLSX.utils.sheet_to_json(sh, {header:1});
+
+      // Get unit from header
+      let unit = 'Kg';
+      for(let i=0;i<Math.min(10,data.length);i++){
+        const t = data[i].join(' ');
+        const m = t.match(/Entitlement\((\w+)\)/);
+        if(m){ unit=m[1]; break; }
+      }
+
+      let hIdx = data.findIndex(r=>r.some&&r.some(c=>String(c||'').trim()==='#'));
+      if(hIdx===-1) hIdx = data.findIndex(r=>r.some&&r.some(c=>String(c||'').toLowerCase().includes('taluk')));
+      if(hIdx===-1) continue;
+
+      const dataRows = data.slice(hIdx+1).filter(r=>r[0]&&String(r[0]).trim()&&!isNaN(+r[0]));
+      const totalRow = data.slice(hIdx+1).find(r=>String(r[1]||'').toLowerCase().includes('total'));
+
+      const talukRows = dataRows.map(r=>({
+        sl:+r[0], taluk:String(r[1]||'').trim(),
+        entitle:+r[2]||0, allot:+r[3]||0, ob:+r[4]||0,
+        totalAllot:+r[5]||0, receipts:+r[6]||0, adj:+r[7]||0,
+        total:+r[8]||0, sales:+r[9]||0, cb:+r[10]||0,
+        advance:+r[11]||0, actualBal:+r[12]||0, offtakePct:+r[13]||0
+      }));
+
+      const district = totalRow ? {
+        entitle:+totalRow[2]||0, allot:+totalRow[3]||0, ob:+totalRow[4]||0,
+        receipts:+totalRow[6]||0, adj:+totalRow[7]||0, total:+totalRow[8]||0,
+        sales:+totalRow[9]||0, cb:+totalRow[10]||0, offtakePct:+totalRow[13]||0
+      } : null;
+
+      // Skip zero files
+      if(!district || district.entitle===0) continue;
+
+      // Try to detect commodity from entitlement value (match against Form 1 rows)
+      let detectedCommodity = pdlDetectCommodityByValue(district.entitle, unit);
+
+      parsed.push({file:file.name, unit, district, talukRows, detected:detectedCommodity});
+    }catch(e){ console.warn('Skip '+file.name+':'+e.message); }
+  }
+
+  if(parsed.length===0){ toast('No valid offtake files found',true); return; }
+
+  // Show assignment dialog
+  showOfftakeAssignDialog(parsed);
+}
+
+function pdlDetectCommodityByValue(entitle, unit){
+  // Match by entitlement value against Form 1 rows (values are in raw Kg/Ltr)
+  const f1rows = pdlSheet.f1.rows;
+  if(f1rows && f1rows.length>0){
+    // Form 1 values are in MT/KL, MIS values are in Kg/Ltr — convert
+    for(const row of f1rows){
+      const f1entKg = row.entitle * 1000; // MT→Kg or KL→Ltr
+      const diff = Math.abs(f1entKg - entitle) / Math.max(f1entKg,1);
+      if(diff < 0.05) return row.name; // within 5%
+    }
+  }
+  return null; // unknown
+}
+
+function showOfftakeAssignDialog(parsedFiles){
+  const existing = document.getElementById('offtake-assign-dialog');
+  if(existing) existing.remove();
+
+  const COMMODITIES = [
+    'Rice-NPHH (M.T)', 'Rice-PHH (M.T)', 'Sugar (M.T)', 'Sugar AAY (M.T)',
+    'Wheat (M.T)', 'Kerosene (K.L)', 'Toordhall (M.T)', 'Palmoil (K.L)',
+    'AAY Rice (M.T)', 'OAP rice (M.T)', 'ANP rice (M.T)', 'Ooty tea (M.T)',
+    'Amma Salt', 'Khadi', 'Palm Jaggery', '-- Skip this file --'
+  ];
+
+  const overlay = document.createElement('div');
+  overlay.id = 'offtake-assign-dialog';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+
+  const dlg = document.createElement('div');
+  dlg.style.cssText = 'background:#0f172a;border:1px solid rgba(99,102,241,.5);border-radius:14px;padding:24px;max-width:700px;width:100%;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.8)';
+
+  dlg.innerHTML = `
+    <div style="font-size:16px;font-weight:800;color:var(--ink);margin-bottom:6px">📦 Assign Commodities to Offtake Files</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:18px">${parsedFiles.length} file(s) loaded. Select the commodity for each file. Auto-detected where possible.</div>
+    <div id="assign-rows">
+      ${parsedFiles.map((p,i)=>{
+        const sel = COMMODITIES.map(c=>`<option value="${c}" ${p.detected===c?'selected':''}>${c}</option>`).join('');
+        const entMT = (p.district.entitle/1000).toFixed(2);
+        const salesMT = (p.district.sales/1000).toFixed(2);
+        return `<div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:10px;background:rgba(255,255,255,.03);border:1px solid ${p.detected?'rgba(52,211,153,.25)':'rgba(251,191,36,.25)'};border-radius:8px;margin-bottom:8px">
+          <div>
+            <div style="font-size:12px;font-weight:600;color:${p.detected?'#34d399':'#fcd34d'}">${p.detected?'✓ Detected':'⚠ Unknown'} — ${p.file.substring(p.file.length-30)}</div>
+            <div style="font-size:11px;color:var(--muted)">Unit: ${p.unit} | Entitlement: ${entMT} MT/KL | Sales: ${salesMT} MT/KL</div>
+          </div>
+          <select id="assign-sel-${i}" style="background:rgba(15,23,42,.8);border:1px solid ${p.detected?'rgba(52,211,153,.4)':'rgba(251,191,36,.4)'};color:var(--ink);padding:6px 10px;border-radius:6px;font-size:12px;min-width:200px">
+            ${sel}
+          </select>
+        </div>`;
+      }).join('')}
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn" onclick="confirmOfftakeAssign(${JSON.stringify(parsedFiles).replace(/"/g,"'")})" style="flex:1;font-size:13px;padding:10px">✅ Confirm & Load All</button>
+      <button class="btn secondary" onclick="document.getElementById('offtake-assign-dialog').remove()" style="font-size:13px;padding:10px">Cancel</button>
+    </div>`;
+
+  overlay.appendChild(dlg);
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) overlay.remove(); });
+}
+
+function confirmOfftakeAssign(parsedFiles){
+  let loaded=0, skipped=0;
+  parsedFiles.forEach((p,i)=>{
+    const sel = document.getElementById('assign-sel-'+i)?.value;
+    if(!sel || sel==='-- Skip this file --'){ skipped++; return; }
+    pdlSheet.offtake[sel] = {talukRows:p.talukRows, district:p.district, filename:p.file};
+    pdlUpdateF1FromOfftake(sel);
+    loaded++;
+  });
+  document.getElementById('offtake-assign-dialog').remove();
   renderPDLOfftakeGrid();
   if(pdlSheet.activeForm==='f1') pdlOpenForm('f1');
-  if(failed.length) toast(`${loaded} loaded, ${failed.length} failed`, true);
-  else toast(`✓ ${loaded} offtake file${loaded>1?'s':''} loaded`);
+  toast(`✓ ${loaded} commodit${loaded===1?'y':'ies'} loaded${skipped?' ('+skipped+' skipped)':''}`);
 }
 
 async function pdlUploadOfftakeSingle(file){
+  // Single file — show individual assign dialog
   const wb = await readExcel(file);
   const sh = wb.Sheets[wb.SheetNames[0]];
   const data = XLSX.utils.sheet_to_json(sh, {header:1});
 
-  let commodity = null;
-  for(let i=0;i<Math.min(9,data.length);i++){
-    const rowText = data[i].join(' ');
-    commodity = pdlDetectCommodity(rowText);
-    if(commodity) break;
+  let unit = 'Kg';
+  for(let i=0;i<Math.min(10,data.length);i++){
+    const m = data[i].join(' ').match(/Entitlement\((\w+)\)/);
+    if(m){ unit=m[1]; break; }
   }
-  if(!commodity) commodity = pdlDetectCommodity(file.name);
-  if(!commodity) throw new Error('Could not detect commodity — rename file to include commodity name');
 
   let hIdx = data.findIndex(r=>r.some&&r.some(c=>String(c||'').trim()==='#'));
   if(hIdx===-1) hIdx = data.findIndex(r=>r.some&&r.some(c=>String(c||'').toLowerCase().includes('taluk')));
-  if(hIdx===-1) throw new Error('Cannot find data header row in '+file.name);
+  if(hIdx===-1) throw new Error('Cannot find data header row');
 
   const dataRows = data.slice(hIdx+1).filter(r=>r[0]&&String(r[0]).trim()&&!isNaN(+r[0]));
   const totalRow = data.slice(hIdx+1).find(r=>String(r[1]||'').toLowerCase().includes('total'));
-
-  const talukRows = dataRows.map(r=>({
-    sl:+r[0], taluk:String(r[1]||'').trim(),
-    entitle:+r[2]||0, allot:+r[3]||0, ob:+r[4]||0,
-    totalAllot:+r[5]||0, receipts:+r[6]||0, adj:+r[7]||0,
-    total:+r[8]||0, sales:+r[9]||0, cb:+r[10]||0,
-    advance:+r[11]||0, actualBal:+r[12]||0, offtakePct:+r[13]||0
-  }));
-
-  const district = totalRow ? {
-    entitle:+totalRow[2]||0, allot:+totalRow[3]||0, ob:+totalRow[4]||0,
-    receipts:+totalRow[6]||0, adj:+totalRow[7]||0, total:+totalRow[8]||0,
-    sales:+totalRow[9]||0, cb:+totalRow[10]||0, offtakePct:+totalRow[13]||0
-  } : null;
-
-  pdlSheet.offtake[commodity] = {talukRows, district, filename:file.name};
-  pdlUpdateF1FromOfftake(commodity);
-}
-
-// Legacy single-file wrapper
-async function pdlUploadOfftake(input){
-  const file = input.files[0]; if(!file) return;
-  try{
-    await pdlUploadOfftakeSingle(file);
-    renderPDLOfftakeGrid();
-    if(pdlSheet.activeForm==='f1') pdlOpenForm('f1');
-    toast('✓ Offtake loaded: '+file.name);
-  }catch(e){ toast('Offtake upload failed: '+e.message, true); }
-  input.value='';
+  const talukRows = dataRows.map(r=>({sl:+r[0],taluk:String(r[1]||'').trim(),entitle:+r[2]||0,allot:+r[3]||0,ob:+r[4]||0,totalAllot:+r[5]||0,receipts:+r[6]||0,adj:+r[7]||0,total:+r[8]||0,sales:+r[9]||0,cb:+r[10]||0,advance:+r[11]||0,actualBal:+r[12]||0,offtakePct:+r[13]||0}));
+  const district = totalRow?{entitle:+totalRow[2]||0,allot:+totalRow[3]||0,ob:+totalRow[4]||0,receipts:+totalRow[6]||0,adj:+totalRow[7]||0,total:+totalRow[8]||0,sales:+totalRow[9]||0,cb:+totalRow[10]||0,offtakePct:+totalRow[13]||0}:null;
+  if(!district||district.entitle===0) throw new Error('Empty or zero data');
+  const detected = pdlDetectCommodityByValue(district.entitle, unit);
+  showOfftakeAssignDialog([{file:file.name, unit, district, talukRows, detected}]);
 }
 
 
@@ -8726,45 +8819,17 @@ function pdlUpdateF1FromOfftake(commodity){
   const o = pdlSheet.offtake[commodity];
   if(!o||!o.district) return;
   const d = o.district;
-  // Map commodity key to Form 1 row name
-  const nameMap = {
-    'Rice':      ['Rice-NPHH (M.T)','Rice-PHH (M.T)'], // Rice splits into PHH+NPHH
-    'AAY Rice':  'AAY Rice (M.T)',
-    'Sugar':     'Sugar (M.T)',
-    'Sugar AAY': 'Sugar AAY (M.T)',
-    'Wheat':     'Wheat (M.T)',
-    'Kerosene':  'Kerosene (K.L)',
-    'Toordhall': 'Toordhall (M.T)',
-    'Palmoil':   'Palmoil   ( K.L)',
-    'OAP Rice':  'OAP rice (M.T)',
-    'ANP Rice':  'ANP rice (M.T)',
-    'Ooty Tea':  'Ooty tea (M.T)',
-  };
-  const targetName = nameMap[commodity];
-  if(!targetName) return;
-
-  // Convert Kg → MT (÷1000), KL stays as is for Kerosene
-  const isKg = !['Kerosene','Palmoil'].includes(commodity);
-  const div = isKg ? 1000 : 1000; // MIS gives in Kg, forms need MT
+  // commodity is now the exact Form 1 row name
+  // All MIS values in Kg/Ltr → divide by 1000 to get MT/KL
+  const div = 1000;
   const entitle = +(d.entitle/div).toFixed(2);
   const allot   = +(d.allot/div).toFixed(2);
   const ob      = +(d.ob/div).toFixed(2);
   const lift    = +(d.receipts/div).toFixed(2);
   const offtake = +(d.sales/div).toFixed(2);
   const cb      = +(d.cb/div).toFixed(2);
-
-  if(Array.isArray(targetName)){
-    // Rice: single MIS row splits — we can't split PHH/NPHH from combined total
-    // Mark both rows as sourced, leave individual editing
-    pdlSheet.f1.rows.forEach(row=>{
-      if(targetName.includes(row.name)){
-        row._fromMIS = true; row._misTotal = {entitle,allot,ob,lift,offtake,cb};
-      }
-    });
-  } else {
-    const row = pdlSheet.f1.rows.find(r=>r.name===targetName);
-    if(row){ row.entitle=entitle; row.allot=allot; row.ob=ob; row.lift=lift; row.offtake=offtake; row.cb=cb; row.uploaded=true; }
-  }
+  const row = pdlSheet.f1.rows.find(r=>r.name===commodity);
+  if(row){ row.entitle=entitle; row.allot=allot; row.ob=ob; row.lift=lift; row.offtake=offtake; row.cb=cb; row.uploaded=true; }
 }
 
 function renderPDLOfftakeGrid(){
