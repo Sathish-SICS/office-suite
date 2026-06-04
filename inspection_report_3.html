@@ -6959,6 +6959,11 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
     <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
       ${catDefs.map(c=>`<button class="btn-tiny ekyc-cat-btn" id="ekyc-tab-${c.k}" onclick="switchEkycTab('${c.k}')">${c.label}</button>`).join('')}
       <button class="btn-tiny ekyc-cat-btn" id="ekyc-tab-shop" onclick="switchEkycTab('shop')">🏪 Shop-wise</button>
+      <span style="margin-left:8px;border-left:1px solid var(--border);padding-left:8px;display:flex;gap:5px;align-items:center">
+        <button class="btn-tiny" id="ekyc-global-copy" onclick="ekycGlobalCopy()" title="Screenshot active tab">📸</button>
+        <button class="btn-tiny" id="ekyc-global-excel" onclick="ekycGlobalExcel()" title="Download Excel for active tab">📥</button>
+        <button class="btn-tiny" id="ekyc-global-print" onclick="ekycGlobalPrint()" title="Print active tab">🖨️</button>
+      </span>
     </div>
     <!-- Filter Panel -->
     <div id="ekyc-filter-panel" style="background:rgba(15,23,42,.5);border:1px solid rgba(99,102,241,.35);border-radius:8px;padding:10px 14px;margin-bottom:12px">
@@ -7168,6 +7173,39 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
         <button class="btn-tiny" onclick="showEkycPrintDialog()">🖨️ Print / PDF</button>
       </div>
     </div>
+    <!-- Shop-wise numeric filter (same style as block abstract filter) -->
+    <div style="background:rgba(15,23,42,.5);border:1px solid rgba(99,102,241,.35);border-radius:8px;padding:10px 14px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+        <span style="font-size:12px;font-weight:700;color:#a5b4fc">🔍 வடிகட்டி (Filter)</span>
+        <span style="font-size:11px;color:var(--muted)">Shop-wise — filters table, Excel & PDF</span>
+        <button class="btn-tiny" onclick="ekycClearShopFilter()" style="margin-left:auto;font-size:11px;background:rgba(239,68,68,.15);border-color:rgba(239,68,68,.4);color:#fca5a5">✕ Clear</button>
+      </div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
+        <div>
+          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">% Filter</label>
+          <div style="display:flex;align-items:center;gap:6px">
+            <select id="ekyc-shop-pct-op" style="background:rgba(15,23,42,.7);border:1px solid var(--border);color:var(--ink);padding:5px 8px;border-radius:5px;font-size:12px">
+              <option value="lt">Below (&lt;)</option>
+              <option value="gte">Above or equal (≥)</option>
+            </select>
+            <input type="number" id="ekyc-shop-pct-val" min="0" max="100" placeholder="e.g. 90" style="width:70px;background:rgba(15,23,42,.7);border:1px solid var(--border);color:var(--ink);padding:5px 8px;border-radius:5px;font-size:12px">
+            <span style="font-size:12px;color:var(--muted)">%</span>
+          </div>
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Pending Filter</label>
+          <div style="display:flex;align-items:center;gap:6px">
+            <select id="ekyc-shop-pend-op" style="background:rgba(15,23,42,.7);border:1px solid var(--border);color:var(--ink);padding:5px 8px;border-radius:5px;font-size:12px">
+              <option value="gt">Above (&gt;)</option>
+              <option value="lte">Below or equal (≤)</option>
+            </select>
+            <input type="number" id="ekyc-shop-pend-val" min="0" placeholder="e.g. 100" style="width:70px;background:rgba(15,23,42,.7);border:1px solid var(--border);color:var(--ink);padding:5px 8px;border-radius:5px;font-size:12px">
+          </div>
+        </div>
+        <button class="btn" onclick="ekycApplyShopFilter()" style="font-size:12px;padding:7px 18px">Apply Filter</button>
+      </div>
+      <div id="ekyc-shop-filter-status" style="font-size:11px;color:#fcd34d;margin-top:6px;min-height:16px"></div>
+    </div>
     <!-- Shop-wise column toggle -->
     <div id="ekyc-shop-col-panel" style="display:none;background:rgba(15,23,42,.7);border:1px solid rgba(124,58,237,.35);border-radius:8px;padding:10px 14px;margin-bottom:10px">
       <div style="font-size:11px;font-weight:700;color:#c4b5fd;margin-bottom:8px">☰ Column Visibility — applies to table, Excel & PDF</div>
@@ -7252,13 +7290,39 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
   switchEkycTab('all');
 }
 
+// Global export — routes to active tab's handler
+function ekycGlobalCopy(){
+  const tab = ekyc._activeTab || 'all';
+  if(tab==='shop') copyEkycTableImg('ekyc-shop-wrap');
+  else copyEkycTableImg('ekyc-block-tbl-'+tab+'-wrap');
+}
+function ekycGlobalExcel(){
+  const tab = ekyc._activeTab || 'all';
+  if(tab==='shop') downloadEkycShopExcel();
+  else downloadEkycExcel();
+}
+function ekycGlobalPrint(){
+  const tab = ekyc._activeTab || 'all';
+  if(tab==='shop') showEkycPrintDialog();
+  else showEkycBlockPrintDialog(tab);
+}
+
 function switchEkycTab(tab){
+  ekyc._activeTab = tab; // track for global export buttons
   ['all','aay','phh','nph','shop'].forEach(k=>{
     const sec=document.getElementById('ekyc-section-'+k);
     const btn=document.getElementById('ekyc-tab-'+k);
     if(sec)sec.style.display=k===tab?'':'none';
     if(btn){btn.style.background=k===tab?'#1e3a8a':'';btn.style.color=k===tab?'white':'';btn.style.borderColor=k===tab?'#1e3a8a':'';}
   });
+  // Update global button tooltips
+  const copyBtn=document.getElementById('ekyc-global-copy');
+  const xlBtn=document.getElementById('ekyc-global-excel');
+  const prBtn=document.getElementById('ekyc-global-print');
+  const tabName={'all':'ALL','aay':'AAY','phh':'PHH','nph':'NPHH','shop':'Shop-wise'}[tab]||tab;
+  if(copyBtn) copyBtn.title=`📸 Copy ${tabName}`;
+  if(xlBtn)   xlBtn.title=`📥 Excel ${tabName}`;
+  if(prBtn)   prBtn.title=`🖨️ Print ${tabName}`;
 }
 
 // ── Sort for Block Abstract tables (ALL/AAY/PHH/NPHH) ─────────────────────
@@ -7456,22 +7520,19 @@ function ekycShopSetSort(col){
   else if(ekyc.shopSort.col===col){
     ekyc.shopSort.dir = ekyc.shopSort.dir==='desc'?'asc':'desc';
   } else {
-    // New column: default direction
-    const defaultDesc = ['pend','added']; // these default to descending (high first)
+    const defaultDesc = ['pend','added'];
     ekyc.shopSort = {col, dir: defaultDesc.includes(col)?'desc':'asc'};
   }
-  filterEkycShops(); // re-render with new sort
+  filterEkycShops();
 }
 
 function sortShopsWithinBlock(shops){
   const {col,dir} = ekyc.shopSort || {col:'pend',dir:'desc'};
-  const hasComp = !!ekyc.oldBlocks;
   const oldShopMap = {};
   if(ekyc.oldData) parseEkycRows(ekyc.oldData).forEach(r=>{ oldShopMap[r.shopcode]=r; });
   return shops.slice().sort((a,b)=>{
     let va, vb;
-    const pA=Math.max(0,a.total_cons-a.total_comp), pB=Math.max(0,b.total_cons-b.total_comp);
-    if(col==='pend'){va=pA;vb=pB;}
+    if(col==='pend'){va=Math.max(0,a.total_cons-a.total_comp);vb=Math.max(0,b.total_cons-b.total_comp);}
     else if(col==='pct'){va=a.total_pct;vb=b.total_pct;}
     else if(col==='pct_old'){
       const oA=oldShopMap[a.shopcode],oB=oldShopMap[b.shopcode];
@@ -7481,7 +7542,7 @@ function sortShopsWithinBlock(shops){
       const oA=oldShopMap[a.shopcode],oB=oldShopMap[b.shopcode];
       va=oA?a.total_comp-oA.total_comp:-99999;
       vb=oB?b.total_comp-oB.total_comp:-99999;
-    } else {va=pA;vb=pB;}
+    } else {va=Math.max(0,a.total_cons-a.total_comp);vb=Math.max(0,b.total_cons-b.total_comp);}
     return dir==='desc'?vb-va:va-vb;
   });
 }
@@ -7493,7 +7554,23 @@ function renderEkycShopTable(rows){
 
   const blockGroups = {};
   rows.forEach(r=>{ if(!blockGroups[r.block]) blockGroups[r.block]=[]; blockGroups[r.block].push(r); });
-  const blockNames = Object.keys(blockGroups).sort();
+  // Sort block names by active sort column (blocks sorted same direction as shops)
+  const {col: sortCol, dir: sortDir} = ekyc.shopSort || {col:'pend',dir:'desc'};
+  const blockNames = Object.keys(blockGroups).sort((a,b)=>{
+    const ba = ekyc.blocks.find(x=>x.block===a)||{};
+    const bb2 = ekyc.blocks.find(x=>x.block===b)||{};
+    let va, vb;
+    if(sortCol==='pend'){
+      va=Math.max(0,(ba.total_cons||0)-(ba.total_comp||0));
+      vb=Math.max(0,(bb2.total_cons||0)-(bb2.total_comp||0));
+    } else if(sortCol==='pct'){
+      va=ba.pct||0; vb=bb2.pct||0;
+    } else {
+      // Default: alphabetical for other sorts
+      return a.localeCompare(b);
+    }
+    return sortDir==='desc' ? vb-va : va-vb;
+  });
 
   function subCell(val, cls, red=false){
     return `<td style="padding:4px 3px;border:1px solid #e2e8f0;text-align:center;font-size:10px;${red?'color:#dc2626':''}" class="${cls}">${fmtN(val)}</td>`;
@@ -7554,12 +7631,67 @@ function renderEkycShopTable(rows){
 }
 
 
+// Shop-wise numeric filter (separate from block abstract filter)
+ekyc.shopFilter = {active:false, pctOp:'lt', pctVal:null, pendOp:'gt', pendVal:null};
+
+function ekycApplyShopFilter(){
+  const pctValRaw  = document.getElementById('ekyc-shop-pct-val')?.value.trim();
+  const pendValRaw = document.getElementById('ekyc-shop-pend-val')?.value.trim();
+  const pctOp  = document.getElementById('ekyc-shop-pct-op')?.value || 'lt';
+  const pendOp = document.getElementById('ekyc-shop-pend-op')?.value || 'gt';
+  const hasPct  = pctValRaw  !== '' && !isNaN(parseFloat(pctValRaw));
+  const hasPend = pendValRaw !== '' && !isNaN(parseFloat(pendValRaw));
+  if(!hasPct && !hasPend){ toast('Enter at least one filter value',true); return; }
+  ekyc.shopFilter = {
+    active:true, pctOp, pctVal:hasPct?parseFloat(pctValRaw):null,
+    pendOp, pendVal:hasPend?parseFloat(pendValRaw):null
+  };
+  filterEkycShops();
+  const parts=[];
+  if(hasPct)  parts.push(`% ${pctOp==='lt'?'<':'≥'} ${pctValRaw}%`);
+  if(hasPend) parts.push(`Pending ${pendOp==='gt'?'>':'≤'} ${pendValRaw}`);
+  const st=document.getElementById('ekyc-shop-filter-status');
+  if(st) st.textContent=`🔎 Active: ${parts.join(' AND ')}`;
+  toast('Shop filter applied');
+}
+
+function ekycClearShopFilter(){
+  ekyc.shopFilter = {active:false};
+  const pv=document.getElementById('ekyc-shop-pct-val');
+  const pnd=document.getElementById('ekyc-shop-pend-val');
+  if(pv) pv.value=''; if(pnd) pnd.value='';
+  const st=document.getElementById('ekyc-shop-filter-status');
+  if(st) st.textContent='';
+  filterEkycShops();
+  toast('Shop filter cleared');
+}
+
+function ekycShopPassesFilter(r){
+  if(!ekyc.shopFilter || !ekyc.shopFilter.active) return true;
+  const pend = Math.max(0,(r.total_cons||0)-(r.total_comp||0));
+  const pct  = r.total_pct ? r.total_pct*100 : 0;
+  const f = ekyc.shopFilter;
+  if(f.pctVal!==null){
+    const pass = f.pctOp==='lt' ? pct<f.pctVal : pct>=f.pctVal;
+    if(!pass) return false;
+  }
+  if(f.pendVal!==null){
+    const pass = f.pendOp==='gt' ? pend>f.pendVal : pend<=f.pendVal;
+    if(!pass) return false;
+  }
+  return true;
+}
+
 function filterEkycShops(){
   const sel=document.getElementById('ekyc-block-filter')?.value||'';
   let rows=sel?ekyc.processedRows2.filter(r=>r.block===sel):ekyc.processedRows2;
-  // Apply numeric filters
+  // Apply block-level numeric filter (from block abstract filter panel)
   if(ekyc.filter && ekyc.filter.active){
     rows = rows.filter(r=>ekycBlockPassesFilter(r.total_cons||0, r.total_comp||0));
+  }
+  // Apply shop-level numeric filter
+  if(ekyc.shopFilter && ekyc.shopFilter.active){
+    rows = rows.filter(r=>ekycShopPassesFilter(r));
   }
   renderEkycShopTable(rows);
   // Update sort button styles after re-render
@@ -7622,11 +7754,15 @@ function printEkycShopwise(orientation){
   const hasComp=!!ekyc.oldBlocks;
   const blockFilter=document.getElementById('ekyc-block-filter')?.value||'';
 
-  // Get rows respecting BOTH block filter AND numeric filter
+  // Get rows respecting BOTH block filter AND numeric filters
   let allRows = blockFilter ? ekyc.processedRows2.filter(r=>r.block===blockFilter) : ekyc.processedRows2.slice();
-  // Apply numeric filter if active
+  // Apply block-level numeric filter
   if(ekyc.filter && ekyc.filter.active){
     allRows = allRows.filter(r=>ekycBlockPassesFilter(r.total_cons||0, r.total_comp||0));
+  }
+  // Apply shop-level numeric filter
+  if(ekyc.shopFilter && ekyc.shopFilter.active){
+    allRows = allRows.filter(r=>ekycShopPassesFilter(r));
   }
 
   const oldShopMapPrint={};
@@ -7635,21 +7771,31 @@ function printEkycShopwise(orientation){
   // Group and sort same as webapp
   const blockGroups={};
   allRows.forEach(r=>{ if(!blockGroups[r.block])blockGroups[r.block]=[]; blockGroups[r.block].push(r); });
-  const blockNames=Object.keys(blockGroups).sort();
-
   const {col,dir}=ekyc.shopSort||{col:'pend',dir:'desc'};
+  // Sort blocks same as webapp
+  const blockNames=Object.keys(blockGroups).sort((a,b)=>{
+    const ba=ekyc.blocks.find(x=>x.block===a)||{},bb2=ekyc.blocks.find(x=>x.block===b)||{};
+    if(col==='pend') return dir==='desc'?Math.max(0,(bb2.total_cons||0)-(bb2.total_comp||0))-Math.max(0,(ba.total_cons||0)-(ba.total_comp||0)):Math.max(0,(ba.total_cons||0)-(ba.total_comp||0))-Math.max(0,(bb2.total_cons||0)-(bb2.total_comp||0));
+    if(col==='pct') return dir==='desc'?(bb2.pct||0)-(ba.pct||0):(ba.pct||0)-(bb2.pct||0);
+    return a.localeCompare(b);
+  });
+
   const sortLabel={'pend':'Pending','pct':'%','added':'Added','pct_old':'Old %'}[col]||col;
   const sortDesc=`Sorted by: ${sortLabel} ${dir==='desc'?'High → Low':'Low → High'}`;
   const title=blockFilter?`${blockFilter}`:'All Blocks';
 
   // Filter note for PDF
   let filterNote = '';
+  const activeParts=[];
   if(ekyc.filter && ekyc.filter.active){
-    const parts=[];
-    if(ekyc.filter.pctVal!==null) parts.push(`% ${ekyc.filter.pctOp==='lt'?'<':'≥'} ${ekyc.filter.pctVal}%`);
-    if(ekyc.filter.pendVal!==null) parts.push(`Pending ${ekyc.filter.pendOp==='gt'?'>':'≤'} ${ekyc.filter.pendVal}`);
-    filterNote = ` | Filter: ${parts.join(' AND ')} (${allRows.length} shops)`;
+    if(ekyc.filter.pctVal!==null) activeParts.push(`% ${ekyc.filter.pctOp==='lt'?'<':'≥'} ${ekyc.filter.pctVal}%`);
+    if(ekyc.filter.pendVal!==null) activeParts.push(`Pending ${ekyc.filter.pendOp==='gt'?'>':'≤'} ${ekyc.filter.pendVal}`);
   }
+  if(ekyc.shopFilter && ekyc.shopFilter.active){
+    if(ekyc.shopFilter.pctVal!==null) activeParts.push(`Shop% ${ekyc.shopFilter.pctOp==='lt'?'<':'≥'} ${ekyc.shopFilter.pctVal}%`);
+    if(ekyc.shopFilter.pendVal!==null) activeParts.push(`Shop Pend ${ekyc.shopFilter.pendOp==='gt'?'>':'≤'} ${ekyc.shopFilter.pendVal}`);
+  }
+  if(activeParts.length) filterNote = ` | Filter: ${activeParts.join(' AND ')} (${allRows.length} shops)`;
 
   // Build autoTable rows
   const tableBody=[];
@@ -10593,8 +10739,10 @@ function downloadEkycShopExcel(){
   if(ekyc.filter && ekyc.filter.active){
     rows = rows.filter(r=>ekycBlockPassesFilter(r.total_cons||0, r.total_comp||0));
   }
-
-  const oldMap = {};
+  // Apply shop-level filter
+  if(ekyc.shopFilter && ekyc.shopFilter.active){
+    rows = rows.filter(r=>ekycShopPassesFilter(r));
+  }
   if(hasComp && ekyc.oldData){
     parseEkycRows(ekyc.oldData).forEach(r=>{ if(!oldMap[r.shopcode]) oldMap[r.shopcode]=r; });
   }
