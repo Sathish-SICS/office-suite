@@ -7209,6 +7209,11 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
     <!-- Shop-wise column toggle -->
     <div id="ekyc-shop-col-panel" style="display:none;background:rgba(15,23,42,.7);border:1px solid rgba(124,58,237,.35);border-radius:8px;padding:10px 14px;margin-bottom:10px">
       <div style="font-size:11px;font-weight:700;color:#c4b5fd;margin-bottom:8px">☰ Column Visibility — applies to table, Excel & PDF</div>
+      <div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border)">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:#fcd34d">
+          <input type="checkbox" id="shp-repeat-block" onchange="filterEkycShops()"> Repeat block name in every row (default: block header row only)
+        </label>
+      </div>
       <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:12px">
         <div style="border-right:1px solid var(--border);padding-right:12px">
           <div style="font-size:10px;color:var(--muted);margin-bottom:4px;font-weight:700">AAY</div>
@@ -7769,192 +7774,186 @@ function showEkycPrintDialog(){
 
 function printEkycShopwise(orientation){
   if(typeof window.jspdf === 'undefined' && typeof jspdf === 'undefined'){
-    toast('PDF library not loaded. Check internet and retry.',true); return;
+    toast('PDF library not loaded.',true); return;
   }
-  const hasComp=!!ekyc.oldBlocks;
-  const blockFilter=document.getElementById('ekyc-block-filter')?.value||'';
+  const hasComp = !!ekyc.oldBlocks;
+  const blockFilter = document.getElementById('ekyc-block-filter')?.value||'';
+  const repeatBlock = document.getElementById('shp-repeat-block')?.checked||false;
 
-  // Get rows respecting BOTH block filter AND numeric filters
+  // Get rows with all active filters
   let allRows = blockFilter ? ekyc.processedRows2.filter(r=>r.block===blockFilter) : ekyc.processedRows2.slice();
-  // Apply block-level numeric filter
-  if(ekyc.filter && ekyc.filter.active){
-    allRows = allRows.filter(r=>ekycBlockPassesFilter(r.total_cons||0, r.total_comp||0));
-  }
-  // Apply shop-level numeric filter
-  if(ekyc.shopFilter && ekyc.shopFilter.active){
-    allRows = allRows.filter(r=>ekycShopPassesFilter(r));
+  if(ekyc.filter?.active) allRows = allRows.filter(r=>ekycBlockPassesFilter(r.total_cons||0,r.total_comp||0));
+  if(ekyc.shopFilter?.active) allRows = allRows.filter(r=>ekycShopPassesFilter(r));
+
+  const oldShopMap={};
+  if(ekyc.oldData) parseEkycRows(ekyc.oldData).forEach(r=>{oldShopMap[r.shopcode]=r;});
+
+  // Get visible columns (same as table)
+  const visCols = getVisibleShopCols();
+  const cfg = getEkycSelTotalConfig();
+  const selLabel = [cfg.aay?'AAY':'',cfg.phh?'PHH':'',cfg.nph?'NPHH':''].filter(Boolean).join('+') || 'Sel';
+
+  // Build column definitions for PDF
+  const pdfCols = ['#','Block','Shop Code','Shop Name'];
+  if(visCols.includes('aay_cons')) pdfCols.push('AAY Cons');
+  if(visCols.includes('aay_done')) pdfCols.push('AAY Done');
+  if(visCols.includes('aay_pend')) pdfCols.push('AAY Pend');
+  if(visCols.includes('aay_pct'))  pdfCols.push('AAY %');
+  if(visCols.includes('phh_cons')) pdfCols.push('PHH Cons');
+  if(visCols.includes('phh_done')) pdfCols.push('PHH Done');
+  if(visCols.includes('phh_pend')) pdfCols.push('PHH Pend');
+  if(visCols.includes('phh_pct'))  pdfCols.push('PHH %');
+  if(visCols.includes('nph_cons')) pdfCols.push('NPHH Cons');
+  if(visCols.includes('nph_done')) pdfCols.push('NPHH Done');
+  if(visCols.includes('nph_pend')) pdfCols.push('NPHH Pend');
+  if(visCols.includes('nph_pct'))  pdfCols.push('NPHH %');
+  if(visCols.includes('tot_cons')) pdfCols.push('Considered');
+  if(visCols.includes('tot_done')) pdfCols.push('Completed');
+  if(visCols.includes('tot_pend')) pdfCols.push('Pending');
+  if(hasComp&&visCols.includes('old_pct')) pdfCols.push(ekyc.oldDate+' %');
+  if(visCols.includes('tot_pct'))  pdfCols.push(ekyc.date+' %');
+  if(hasComp&&visCols.includes('added')) pdfCols.push('Added');
+  if(visCols.includes('sel_cons')) pdfCols.push(selLabel+' Cons');
+  if(visCols.includes('sel_done')) pdfCols.push(selLabel+' Done');
+  if(visCols.includes('sel_pend')) pdfCols.push(selLabel+' Pend');
+  if(visCols.includes('sel_pct'))  pdfCols.push(selLabel+' %');
+
+  // Helper: build a row from a shop/block record
+  function buildRow(r, siStr, isBlock, blockLabel){
+    const cons=r.total_cons||0, comp=r.total_comp||0, pend=Math.max(0,cons-comp);
+    const pct=cons>0?comp/cons:0;
+    const or=oldShopMap[r.shopcode];
+    const oldPct=or&&or.total_cons>0?or.total_comp/or.total_cons:null;
+    const added=or?comp-(or.total_comp||0):null;
+    let sc=0,sd=0;
+    if(cfg.aay){sc+=r.aay_cons||0;sd+=r.aay_comp||0;}
+    if(cfg.phh){sc+=r.phh_cons||0;sd+=r.phh_comp||0;}
+    if(cfg.nph){sc+=r.nph_cons||0;sd+=r.nph_comp||0;}
+    const sPend=Math.max(0,sc-sd), sPct=sc>0?sd/sc:0;
+    const row = [siStr, blockLabel, isBlock?'':(r.shopcode||''), isBlock?'':(r.shop_name||'')];
+    if(visCols.includes('aay_cons')) row.push(String(r.aay_cons||0));
+    if(visCols.includes('aay_done')) row.push(String(r.aay_comp||0));
+    if(visCols.includes('aay_pend')) row.push(String(Math.max(0,(r.aay_cons||0)-(r.aay_comp||0))));
+    if(visCols.includes('aay_pct'))  row.push(r.aay_cons>0?fmtPct((r.aay_comp||0)/(r.aay_cons||1)):'—');
+    if(visCols.includes('phh_cons')) row.push(String(r.phh_cons||0));
+    if(visCols.includes('phh_done')) row.push(String(r.phh_comp||0));
+    if(visCols.includes('phh_pend')) row.push(String(Math.max(0,(r.phh_cons||0)-(r.phh_comp||0))));
+    if(visCols.includes('phh_pct'))  row.push(r.phh_cons>0?fmtPct((r.phh_comp||0)/(r.phh_cons||1)):'—');
+    if(visCols.includes('nph_cons')) row.push(String(r.nph_cons||0));
+    if(visCols.includes('nph_done')) row.push(String(r.nph_comp||0));
+    if(visCols.includes('nph_pend')) row.push(String(Math.max(0,(r.nph_cons||0)-(r.nph_comp||0))));
+    if(visCols.includes('nph_pct'))  row.push(r.nph_cons>0?fmtPct((r.nph_comp||0)/(r.nph_cons||1)):'—');
+    if(visCols.includes('tot_cons')) row.push(String(cons));
+    if(visCols.includes('tot_done')) row.push(String(comp));
+    if(visCols.includes('tot_pend')) row.push(String(pend));
+    if(hasComp&&visCols.includes('old_pct')) row.push(oldPct!==null?fmtPct(oldPct):'—');
+    if(visCols.includes('tot_pct'))  row.push(fmtPct(pct));
+    if(hasComp&&visCols.includes('added')) row.push(added!==null?(added>0?'+':'')+String(added):'—');
+    if(visCols.includes('sel_cons')) row.push(String(sc));
+    if(visCols.includes('sel_done')) row.push(String(sd));
+    if(visCols.includes('sel_pend')) row.push(String(sPend));
+    if(visCols.includes('sel_pct'))  row.push(fmtPct(sPct));
+    return {data:row, isBlock, pct, sPct, pendPct:pend/(cons||1), sPend, pend};
   }
 
-  const oldShopMapPrint={};
-  if(ekyc.oldData) parseEkycRows(ekyc.oldData).forEach(r=>{ oldShopMapPrint[r.shopcode]=r; });
-
-  // Group and sort same as webapp
+  // Group by block, sort within each block (same as table)
   const blockGroups={};
-  allRows.forEach(r=>{ if(!blockGroups[r.block])blockGroups[r.block]=[]; blockGroups[r.block].push(r); });
-  const {col,dir}=ekyc.shopSort||{col:'pend',dir:'desc'};
-  const isFlatSortPDF = ['pend','pct','pct_old','added'].includes(col);
-  // For flat sort: sort all shops globally; otherwise sort blocks alphabetically
-  const blockNames=isFlatSortPDF ? [] : Object.keys(blockGroups).sort();
+  allRows.forEach(r=>{if(!blockGroups[r.block])blockGroups[r.block]=[];blockGroups[r.block].push(r);});
+  const blockNames = Object.keys(blockGroups).sort();
 
-  const sortLabel={'pend':'Pending','pct':'%','added':'Added','pct_old':'Old %'}[col]||col;
-  const sortDesc=`Sorted by: ${sortLabel} ${dir==='desc'?'High → Low':'Low → High'}`;
-  const title=blockFilter?`${blockFilter}`:'All Blocks';
+  const tableBody=[]; let si=1;
+  const {col:sortCol, dir:sortDir} = ekyc.shopSort||{col:'pend',dir:'desc'};
 
-  // Filter note for PDF
-  let filterNote = '';
-  const activeParts=[];
-  if(ekyc.filter && ekyc.filter.active){
-    if(ekyc.filter.pctVal!==null) activeParts.push(`% ${ekyc.filter.pctOp==='lt'?'<':'≥'} ${ekyc.filter.pctVal}%`);
-    if(ekyc.filter.pendVal!==null) activeParts.push(`Pending ${ekyc.filter.pendOp==='gt'?'>':'≤'} ${ekyc.filter.pendVal}`);
-  }
-  if(ekyc.shopFilter && ekyc.shopFilter.active){
-    if(ekyc.shopFilter.pctVal!==null) activeParts.push(`Shop% ${ekyc.shopFilter.pctOp==='lt'?'<':'≥'} ${ekyc.shopFilter.pctVal}%`);
-    if(ekyc.shopFilter.pendVal!==null) activeParts.push(`Shop Pend ${ekyc.shopFilter.pendOp==='gt'?'>':'≤'} ${ekyc.shopFilter.pendVal}`);
-  }
-  if(activeParts.length) filterNote = ` | Filter: ${activeParts.join(' AND ')} (${allRows.length} shops)`;
+  blockNames.forEach(blockName=>{
+    const bb=ekyc.blocks.find(b=>b.block===blockName)||{};
+    const brows = buildRow(bb, String(si++), true, blockName);
+    tableBody.push(brows);
+    const sorted = sortShopsWithinBlock(blockGroups[blockName]);
+    sorted.forEach(r=>{ tableBody.push(buildRow(r, String(si++), false, repeatBlock?r.block:'')); });
+  });
 
-  // Build autoTable rows
-  const tableBody=[];
-  let si=1;
+  // PDF generation
+  const {jsPDF} = window.jspdf;
+  const orient = orientation || (pdfCols.length>10?'landscape':'portrait');
+  const doc = new jsPDF({orientation:orient,unit:'mm',format:'a4'});
 
-  function pushShopRowPDF(r){
-    const pend=Math.max(0,r.total_cons-r.total_comp);
-    const oldR=oldShopMapPrint[r.shopcode];
-    const oldPct=oldR&&oldR.total_cons>0?oldR.total_comp/oldR.total_cons:null;
-    const added=oldR?r.total_comp-oldR.total_comp:null;
-    const row=[String(si++), r.block, r.shopcode, r.shop_name,
-      String(r.total_cons), String(r.total_comp), String(pend)];
-    if(hasComp) row.push(oldPct!==null?fmtPct(oldPct):'—');
-    row.push(fmtPct(r.total_pct));
-    if(hasComp) row.push(added!==null?(added>0?'+':'')+String(added):'—');
-    tableBody.push({data:row, isBlock:false, pct:r.total_pct, oldPct, added});
-  }
+  const sortLabel = {'pend':'Pending','pct':'%','added':'Added','pct_old':'Old %'}[sortCol]||sortCol;
+  const sortDesc = `Sorted by: ${sortLabel} ${sortDir==='desc'?'High → Low':'Low → High'}`;
+  const filterParts=[];
+  if(ekyc.filter?.active){if(ekyc.filter.pctVal!==null)filterParts.push(`%${ekyc.filter.pctOp==='lt'?'<':'≥'}${ekyc.filter.pctVal}%`);if(ekyc.filter.pendVal!==null)filterParts.push(`Pend${ekyc.filter.pendOp==='gt'?'>':'≤'}${ekyc.filter.pendVal}`);}
+  if(ekyc.shopFilter?.active){if(ekyc.shopFilter.pctVal!==null)filterParts.push(`Shp%${ekyc.shopFilter.pctOp==='lt'?'<':'≥'}${ekyc.shopFilter.pctVal}%`);if(ekyc.shopFilter.pendVal!==null)filterParts.push(`ShpPend${ekyc.shopFilter.pendOp==='gt'?'>':'≤'}${ekyc.shopFilter.pendVal}`);}
+  const filterNote = filterParts.length?` | Filter: ${filterParts.join(' AND ')} (${allRows.length} shops)`:'';
 
-  if(isFlatSortPDF){
-    // Globally sort all shops
-    const globalSorted = allRows.slice().sort((a,b)=>{
-      let va,vb;
-      if(col==='pend'){va=Math.max(0,a.total_cons-a.total_comp);vb=Math.max(0,b.total_cons-b.total_comp);}
-      else if(col==='pct'){va=a.total_pct;vb=b.total_pct;}
-      else if(col==='added'){const oA=oldShopMapPrint[a.shopcode],oB=oldShopMapPrint[b.shopcode];va=oA?a.total_comp-oA.total_comp:-99999;vb=oB?b.total_comp-oB.total_comp:-99999;}
-      else{va=Math.max(0,a.total_cons-a.total_comp);vb=Math.max(0,b.total_cons-b.total_comp);}
-      return dir==='desc'?vb-va:va-vb;
-    });
-    globalSorted.forEach(r=>pushShopRowPDF(r));
-  } else {
-    blockNames.forEach(blockName=>{
-      const bb=ekyc.blocks.find(b=>b.block===blockName)||{};
-      const filteredBlockRows = blockGroups[blockName] || [];
-      const bCons = filteredBlockRows.reduce((s,r)=>s+(r.total_cons||0),0);
-      const bComp = filteredBlockRows.reduce((s,r)=>s+(r.total_comp||0),0);
-      const bpend = Math.max(0, bCons - bComp);
-      const bpct = bCons>0 ? bComp/bCons : 0;
-      const bRow=[String(si++), '⬛ '+blockName,'','',
-        String(bCons), String(bComp), String(bpend)];
-      if(hasComp) bRow.push('');
-      bRow.push(fmtPct(bpct));
-      if(hasComp) bRow.push('');
-      tableBody.push({data:bRow, isBlock:true, pct:bpct});
-      filteredBlockRows.forEach(r=>pushShopRowPDF(r));
-    });
-  }
-
-  const { jsPDF } = window.jspdf;
-  // Use user-selected orientation; default: landscape if comparison, portrait otherwise
-  const orient = orientation || (hasComp ? 'landscape' : 'portrait');
-  const doc = new jsPDF({orientation:orient, unit:'mm', format:'a4'});
-
-  doc.setFontSize(11);
-  doc.setFont('helvetica','bold');
-  doc.text(`e-KYC Progress — Shop-wise — ${title}`, 10, 12);
-  doc.setFontSize(8);
-  doc.setFont('helvetica','normal');
-  doc.setTextColor(100);
-  const subLine = `Thiruvannamalai District | As on ${ekyc.date}${hasComp?' | Compared from: '+ekyc.oldDate:''} | ${sortDesc}${filterNote}`;
-  doc.text(subLine, 10, 18);
+  doc.setFontSize(11); doc.setFont('helvetica','bold');
+  doc.text(`e-KYC Progress — Shop-wise — ${blockFilter||'All Blocks'}`, 10, 12);
+  doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(100);
+  doc.text(`Thiruvannamalai District | As on ${ekyc.date} | ${sortDesc}${filterNote}`, 10, 18);
   doc.setTextColor(0);
 
-  function pctRgb(p){
-    const pct=Math.max(0,Math.min(1,p||0));
-    let r,g,b;
-    if(pct<0.85){const t=pct/0.85;r=220;g=Math.round(53+t*106);b=53;}
-    else{const t=(pct-0.85)/0.15;r=Math.round(220-t*187);g=Math.round(159+t*64);b=Math.round(53-t*53);}
-    return [r,g,b];
-  }
+  // Color pct cell
+  function pctRgb(p){ const v=Math.max(0,Math.min(1,p||0)); return v>=0.9?[209,250,229]:v>=0.8?[254,243,199]:[254,226,226]; }
 
-  const cols = ['#','Block','Shop Code','Shop Name','Considered','Completed','Pending'];
-  if(hasComp) cols.push(ekyc.oldDate+' %');
-  cols.push(ekyc.date+' %');
-  if(hasComp) cols.push('Added');
+  // Find which column indices are pct-type for coloring
+  const pctColIdxs=[];
+  pdfCols.forEach((c,i)=>{ if(c.endsWith('%')||c==='AAY %'||c==='PHH %'||c==='NPHH %'||c.endsWith('Pend')) pctColIdxs.push(i); });
+  const pctValueIdxs=pdfCols.reduce((acc,c,i)=>{if(c.endsWith('%')||c==='AAY %'||c==='PHH %'||c==='NPHH %')acc.push(i);return acc;},[]);
+  const pendIdxs=pdfCols.reduce((acc,c,i)=>{if(c.endsWith('Pend')||c==='Pending')acc.push(i);return acc;},[]);
 
-  // Adjust column widths based on orientation
-  const isLandscape = orient === 'landscape';
-  const cw = hasComp
-    ? (isLandscape ? [7,32,16,40,14,14,12,12,12,11] : [6,28,14,35,13,13,11,11,11,10])
-    : (isLandscape ? [7,40,18,55,18,18,16,16] : [7,35,18,45,17,17,14,14]);
+  const pageW = doc.internal.pageSize.getWidth();
+  const tableW = pageW - 20; // 10mm margins each side
+  // Auto-distribute column widths
+  const fixedCols = [0,1,2,3]; // #, Block, Code, Name
+  const fixW = [6, orient==='landscape'?28:22, 14, orient==='landscape'?38:28];
+  const remaining = tableW - fixW.reduce((s,v)=>s+v,0);
+  const numCols = pdfCols.length;
+  const dataCols = numCols - 4;
+  const colW = dataCols>0 ? remaining/dataCols : 10;
+  const cw = pdfCols.map((c,i)=>i<4?fixW[i]:Math.max(8,colW));
 
   doc.autoTable({
     startY:22,
-    head:[cols],
+    head:[pdfCols],
     body:tableBody.map(r=>r.data),
-    columnStyles: Object.fromEntries(cw.map((w,i)=>([i,{cellWidth:w}]))),
-    headStyles:{fillColor:[30,58,138],textColor:255,fontSize:7.5,fontStyle:'bold',halign:'center'},
-    bodyStyles:{fontSize:7,cellPadding:1.5},
-    styles:{overflow:'linebreak',lineColor:[203,213,225],lineWidth:0.2},
+    columnStyles:Object.fromEntries(cw.map((w,i)=>[i,{cellWidth:w,halign:i>=4?'center':'left'}])),
+    headStyles:{fillColor:[30,58,138],textColor:255,fontSize:7,fontStyle:'bold',halign:'center'},
+    bodyStyles:{fontSize:6.5,cellPadding:1.2},
+    styles:{overflow:'linebreak',lineColor:[203,213,225],lineWidth:0.15},
     willDrawCell(data){
       if(data.section!=='body') return;
-      const row=tableBody[data.row.index];
-      if(!row) return;
+      const row = tableBody[data.row.index]; if(!row) return;
       if(row.isBlock){
         data.cell.styles.fillColor=[219,234,254];
         data.cell.styles.fontStyle='bold';
         data.cell.styles.textColor=[30,58,138];
         return;
       }
-      const pctCol = hasComp ? 8 : 7;
-      const oldPctCol = hasComp ? 7 : -1;
-      const addedCol = hasComp ? 9 : -1;
-      if(data.column.index===pctCol){
-        const [r,g,b]=pctRgb(row.pct);
-        data.cell.styles.fillColor=[r,g,b];
-        data.cell.styles.textColor=255;
+      const ci = data.column.index;
+      const cellVal = String(data.cell.raw||'');
+      // Color pct cells
+      if(pdfCols[ci]&&pdfCols[ci].endsWith('%')&&cellVal.endsWith('%')){
+        const v=parseFloat(cellVal)/100;
+        data.cell.styles.fillColor=pctRgb(v);
         data.cell.styles.fontStyle='bold';
-        data.cell.styles.halign='center';
       }
-      if(oldPctCol>=0 && data.column.index===oldPctCol && row.oldPct!=null){
-        const [r,g,b]=pctRgb(row.oldPct);
-        data.cell.styles.fillColor=[r,g,b];
-        data.cell.styles.textColor=255;
-        data.cell.styles.fontStyle='bold';
-        data.cell.styles.halign='center';
+      // Color pending cells red if > 0
+      if(pdfCols[ci]&&(pdfCols[ci]==='Pending'||pdfCols[ci].endsWith('Pend'))&&+cellVal>0){
+        data.cell.styles.textColor=[220,38,38];
       }
-      if(addedCol>=0 && data.column.index===addedCol && row.added!=null){
-        data.cell.styles.textColor=row.added>0?[5,150,105]:row.added<0?[220,38,38]:[100,116,139];
-        data.cell.styles.fontStyle='bold';
-        data.cell.styles.halign='center';
-      }
-      if(data.column.index===6){
-        const pend=parseInt(data.cell.raw||0);
-        if(pend>0) data.cell.styles.textColor=[220,38,38];
-        data.cell.styles.halign='center';
-      }
-      if(data.column.index>=4) data.cell.styles.halign='center';
     },
     didDrawPage(data){
-      const pageCount=doc.getNumberOfPages();
-      doc.setFontSize(7);
-      doc.setTextColor(150);
-      const pageW=doc.internal.pageSize.getWidth();
-      doc.text(`Page ${data.pageNumber} of ${pageCount}`,pageW-20,doc.internal.pageSize.getHeight()-5);
-      doc.text('திருவண்ணாமலை மாவட்டம்',10,doc.internal.pageSize.getHeight()-5);
+      const pc=doc.getNumberOfPages(), pw=doc.internal.pageSize.getWidth(), ph=doc.internal.pageSize.getHeight();
+      doc.setFontSize(6.5); doc.setTextColor(150);
+      doc.text(`Page ${data.pageNumber} of ${pc}`, pw-18, ph-4);
+      doc.text('திருவண்ணாமலை மாவட்டம்', 10, ph-4);
       doc.setTextColor(0);
     }
   });
 
-  const fname=`eKYC_Shopwise_${blockFilter||'AllBlocks'}_${ekyc.date.replace(/\./g,'')}.pdf`;
+  const fname=`eKYC_Shopwise_${(blockFilter||'AllBlocks').replace(/\s/g,'_')}_${(ekyc.date||'').replace(/\./g,'')}.pdf`;
   doc.save(fname);
-  toast('✓ PDF downloaded: '+fname);
+  toast('PDF downloaded: '+fname);
 }
+
 
 function downloadEkycExcel(){
   if(!ekyc.blocks||!ekyc.processedRows2){toast('Generate report first',true);return;}
@@ -10762,36 +10761,23 @@ function ekycBlockPassesFilter(cons, comp){
 function downloadEkycShopExcel(){
   if(!ekyc.processedRows2){ toast('Generate report first',true); return; }
   const hasComp = !!ekyc.oldData;
-  const blockFilter = document.getElementById('ekyc-block-filter')?.value || '';
-  let rows = blockFilter ? ekyc.processedRows2.filter(r=>r.block===blockFilter) : ekyc.processedRows2.slice();
+  const blockFilter = document.getElementById('ekyc-block-filter')?.value||'';
+  const repeatBlock = document.getElementById('shp-repeat-block')?.checked||false;
 
-  if(ekyc.filter && ekyc.filter.active){
-    rows = rows.filter(r=>ekycBlockPassesFilter(r.total_cons||0, r.total_comp||0));
-  }
-  // Apply shop-level filter
-  if(ekyc.shopFilter && ekyc.shopFilter.active){
-    rows = rows.filter(r=>ekycShopPassesFilter(r));
-  }
-  if(hasComp && ekyc.oldData){
-    parseEkycRows(ekyc.oldData).forEach(r=>{ if(!oldMap[r.shopcode]) oldMap[r.shopcode]=r; });
-  }
+  // Get rows with all active filters
+  let rows = blockFilter ? ekyc.processedRows2.filter(r=>r.block===blockFilter) : ekyc.processedRows2.slice();
+  if(ekyc.filter?.active) rows = rows.filter(r=>ekycBlockPassesFilter(r.total_cons||0,r.total_comp||0));
+  if(ekyc.shopFilter?.active) rows = rows.filter(r=>ekycShopPassesFilter(r));
+
+  const oldMap={};
+  if(hasComp&&ekyc.oldData) parseEkycRows(ekyc.oldData).forEach(r=>{if(!oldMap[r.shopcode])oldMap[r.shopcode]=r;});
 
   const visCols = getVisibleShopCols();
-  const showAAY = ['aay_cons','aay_done','aay_pend','aay_pct'].some(c=>visCols.includes(c));
-  const showPHH = ['phh_cons','phh_done','phh_pend','phh_pct'].some(c=>visCols.includes(c));
-  const showNPH = ['nph_cons','nph_done','nph_pend','nph_pct'].some(c=>visCols.includes(c));
+  const cfg = getEkycSelTotalConfig();
+  const selLabel=[cfg.aay?'AAY':'',cfg.phh?'PHH':'',cfg.nph?'NPHH':''].filter(Boolean).join('+')||'Sel';
 
-  // Determine sort mode
-  const {col:xlSortCol, dir:xlSortDir} = ekyc.shopSort || {col:'pend',dir:'desc'};
-  const isFlatSortXL = ['pend','pct','pct_old','added'].includes(xlSortCol);
-
-  // Group by block (for grouped mode)
-  const blockGroups={};
-  rows.forEach(r=>{ if(!blockGroups[r.block])blockGroups[r.block]=[]; blockGroups[r.block].push(r); });
-  const blockNames=isFlatSortXL ? [] : Object.keys(blockGroups).sort();
-
-  // Build headers
-  const headers = ['#','Block','Shop Code','FPS Name'];
+  // Build header row
+  const headers=['#','Block','Shop Code','FPS Name'];
   if(visCols.includes('aay_cons')) headers.push('AAY Cons');
   if(visCols.includes('aay_done')) headers.push('AAY Done');
   if(visCols.includes('aay_pend')) headers.push('AAY Pend');
@@ -10807,134 +10793,75 @@ function downloadEkycShopExcel(){
   if(visCols.includes('tot_cons')) headers.push('Considered');
   if(visCols.includes('tot_done')) headers.push('Completed');
   if(visCols.includes('tot_pend')) headers.push('Pending');
-  if(hasComp && visCols.includes('old_pct')) headers.push(ekyc.oldDate+' %');
+  if(hasComp&&visCols.includes('old_pct')) headers.push(ekyc.oldDate+' %');
   if(visCols.includes('tot_pct'))  headers.push(ekyc.date+' %');
-  if(hasComp && visCols.includes('added')) headers.push('Added');
-  // Selected total headers
-  const cfg = getEkycSelTotalConfig();
-  const selLabel = [cfg.aay?'AAY':'',cfg.phh?'PHH':'',cfg.nph?'NPHH':''].filter(Boolean).join('+') || 'Sel';
+  if(hasComp&&visCols.includes('added')) headers.push('Added');
   if(visCols.includes('sel_cons')) headers.push(selLabel+' Cons');
   if(visCols.includes('sel_done')) headers.push(selLabel+' Done');
   if(visCols.includes('sel_pend')) headers.push(selLabel+' Pend');
   if(visCols.includes('sel_pct'))  headers.push(selLabel+' %');
 
-  const data = [headers];
-  let si=1;
-
-  function xlShopRow(r, blockLabel){
-    const pend = Math.max(0,r.total_cons-r.total_comp);
-    const pct = r.total_cons>0?+(r.total_pct*100).toFixed(1)+'%':'0%';
-    const or = oldMap[r.shopcode];
-    const oPct = hasComp && or && or.total_cons>0 ? +(or.total_comp/or.total_cons*100).toFixed(1)+'%' : '—';
-    const added = hasComp && or!==undefined ? r.total_comp-(or.total_comp||0) : null;
-    const row = [si++,blockLabel||'',r.shopcode,r.shop_name||'']; 
-    if(visCols.includes('aay_cons')) row.push(r.aay_cons); if(visCols.includes('aay_done')) row.push(r.aay_comp); if(visCols.includes('aay_pend')) row.push(r.aay_pend); if(visCols.includes('aay_pct'))  row.push(r.aay_cons>0?+(r.aay_comp/r.aay_cons*100).toFixed(1)+'%':'—');
-    if(visCols.includes('phh_cons')) row.push(r.phh_cons); if(visCols.includes('phh_done')) row.push(r.phh_comp); if(visCols.includes('phh_pend')) row.push(r.phh_pend); if(visCols.includes('phh_pct'))  row.push(r.phh_cons>0?+(r.phh_comp/r.phh_cons*100).toFixed(1)+'%':'—');
-    if(visCols.includes('nph_cons')) row.push(r.nph_cons); if(visCols.includes('nph_done')) row.push(r.nph_comp); if(visCols.includes('nph_pend')) row.push(r.nph_pend); if(visCols.includes('nph_pct'))  row.push(r.nph_cons>0?+(r.nph_comp/r.nph_cons*100).toFixed(1)+'%':'—');
-    if(visCols.includes('tot_cons')) row.push(r.total_cons); if(visCols.includes('tot_done')) row.push(r.total_comp); if(visCols.includes('tot_pend')) row.push(pend);
-    if(hasComp && visCols.includes('old_pct')) row.push(oPct);
+  // Helper: build data row
+  function buildRow(r, siNum, isBlock, blockLabel){
+    const cons=r.total_cons||0, comp=r.total_comp||0, pend=Math.max(0,cons-comp);
+    const pct=cons>0?+(comp/cons*100).toFixed(1)+'%':'0%';
+    const or=oldMap[r.shopcode];
+    const oPct=hasComp&&or&&or.total_cons>0?+(or.total_comp/or.total_cons*100).toFixed(1)+'%':'—';
+    const added=hasComp&&or!==undefined?comp-(or.total_comp||0):null;
+    let sc=0,sd=0;
+    if(cfg.aay){sc+=r.aay_cons||0;sd+=r.aay_comp||0;}
+    if(cfg.phh){sc+=r.phh_cons||0;sd+=r.phh_comp||0;}
+    if(cfg.nph){sc+=r.nph_cons||0;sd+=r.nph_comp||0;}
+    const sPend=Math.max(0,sc-sd), sPct=sc>0?+(sd/sc*100).toFixed(1)+'%':'—';
+    const row=[siNum, blockLabel, isBlock?'':(r.shopcode||''), isBlock?'':(r.shop_name||'')];
+    if(visCols.includes('aay_cons')) row.push(r.aay_cons||0);
+    if(visCols.includes('aay_done')) row.push(r.aay_comp||0);
+    if(visCols.includes('aay_pend')) row.push(Math.max(0,(r.aay_cons||0)-(r.aay_comp||0)));
+    if(visCols.includes('aay_pct'))  row.push(r.aay_cons>0?+(r.aay_comp/r.aay_cons*100).toFixed(1)+'%':'—');
+    if(visCols.includes('phh_cons')) row.push(r.phh_cons||0);
+    if(visCols.includes('phh_done')) row.push(r.phh_comp||0);
+    if(visCols.includes('phh_pend')) row.push(Math.max(0,(r.phh_cons||0)-(r.phh_comp||0)));
+    if(visCols.includes('phh_pct'))  row.push(r.phh_cons>0?+(r.phh_comp/r.phh_cons*100).toFixed(1)+'%':'—');
+    if(visCols.includes('nph_cons')) row.push(r.nph_cons||0);
+    if(visCols.includes('nph_done')) row.push(r.nph_comp||0);
+    if(visCols.includes('nph_pend')) row.push(Math.max(0,(r.nph_cons||0)-(r.nph_comp||0)));
+    if(visCols.includes('nph_pct'))  row.push(r.nph_cons>0?+(r.nph_comp/r.nph_cons*100).toFixed(1)+'%':'—');
+    if(visCols.includes('tot_cons')) row.push(cons);
+    if(visCols.includes('tot_done')) row.push(comp);
+    if(visCols.includes('tot_pend')) row.push(pend);
+    if(hasComp&&visCols.includes('old_pct')) row.push(oPct);
     if(visCols.includes('tot_pct'))  row.push(pct);
-    if(hasComp && visCols.includes('added')) row.push(added!==null?(added>0?'+':'')+added:'—');
-    const cfg2=getEkycSelTotalConfig();
-    if(visCols.includes('sel_cons')||visCols.includes('sel_done')||visCols.includes('sel_pend')||visCols.includes('sel_pct')){
-      let sc=0,sd=0;
-      if(cfg2.aay){sc+=r.aay_cons;sd+=r.aay_comp;} if(cfg2.phh){sc+=r.phh_cons;sd+=r.phh_comp;} if(cfg2.nph){sc+=r.nph_cons;sd+=r.nph_comp;}
-      if(visCols.includes('sel_cons')) row.push(sc); if(visCols.includes('sel_done')) row.push(sd); if(visCols.includes('sel_pend')) row.push(Math.max(0,sc-sd)); if(visCols.includes('sel_pct'))  row.push(sc>0?+(sd/sc*100).toFixed(1)+'%':'—');
-    }
-    data.push(row);
+    if(hasComp&&visCols.includes('added')) row.push(added!==null?(added>0?'+':'')+added:'—');
+    if(visCols.includes('sel_cons')) row.push(sc);
+    if(visCols.includes('sel_done')) row.push(sd);
+    if(visCols.includes('sel_pend')) row.push(sPend);
+    if(visCols.includes('sel_pct'))  row.push(sPct);
+    return row;
   }
 
-  if(isFlatSortXL){
-    // Globally sort
-    const oldMapXL={};
-    if(hasComp&&ekyc.oldData) parseEkycRows(ekyc.oldData).forEach(r=>{oldMapXL[r.shopcode]=r;});
-    const globalSorted=rows.slice().sort((a,b)=>{
-      let va,vb;
-      if(xlSortCol==='pend'){va=Math.max(0,a.total_cons-a.total_comp);vb=Math.max(0,b.total_cons-b.total_comp);}
-      else if(xlSortCol==='pct'){va=a.total_pct;vb=b.total_pct;}
-      else if(xlSortCol==='added'){const oA=oldMapXL[a.shopcode],oB=oldMapXL[b.shopcode];va=oA?a.total_comp-oA.total_comp:-99999;vb=oB?b.total_comp-oB.total_comp:-99999;}
-      else{va=Math.max(0,a.total_cons-a.total_comp);vb=Math.max(0,b.total_cons-b.total_comp);}
-      return xlSortDir==='desc'?vb-va:va-vb;
-    });
-    globalSorted.forEach(r=>xlShopRow(r, r.block));
-  } else {
+  // Group and sort same as table
+  const blockGroups={};
+  rows.forEach(r=>{if(!blockGroups[r.block])blockGroups[r.block]=[];blockGroups[r.block].push(r);});
+  const blockNames=Object.keys(blockGroups).sort();
+
+  const data=[headers]; let si=1;
   blockNames.forEach(blockName=>{
-    const blockRows = blockGroups[blockName];
-    const bb = ekyc.blocks.find(b=>b.block===blockName)||{};
-    // Block summary row
-    const bRow = ['', blockName, '', ''];
-    if(visCols.includes('aay_cons')) bRow.push(bb.aay_cons||0);
-    if(visCols.includes('aay_done')) bRow.push(bb.aay_comp||0);
-    if(visCols.includes('aay_pend')) bRow.push(Math.max(0,(bb.aay_cons||0)-(bb.aay_comp||0)));
-    if(visCols.includes('aay_pct'))  bRow.push(bb.aay_cons>0?+((bb.aay_comp/bb.aay_cons)*100).toFixed(1)+'%':'—');
-    if(visCols.includes('phh_cons')) bRow.push(bb.phh_cons||0);
-    if(visCols.includes('phh_done')) bRow.push(bb.phh_comp||0);
-    if(visCols.includes('phh_pend')) bRow.push(Math.max(0,(bb.phh_cons||0)-(bb.phh_comp||0)));
-    if(visCols.includes('phh_pct'))  bRow.push(bb.phh_cons>0?+((bb.phh_comp/bb.phh_cons)*100).toFixed(1)+'%':'—');
-    if(visCols.includes('nph_cons')) bRow.push(bb.nph_cons||0);
-    if(visCols.includes('nph_done')) bRow.push(bb.nph_comp||0);
-    if(visCols.includes('nph_pend')) bRow.push(Math.max(0,(bb.nph_cons||0)-(bb.nph_comp||0)));
-    if(visCols.includes('nph_pct'))  bRow.push(bb.nph_cons>0?+((bb.nph_comp/bb.nph_cons)*100).toFixed(1)+'%':'—');
-    if(visCols.includes('tot_cons')) bRow.push(bb.total_cons||0);
-    if(visCols.includes('tot_done')) bRow.push(bb.total_comp||0);
-    if(visCols.includes('tot_pend')) bRow.push(Math.max(0,(bb.total_cons||0)-(bb.total_comp||0)));
-    if(hasComp && visCols.includes('old_pct')) bRow.push('');
-    if(visCols.includes('tot_pct'))  bRow.push(bb.pct>0?+(bb.pct*100).toFixed(1)+'%':'—');
-    if(hasComp && visCols.includes('added')) bRow.push('');
-    // Selected total for block
-    if(visCols.includes('sel_cons')||visCols.includes('sel_done')||visCols.includes('sel_pend')||visCols.includes('sel_pct')){
-      let sc=0,sd=0; const cfg2=getEkycSelTotalConfig();
-      if(cfg2.aay){sc+=(bb.aay_cons||0);sd+=(bb.aay_comp||0);} if(cfg2.phh){sc+=(bb.phh_cons||0);sd+=(bb.phh_comp||0);} if(cfg2.nph){sc+=(bb.nph_cons||0);sd+=(bb.nph_comp||0);}
-      if(visCols.includes('sel_cons')) bRow.push(sc);
-      if(visCols.includes('sel_done')) bRow.push(sd);
-      if(visCols.includes('sel_pend')) bRow.push(Math.max(0,sc-sd));
-      if(visCols.includes('sel_pct'))  bRow.push(sc>0?+(sd/sc*100).toFixed(1)+'%':'—');
-    }
-    data.push(bRow);
-
-    sortShopsWithinBlock(blockRows).forEach(r=>xlShopRow(r, ''));
+    const bb=ekyc.blocks.find(b=>b.block===blockName)||{};
+    // Block summary — compute aggregates from filtered rows
+    const brows=blockGroups[blockName];
+    const bAgg={total_cons:brows.reduce((s,r)=>s+(r.total_cons||0),0),total_comp:brows.reduce((s,r)=>s+(r.total_comp||0),0),aay_cons:brows.reduce((s,r)=>s+(r.aay_cons||0),0),aay_comp:brows.reduce((s,r)=>s+(r.aay_comp||0),0),phh_cons:brows.reduce((s,r)=>s+(r.phh_cons||0),0),phh_comp:brows.reduce((s,r)=>s+(r.phh_comp||0),0),nph_cons:brows.reduce((s,r)=>s+(r.nph_cons||0),0),nph_comp:brows.reduce((s,r)=>s+(r.nph_comp||0),0),shopcode:null,shop_name:null};
+    bAgg.total_pct=bAgg.total_cons>0?bAgg.total_comp/bAgg.total_cons:0;
+    data.push(buildRow(bAgg, si++, true, blockName));
+    sortShopsWithinBlock(brows).forEach(r=>{ data.push(buildRow(r, si++, false, repeatBlock?r.block:''));});
   });
-  } // end else (grouped mode)
 
-  // Totals row
-  const totCons=rows.reduce((s,r)=>s+(r.total_cons||0),0);
-  const totComp=rows.reduce((s,r)=>s+(r.total_comp||0),0);
-  const tRow=['','TOTAL','',''];
-  if(visCols.includes('aay_cons')) tRow.push(rows.reduce((s,r)=>s+(r.aay_cons||0),0));
-  if(visCols.includes('aay_done')) tRow.push(rows.reduce((s,r)=>s+(r.aay_comp||0),0));
-  if(visCols.includes('aay_pend')) tRow.push(rows.reduce((s,r)=>s+(r.aay_pend||0),0));
-  if(visCols.includes('aay_pct'))  tRow.push('');
-  if(visCols.includes('phh_cons')) tRow.push(rows.reduce((s,r)=>s+(r.phh_cons||0),0));
-  if(visCols.includes('phh_done')) tRow.push(rows.reduce((s,r)=>s+(r.phh_comp||0),0));
-  if(visCols.includes('phh_pend')) tRow.push(rows.reduce((s,r)=>s+(r.phh_pend||0),0));
-  if(visCols.includes('phh_pct'))  tRow.push('');
-  if(visCols.includes('nph_cons')) tRow.push(rows.reduce((s,r)=>s+(r.nph_cons||0),0));
-  if(visCols.includes('nph_done')) tRow.push(rows.reduce((s,r)=>s+(r.nph_comp||0),0));
-  if(visCols.includes('nph_pend')) tRow.push(rows.reduce((s,r)=>s+(r.nph_pend||0),0));
-  if(visCols.includes('nph_pct'))  tRow.push('');
-  if(visCols.includes('tot_cons')) tRow.push(totCons);
-  if(visCols.includes('tot_done')) tRow.push(totComp);
-  if(visCols.includes('tot_pend')) tRow.push(Math.max(0,totCons-totComp));
-  if(hasComp && visCols.includes('old_pct')) tRow.push('');
-  if(visCols.includes('tot_pct'))  tRow.push(totCons>0?+(totComp/totCons*100).toFixed(1)+'%':'—');
-  if(hasComp && visCols.includes('added')) tRow.push('');
-  if(visCols.includes('sel_cons')||visCols.includes('sel_done')||visCols.includes('sel_pend')||visCols.includes('sel_pct')){
-    let sc=0,sd=0; const cfg4=getEkycSelTotalConfig();
-    rows.forEach(r=>{ if(cfg4.aay){sc+=r.aay_cons;sd+=r.aay_comp;} if(cfg4.phh){sc+=r.phh_cons;sd+=r.phh_comp;} if(cfg4.nph){sc+=r.nph_cons;sd+=r.nph_comp;} });
-    if(visCols.includes('sel_cons')) tRow.push(sc);
-    if(visCols.includes('sel_done')) tRow.push(sd);
-    if(visCols.includes('sel_pend')) tRow.push(Math.max(0,sc-sd));
-    if(visCols.includes('sel_pct'))  tRow.push(sc>0?+(sd/sc*100).toFixed(1)+'%':'—');
-  }
-  data.push(tRow);
-
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet(data);
-  ws['!cols'] = headers.map((_,i)=>({wch: i<4 ? [5,20,14,30][i] : 10}));
-  XLSX.utils.book_append_sheet(wb, ws, 'Shop-wise');
-  const fname = `ekyc_shopwise_${blockFilter||'AllBlocks'}_${(ekyc.date||'').replace(/\./g,'')}.xlsx`;
-  XLSX.writeFile(wb, fname);
-  toast('Shop-wise Excel downloaded: '+fname);
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet(data);
+  ws['!cols']=headers.map((_,i)=>({wch:i===0?5:i===1?20:i===2?14:i===3?30:10}));
+  XLSX.utils.book_append_sheet(wb,ws,'Shop-wise');
+  const fname=`ekyc_shopwise_${(blockFilter||'AllBlocks').replace(/\s/g,'_')}_${(ekyc.date||'').replace(/\./g,'')}.xlsx`;
+  XLSX.writeFile(wb,fname);
+  toast('Excel downloaded: '+fname);
 }
 
 
