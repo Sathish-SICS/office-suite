@@ -61,7 +61,8 @@ header .badge{font-size:12px;background:var(--accent);padding:4px 10px;border-ra
 .upload-box .title{font-size:13px;color:var(--muted);margin-bottom:6px}
 .upload-box .filename{font-size:14px;font-weight:600;color:var(--ink);word-break:break-all}
 .upload-box .hint{font-size:11px;color:var(--muted);margin-top:6px}
-.upload-box input{display:none}
+.upload-box input[type=file]{opacity:0;position:absolute;width:0.1px;height:0.1px;overflow:hidden;z-index:-1}
+.upload-box{position:relative}
 
 .btn{
   background:var(--accent);color:white;border:none;
@@ -722,7 +723,7 @@ document.addEventListener('keydown', e=>{
   <div class="upload-box" id="box-master" style="max-width:500px">
     <label for="file-master">
       <div class="title">🏪 Master FPS Shop List</div>
-      <div class="filename" id="name-master">Drag & drop or click to upload</div>
+      <div class="filename" id="name-master">Tap or click to upload</div>
       <div class="hint">Excel with columns: block, society, shop_code, shop_name, FT/PT</div>
     </label>
     <input type="file" id="file-master" accept=".xlsx,.xls">
@@ -850,7 +851,7 @@ document.addEventListener('keydown', e=>{
   <div class="upload-box" id="box-pdl-mis" style="max-width:500px">
     <label for="file-pdl-mis">
       <div class="title">📥 MIS Inspection Report</div>
-      <div class="filename" id="name-pdl-mis">Drag & drop or click to upload</div>
+      <div class="filename" id="name-pdl-mis">Tap or click to upload</div>
       <div class="hint">From MIS Server (.xlsx)</div>
     </label>
     <input type="file" id="file-pdl-mis" accept=".xlsx,.xls">
@@ -1100,12 +1101,12 @@ document.addEventListener('keydown', e=>{
     <div>
       <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px">📊 Current File (required)</div>
       <div class="upload-box" id="box-ekyc" style="margin:0">
-        <label for="file-ekyc">
+        <label for="file-ekyc" style="display:block;cursor:pointer;width:100%;height:100%">
           <div class="title">TNPDS State e-KYC Excel</div>
-          <div class="filename" id="name-ekyc">Click or drag to upload</div>
+          <div class="filename" id="name-ekyc">Tap or click to upload</div>
           <div class="hint">File with "Shop Wise" tab — all districts</div>
         </label>
-        <input type="file" id="file-ekyc" accept=".xlsx,.xls">
+        <input type="file" id="file-ekyc" accept=".xlsx,.xls,.xlsx" style="opacity:0;position:absolute;width:0.1px;height:0.1px;overflow:hidden">
       </div>
       <div id="ekyc-load-status" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
     </div>
@@ -1113,12 +1114,12 @@ document.addEventListener('keydown', e=>{
     <div>
       <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px">📊 Older File for Comparison <span style="font-weight:400;color:#64748b">(optional)</span></div>
       <div class="upload-box" id="box-ekyc-old" style="margin:0;border-color:rgba(245,158,11,.4)">
-        <label for="file-ekyc-old">
+        <label for="file-ekyc-old" style="display:block;cursor:pointer;width:100%;height:100%">
           <div class="title" style="color:#fcd34d">Older e-KYC Excel</div>
-          <div class="filename" id="name-ekyc-old">Click or drag to upload</div>
+          <div class="filename" id="name-ekyc-old">Tap or click to upload</div>
           <div class="hint">Previous file for progress comparison</div>
         </label>
-        <input type="file" id="file-ekyc-old" accept=".xlsx,.xls">
+        <input type="file" id="file-ekyc-old" accept=".xlsx,.xls" style="opacity:0;position:absolute;width:0.1px;height:0.1px;overflow:hidden">
       </div>
       <div id="ekyc-old-status" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
     </div>
@@ -1131,7 +1132,7 @@ document.addEventListener('keydown', e=>{
       <label for="file-ekyc-map" style="cursor:pointer">
         <span style="font-size:11px;color:var(--muted)">Click to override with custom mapping file</span>
       </label>
-      <input type="file" id="file-ekyc-map" accept=".xlsx,.xls">
+      <input type="file" id="file-ekyc-map" accept=".xlsx,.xls" style="opacity:0;position:absolute;width:0.1px;height:0.1px;overflow:hidden">
     </div>
   </div>
   <div class="action-bar" id="ekyc-action-bar" style="display:none">
@@ -1408,7 +1409,7 @@ document.addEventListener('keydown', e=>{
     Re-upload any time to replace with updated data.
   </div>
   <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-    <input type="file" id="pdl-basic-file" accept=".xlsx,.xls" style="display:none" onchange="pdlUploadBasicData(this)">
+    <input type="file" id="pdl-basic-file" accept=".xlsx,.xls" style="opacity:0;position:absolute;width:0.1px;height:0.1px;overflow:hidden" onchange="pdlUploadBasicData(this)">
     <div id="pdl-basic-box" onclick="document.getElementById('pdl-basic-file').click()"
       style="flex:1;min-width:240px;background:rgba(15,23,42,.5);border:2px dashed rgba(99,102,241,.4);border-radius:10px;padding:16px 20px;cursor:pointer;transition:border-color .2s;text-align:center"
       onmouseover="this.style.borderColor='rgba(99,102,241,.8)'" onmouseout="this.style.borderColor='rgba(99,102,241,.4)'">
@@ -1429,8 +1430,8 @@ document.addEventListener('keydown', e=>{
     From MIS Portal → copy-paste the card count summary into Excel with two sheets: <b style="color:#6ee7b7">Card Type Overview</b> and <b style="color:#6ee7b7">NFSA Details</b>. Re-upload anytime to update.
   </div>
   <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-    <input type="file" id="pdl-cards-file" accept=".xlsx,.xls" style="display:none" onchange="pdlUploadCards(this)">
-    <div onclick="document.getElementById('pdl-cards-file').click()"
+    <input type="file" id="pdl-cards-file" accept=".xlsx,.xls" style="opacity:0;position:absolute;width:0.1px;height:0.1px;overflow:hidden" onchange="pdlUploadCards(this)">
+    <label for="pdl-cards-file"
       style="flex:1;min-width:240px;background:rgba(15,23,42,.5);border:2px dashed rgba(52,211,153,.3);border-radius:10px;padding:16px 20px;cursor:pointer;transition:border-color .2s;text-align:center"
       onmouseover="this.style.borderColor='rgba(52,211,153,.7)'" onmouseout="this.style.borderColor='rgba(52,211,153,.3)'">
       <div id="pdl-cards-name" style="font-size:13px;color:var(--muted)">📁 Click to upload Cards Excel</div>
@@ -1451,10 +1452,10 @@ document.addEventListener('keydown', e=>{
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px" id="pdl-offtake-grid">
   </div>
   <div style="margin-top:10px">
-    <input type="file" id="pdl-offtake-file" accept=".xlsx,.xls" style="display:none" multiple onchange="pdlUploadOfftakeMultiple(this)">
-    <button class="btn" onclick="document.getElementById('pdl-offtake-file').click()" style="font-size:12px;padding:8px 18px">
+    <input type="file" id="pdl-offtake-file" accept=".xlsx,.xls" style="opacity:0;position:absolute;width:0.1px;height:0.1px;overflow:hidden" multiple onchange="pdlUploadOfftakeMultiple(this)">
+    <label for="pdl-offtake-file" class="btn" style="font-size:12px;padding:8px 18px;cursor:pointer;display:inline-flex;align-items:center;gap:4px">
       📂 Upload Offtake File(s)
-    </button>
+    </label>
     <span style="font-size:11px;color:var(--muted);margin-left:10px">Select one or multiple files — a commodity assignment dialog will appear</span>
   </div>
 </div>
@@ -6780,45 +6781,45 @@ async function copyEkycTableImg(wrapId){
 }
 
 function ekycSetup(){
-  // Current file
-  const box = document.getElementById('box-ekyc');
+  // Mobile-safe: labels with for= handle click natively. Don't add box.click() listeners.
   const file = document.getElementById('file-ekyc');
-  if(!box||!file) return;
-  box.addEventListener('click', ()=>file.click());
-  box.addEventListener('dragover', e=>{e.preventDefault();box.style.borderColor='#3b82f6'});
-  box.addEventListener('dragleave', ()=>box.style.borderColor='var(--border)');
-  box.addEventListener('drop', e=>{e.preventDefault();box.style.borderColor='var(--border)';if(e.dataTransfer.files[0])handleEkycFile(e.dataTransfer.files[0],'current');});
-  file.addEventListener('change', e=>{if(e.target.files[0])handleEkycFile(e.target.files[0],'current');});
-  // Old file
-  const boxO = document.getElementById('box-ekyc-old');
   const fileO = document.getElementById('file-ekyc-old');
-  boxO.addEventListener('click', ()=>fileO.click());
-  boxO.addEventListener('dragover', e=>{e.preventDefault();boxO.style.borderColor='#f59e0b'});
-  boxO.addEventListener('dragleave', ()=>boxO.style.borderColor='rgba(245,158,11,.4)');
-  boxO.addEventListener('drop', e=>{e.preventDefault();boxO.style.borderColor='rgba(245,158,11,.4)';if(e.dataTransfer.files[0])handleEkycFile(e.dataTransfer.files[0],'old');});
-  fileO.addEventListener('change', e=>{if(e.target.files[0])handleEkycFile(e.target.files[0],'old');});
-  // Custom map
+  const box = document.getElementById('box-ekyc');
+  const boxO = document.getElementById('box-ekyc-old');
+  if(!file||!box) return;
+  // Desktop drag-drop only
+  if(!('ontouchstart' in window)){
+    box.addEventListener('dragover',e=>{e.preventDefault();box.style.borderColor='#3b82f6';});
+    box.addEventListener('dragleave',()=>box.style.borderColor='var(--border)');
+    box.addEventListener('drop',e=>{e.preventDefault();box.style.borderColor='var(--border)';if(e.dataTransfer.files[0])handleEkycFile(e.dataTransfer.files[0],'current');});
+    boxO.addEventListener('dragover',e=>{e.preventDefault();boxO.style.borderColor='#f59e0b';});
+    boxO.addEventListener('dragleave',()=>boxO.style.borderColor='rgba(245,158,11,.4)');
+    boxO.addEventListener('drop',e=>{e.preventDefault();boxO.style.borderColor='rgba(245,158,11,.4)';if(e.dataTransfer.files[0])handleEkycFile(e.dataTransfer.files[0],'old');});
+  }
+  file.addEventListener('change', e=>{if(e.target.files[0])handleEkycFile(e.target.files[0],'current');e.target.value='';});
+  fileO.addEventListener('change', e=>{if(e.target.files[0])handleEkycFile(e.target.files[0],'old');e.target.value='';});
   const fileM = document.getElementById('file-ekyc-map');
   fileM.addEventListener('change', async e=>{
     if(!e.target.files[0]) return;
-    const buf = await e.target.files[0].arrayBuffer();
-    const wb2 = XLSX.read(buf,{type:'array'});
-    const ws = wb2.Sheets[wb2.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(ws);
-    ekyc.customShopMap = {};
-    rows.forEach(r=>{
-      const code = String(r.Shop_Code||r.shop_code||r['Shop Code']||r.Shopcode||'').trim();
-      const block = String(r.Block||r.block||'').trim();
-      if(code&&block) ekyc.customShopMap[code]=block;
-    });
-    document.getElementById('ekyc-map-status').textContent = `✓ Custom map loaded (${Object.keys(ekyc.customShopMap).length} entries)`;
-    document.getElementById('ekyc-map-status').style.color='#fcd34d';
-    toast('Custom shop map loaded');
+    try{
+      const wb2 = await readExcel(e.target.files[0]);
+      const ws = wb2.Sheets[wb2.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws);
+      ekyc.customShopMap = {};
+      rows.forEach(r=>{
+        const code = String(r.Shop_Code||r.shop_code||r['Shop Code']||r.Shopcode||'').trim();
+        const block = String(r.Block||r.block||'').trim();
+        if(code&&block) ekyc.customShopMap[code]=block;
+      });
+      document.getElementById('ekyc-map-status').textContent=`✓ Custom map loaded (${Object.keys(ekyc.customShopMap).length} entries)`;
+      document.getElementById('ekyc-map-status').style.color='#fcd34d';
+      toast('Custom shop map loaded');
+    }catch(err){ toast('Map load failed: '+err.message,true); }
+    e.target.value='';
   });
   document.getElementById('btn-ekyc-generate').addEventListener('click', generateEkycReport);
   document.getElementById('btn-ekyc-reset').addEventListener('click', resetEkyc);
 }
-
 function resetEkyc(){
   ekyc.data=null; ekyc.oldData=null; ekyc.date=''; ekyc.oldDate=''; ekyc.filter={active:false};
   ['name-ekyc','name-ekyc-old'].forEach(id=>document.getElementById(id).textContent='Click or drag to upload');
@@ -6835,8 +6836,7 @@ async function handleEkycFile(file, which){
   nameEl.textContent = file.name;
   statEl.textContent = '⏳ Reading...';
   try{
-    const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf,{type:'array'});
+    const wb = await readExcel(file); // uses FileReader (mobile-compatible)
     const shopSheet = wb.SheetNames.find(s=>s.toLowerCase().includes('shop')&&s.toLowerCase().includes('wise'));
     if(!shopSheet) throw new Error('"Shop Wise" sheet not found. Sheets: '+wb.SheetNames.join(', '));
     const ws = wb.Sheets[shopSheet];
@@ -9430,8 +9430,8 @@ const PDL_FORM_RENDERERS = {
       <div class="pdl-source-box">
         <span class="pdl-source-label">📥 MIS Source</span>
         <span style="font-size:11px;color:var(--muted);flex:1">Upload Form 1 Excel OR offtake files in Step 3. 🔵 = uploaded. ⚪ = default.</span>
-        <input type="file" id="pdl-f1-file" accept=".xlsx,.xls" style="display:none" onchange="pdlUploadForm1(this)">
-        <button class="btn-tiny" onclick="document.getElementById('pdl-f1-file').click()" style="background:rgba(99,102,241,.15);border-color:rgba(99,102,241,.4);color:#a5b4fc">📂 Upload Form 1 Excel</button>
+        <input type="file" id="pdl-f1-file" accept=".xlsx,.xls" style="opacity:0;position:absolute;width:0.1px;height:0.1px;overflow:hidden" onchange="pdlUploadForm1(this)">
+        <label for="pdl-f1-file" class="btn-tiny" style="background:rgba(99,102,241,.15);border-color:rgba(99,102,241,.4);color:#a5b4fc;cursor:pointer;display:inline-flex;align-items:center;gap:4px">📂 Upload Form 1 Excel</label>
         <button class="btn-tiny" onclick="pdlExportForm1()" style="background:rgba(52,211,153,.15);border-color:rgba(52,211,153,.4);color:#6ee7b7">📥 Download Form 1</button>
       </div>
       ${!pdlSheet.basicLoaded ? '<div style="background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);border-radius:6px;padding:8px 12px;font-size:11px;color:#fcd34d;margin-bottom:10px">⚠ Upload Basic Data (Step 1) to get correct FPS count</div>' : ''}
