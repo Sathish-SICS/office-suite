@@ -1436,7 +1436,7 @@ document.addEventListener('keydown', e=>{
       onmouseover="this.style.borderColor='rgba(52,211,153,.7)'" onmouseout="this.style.borderColor='rgba(52,211,153,.3)'">
       <div id="pdl-cards-name" style="font-size:13px;color:var(--muted)">📁 Click to upload Cards Excel</div>
       <div id="pdl-cards-status" style="font-size:11px;color:#6ee7b7;margin-top:4px"></div>
-    </div>
+    </label>
     <div id="pdl-cards-summary" style="display:none;background:rgba(52,211,153,.06);border:1px solid rgba(52,211,153,.2);border-radius:8px;padding:12px 16px;font-size:12px;line-height:1.8"></div>
   </div>
 </div>
@@ -6041,6 +6041,7 @@ const BUILT_IN_SHOP_BLOCK = {
 "05FB005PN":"Cheyyar",
 "05FB006PN":"Cheyyar",
 "05FB007PN":"Cheyyar",
+"05FB008PN":"Cheyyar",
 "05FC001PN":"Cheyyar",
 "05FC002PN":"Cheyyar",
 "05FP001PN":"Cheyyar",
@@ -6318,6 +6319,7 @@ const BUILT_IN_SHOP_BLOCK = {
 "05HO003P1":"Jamunamarathur",
 "05HO003PY":"Jamunamarathur",
 "05HO007PN":"Jamunamarathur",
+"05HO008PN":"Jamunamarathur",
 "05HP061P1":"Kalasapakkam",
 "05HP061PY":"Kalasapakkam",
 "05HP062PN":"Kalasapakkam",
@@ -6953,8 +6955,27 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
   const oc=pctGradient(overallPct);
   let html=`<div class="panel">
     <h2><span class="dot"></span> 🔑 e-KYC — திருவண்ணாமலை மாவட்டம் <span style="margin-left:auto;font-size:12px;color:var(--muted);font-weight:400">As on ${d}${hasComp?' | Compare with '+od:''}</span></h2>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
-      ${[['Considered',fmtN(totalCons),'#93c5fd'],['Completed',fmtN(totalComp),'#6ee7b7'],['Pending',fmtN(totalPend),'#fca5a5'],['% Done',fmtPct(overallPct),oc.solid]].map(([l,v,c])=>`<div style="background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center"><div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;margin-bottom:4px">${l}</div><div style="font-size:20px;font-weight:700;color:${c}">${v}</div></div>`).join('')}
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:6px">
+      <div style="background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
+        <div id="ekyc-stat-cat" style="font-size:10px;color:var(--muted);font-weight:600;margin-bottom:2px">ALL</div>
+        <div style="font-size:10px;color:var(--muted);margin-bottom:3px">Considered</div>
+        <div id="ekyc-stat-cons" style="font-size:20px;font-weight:700;color:#93c5fd">${fmtN(totalCons)}</div>
+      </div>
+      <div style="background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
+        <div style="font-size:10px;color:var(--muted);font-weight:600;margin-bottom:2px">&nbsp;</div>
+        <div style="font-size:10px;color:var(--muted);margin-bottom:3px">Completed</div>
+        <div id="ekyc-stat-comp" style="font-size:20px;font-weight:700;color:#6ee7b7">${fmtN(totalComp)}</div>
+      </div>
+      <div style="background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
+        <div style="font-size:10px;color:var(--muted);font-weight:600;margin-bottom:2px">&nbsp;</div>
+        <div style="font-size:10px;color:var(--muted);margin-bottom:3px">Pending</div>
+        <div id="ekyc-stat-pend" style="font-size:20px;font-weight:700;color:#fca5a5">${fmtN(totalPend)}</div>
+      </div>
+      <div style="background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
+        <div style="font-size:10px;color:var(--muted);font-weight:600;margin-bottom:2px">&nbsp;</div>
+        <div style="font-size:10px;color:var(--muted);margin-bottom:3px">% Done</div>
+        <div id="ekyc-stat-pct" style="font-size:20px;font-weight:700;color:${oc.solid}">${fmtPct(overallPct)}</div>
+      </div>
     </div>
     <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
       ${catDefs.map(c=>`<button class="btn-tiny ekyc-cat-btn" id="ekyc-tab-${c.k}" onclick="switchEkycTab('${c.k}')">${c.label}</button>`).join('')}
@@ -7059,6 +7080,26 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
             ${hasComp?`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-bottom:2px"><input type="checkbox" checked onchange="ekycToggleCol('${cat.k}','old_pct',this.checked)"> Old %</label>`:''}
             ${hasComp?`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-bottom:2px"><input type="checkbox" checked onchange="ekycToggleCol('${cat.k}','added',this.checked)"> Added</label>`:''}
           </div>
+          ${cat.k==='all'?`
+          <div style="border-left:1px solid var(--border);padding-left:12px;min-width:180px">
+            <div style="font-size:10px;color:#fcd34d;margin-bottom:6px;font-weight:700">⊕ Selected Total</div>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-bottom:8px;font-size:12px">
+              <input type="checkbox" id="blk-sel-active" ${ekycBST('active')} onchange="ekycBlkSelToggle('active',this.checked)"> <b>Show ⊕ Column</b>
+            </label>
+            <div style="font-size:10px;color:var(--muted);margin-bottom:4px;font-weight:600">Categories to sum:</div>
+            <div style="margin-bottom:4px"><label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;font-weight:600"><input type="checkbox" id="blk-sel-aay" ${ekycBST('aay')} onchange="ekycBlkSelToggle('aay',this.checked)"> AAY</label></div>
+            <div style="margin-bottom:4px"><label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;font-weight:600"><input type="checkbox" id="blk-sel-phh" ${ekycBST('phh')} onchange="ekycBlkSelToggle('phh',this.checked)"> PHH</label></div>
+            <div style="margin-bottom:8px"><label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;font-weight:600"><input type="checkbox" id="blk-sel-nph" ${ekycBST('nph')} onchange="ekycBlkSelToggle('nph',this.checked)"> NPHH</label></div>
+            <div style="font-size:10px;color:var(--muted);margin-bottom:4px;font-weight:600">Sub-columns:</div>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;margin-bottom:2px;font-weight:600">
+              <input type="checkbox" id="blk-sel-allsub" ${(()=>{const s=ekyc.blkSelTotal||{};return (s.cons!==false&&s.done!==false&&s.pend!==false&&s.pct!==false)?'checked':'';})()}
+                onchange="ekycBlkSelToggleAllSub(this.checked)"> All
+            </label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;margin-bottom:2px;padding-left:16px"><input type="checkbox" id="blk-sel-cons" ${ekycBST('cons')} onchange="ekycBlkSelToggle('cons',this.checked)"> Cons</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;margin-bottom:2px;padding-left:16px"><input type="checkbox" id="blk-sel-done" ${ekycBST('done')} onchange="ekycBlkSelToggle('done',this.checked)"> Done</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;margin-bottom:2px;padding-left:16px"><input type="checkbox" id="blk-sel-pend" ${ekycBST('pend')} onchange="ekycBlkSelToggle('pend',this.checked)"> Pend</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;padding-left:16px"><input type="checkbox" id="blk-sel-pct" ${ekycBST('pct')} onchange="ekycBlkSelToggle('pct',this.checked)"> %</label>
+          </div>`:``}
         </div>
       </div>      </div>
       <div style="overflow-x:auto;background:white;border-radius:8px;border:1px solid #cbd5e1;color:#1e293b;margin-bottom:14px" id="ekyc-block-tbl-${cat.k}-wrap">
@@ -7075,7 +7116,8 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
               <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center" class="ekyc-col-${cat.k}-tot_done">Completed</th>
               <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','pend')" class="ekyc-col-${cat.k}-tot_pend">Pending ${ekyc[catSortKey].col==='pend'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th>
               ${hasComp?`<th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#7c3aed;min-width:80px;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','pct_old')" class="ekyc-col-${cat.k}-old_pct">${od} % ${ekyc[catSortKey].col==='pct_old'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th>`:''}              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;min-width:80px;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','pct')" class="ekyc-col-${cat.k}-tot_pct">${d} % ${ekyc[catSortKey].col==='pct'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th>
-              ${hasComp?`<th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#065f46;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','added')" class="ekyc-col-${cat.k}-added">Added ${ekyc[catSortKey].col==='added'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th>`:''}            </tr>
+              ${hasComp?`<th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#065f46;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','added')" class="ekyc-col-${cat.k}-added">Added ${ekyc[catSortKey].col==='added'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th>`:''}
+              ${cat.k==='all'?ekycBlkSelMainHeader():''}            </tr>
             ${cat.k==='all'?`<tr style="background:#3b82f6;color:white">
               <th colspan="2" style="padding:4px;border:1px solid #1e40af"></th>
               <th style="padding:4px;border:1px solid #1e40af;font-size:10px;text-align:center" class="ekyc-col-${cat.k}-aay_cons">Cons</th>
@@ -7091,6 +7133,7 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
               <th style="padding:4px;border:1px solid #1e40af;font-size:10px;text-align:center" class="ekyc-col-${cat.k}-nph_pend">Pend</th>
               <th style="padding:4px;border:1px solid #1e40af;font-size:10px;text-align:center;background:#7c3aed" class="ekyc-col-${cat.k}-nph_pct">%</th>
               <th colspan="${4+(hasComp?2:0)}" style="padding:4px;border:1px solid #1e40af"></th>
+              ${cat.k==='all'?ekycBlkSelSubHeaders():''}
             </tr>`:''}          </thead>
           <tbody>
             ${sortedB.map((b,i)=>{
@@ -7116,22 +7159,32 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
               <td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center;color:#dc2626" class="ekyc-col-${cat.k}-nph_pend">${fmtN(b.nph_cons-b.nph_comp)}</td>
               <td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center;font-weight:600;background:${b.nph_cons>0&&b.nph_comp/b.nph_cons>=0.9?'#d1fae5':b.nph_cons>0&&b.nph_comp/b.nph_cons>=0.8?'#fef3c7':'#fee2e2'}" class="ekyc-col-${cat.k}-nph_pct">${b.nph_cons>0?fmtPct(b.nph_comp/b.nph_cons):'—'}</td>
               `:''}
-                <td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;font<td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;font-weight:600" class="ekyc-col-${cat.k}-tot_cons">${fmtN(cons)}</td>
+                <td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;font-weight:600" class="ekyc-col-${cat.k}-tot_cons">${fmtN(cons)}</td>
                 <td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;font-weight:600" class="ekyc-col-${cat.k}-tot_done">${fmtN(comp)}</td>
                 <td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;color:#dc2626;font-weight:600" class="ekyc-col-${cat.k}-tot_pend">${fmtN(pend)}</td>
                 ${hasComp?pctCell(oldPct,'','ekyc-col-'+cat.k+'-old_pct'):''}
                 ${pctCell(pct,'','ekyc-col-'+cat.k+'-tot_pct')}
-                ${hasComp?`<td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;font-weight:700;color:${added>0?'#059669':added<0?'#dc2626':'#64748b'}" class="ekyc-col-${cat.k}-added">${added!==null?(added>0?'+':'')+fmtN(added):'—'}</td>`:''}              </tr>`;
+                ${hasComp?`<td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;font-weight:700;color:${added>0?'#059669':added<0?'#dc2626':'#64748b'}" class="ekyc-col-${cat.k}-added">${added!==null?(added>0?'+':'')+fmtN(added):'—'}</td>`:''}
+                ${cat.k==='all'?ekycBlkSelCell(b):''}              </tr>`;
             }).join('')}
-            <tr style="background:#f1f5f9;font-weight:700">
+            <tr class="ekyc-blk-total-row" style="background:#f1f5f9;font-weight:700">
               <td colspan="2" style="padding:7px 8px;border:1px solid #94a3b8;text-align:center">TOTAL</td>
-              ${cat.k==='all'?[blocks.reduce((s,b)=>s+b.aay_cons,0),blocks.reduce((s,b)=>s+b.aay_comp,0),blocks.reduce((s,b)=>s+b.aay_cons-b.aay_comp,0),blocks.reduce((s,b)=>s+b.phh_cons,0),blocks.reduce((s,b)=>s+b.phh_comp,0),blocks.reduce((s,b)=>s+b.phh_cons-b.phh_comp,0),blocks.reduce((s,b)=>s+b.nph_cons,0),blocks.reduce((s,b)=>s+b.nph_comp,0),blocks.reduce((s,b)=>s+b.nph_cons-b.nph_comp,0)].map(v=>`<td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center">${fmtN(v)}</td>`).join(''):''}
-              <td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center">${fmtN(totCons)}</td>
-              <td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center">${fmtN(totComp)}</td>
-              <td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center">${fmtN(totPend)}</td>
-              ${hasComp&&oldBlocks?pctCell(oldBlocks.reduce((s,b)=>s+cat.compF(b),0)/Math.max(1,oldBlocks.reduce((s,b)=>s+cat.consF(b),0)),'font-size:13px'):''}
-              ${pctCell(totPct,'font-size:13px')}
-              ${hasComp&&oldBlocks?`<td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center;font-weight:700;color:#059669">+${fmtN(totComp-oldBlocks.reduce((s,b)=>s+cat.compF(b),0))}</td>`:''}
+              ${cat.k==='all'?(()=>{
+                const aaC=blocks.reduce((s,b)=>s+b.aay_cons,0),aaD=blocks.reduce((s,b)=>s+b.aay_comp,0),aaP=blocks.reduce((s,b)=>s+Math.max(0,b.aay_cons-b.aay_comp),0);
+                const phC=blocks.reduce((s,b)=>s+b.phh_cons,0),phD=blocks.reduce((s,b)=>s+b.phh_comp,0),phP=blocks.reduce((s,b)=>s+Math.max(0,b.phh_cons-b.phh_comp),0);
+                const npC=blocks.reduce((s,b)=>s+b.nph_cons,0),npD=blocks.reduce((s,b)=>s+b.nph_comp,0),npP=blocks.reduce((s,b)=>s+Math.max(0,b.nph_cons-b.nph_comp),0);
+                const aaPct=aaC>0?aaD/aaC:0,phPct=phC>0?phD/phC:0,npPct=npC>0?npD/npC:0;
+                const tdS='padding:7px 4px;border:1px solid #94a3b8;text-align:center';
+                const pctTd=(p,cls)=>`<td style="${tdS};font-weight:700;background:${p>=0.9?'#d1fae5':p>=0.8?'#fef3c7':'#fee2e2'}" class="${cls}">${fmtPct(p)}</td>`;
+                return `<td style="${tdS}" class="ekyc-col-all-aay_cons">${fmtN(aaC)}</td><td style="${tdS}" class="ekyc-col-all-aay_done">${fmtN(aaD)}</td><td style="${tdS};color:#dc2626" class="ekyc-col-all-aay_pend">${fmtN(aaP)}</td>${pctTd(aaPct,'ekyc-col-all-aay_pct')}<td style="${tdS}" class="ekyc-col-all-phh_cons">${fmtN(phC)}</td><td style="${tdS}" class="ekyc-col-all-phh_done">${fmtN(phD)}</td><td style="${tdS};color:#dc2626" class="ekyc-col-all-phh_pend">${fmtN(phP)}</td>${pctTd(phPct,'ekyc-col-all-phh_pct')}<td style="${tdS}" class="ekyc-col-all-nph_cons">${fmtN(npC)}</td><td style="${tdS}" class="ekyc-col-all-nph_done">${fmtN(npD)}</td><td style="${tdS};color:#dc2626" class="ekyc-col-all-nph_pend">${fmtN(npP)}</td>${pctTd(npPct,'ekyc-col-all-nph_pct')}`;
+              })():''}
+              <td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center" class="ekyc-col-${cat.k}-tot_cons">${fmtN(totCons)}</td>
+              <td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center" class="ekyc-col-${cat.k}-tot_done">${fmtN(totComp)}</td>
+              <td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center" class="ekyc-col-${cat.k}-tot_pend">${fmtN(totPend)}</td>
+              ${hasComp&&oldBlocks?(()=>{const op=oldBlocks.reduce((s,b)=>s+cat.compF(b),0)/Math.max(1,oldBlocks.reduce((s,b)=>s+cat.consF(b),0));return `<td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center;font-weight:700;background:${op>=0.9?'#d1fae5':op>=0.8?'#fef3c7':'#fee2e2'};font-size:13px" class="ekyc-col-${cat.k}-old_pct">${fmtPct(op)}</td>`;})():''}
+              <td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center;font-weight:700;background:${totPct>=0.9?'#d1fae5':totPct>=0.8?'#fef3c7':'#fee2e2'};font-size:13px" class="ekyc-col-${cat.k}-tot_pct">${fmtPct(totPct)}</td>
+              ${hasComp&&oldBlocks?`<td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center;font-weight:700;color:#059669" class="ekyc-col-${cat.k}-added">+${fmtN(totComp-oldBlocks.reduce((s,b)=>s+cat.compF(b),0))}</td>`:''}
+              ${cat.k==='all'?ekycBlkSelCell(null,sortedB):''}
             </tr>
           </tbody>
         </table>
@@ -7269,8 +7322,7 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
             ${sortTh('pend','Pending','min-width:60px;'+' class="shp-col-tot_pend"')}
             ${hasComp?sortTh('pct_old',od+' %','background:#7c3aed;min-width:65px; class="shp-col-old_pct"'):''}
             ${sortTh('pct',hasComp?d+' %':'%','min-width:65px; class="shp-col-tot_pct"')}
-            ${hasComp?sortTh('added','Added','background:#065f46; class="shp-col-added"'):''}
-            <!-- Selected Total headers - injected by JS -->
+            <!-- Selected Total headers + Added column - injected by JS at end -->
           </tr>
           <tr style="background:#3b82f6;color:white">
             <th colspan="4" style="padding:3px;border:1px solid #1e40af"></th>
@@ -7280,8 +7332,8 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
               `<th style="padding:3px;border:1px solid #1e40af;font-size:9px;text-align:center" class="shp-col-${cat}_pend">Pend</th>`,
               `<th style="padding:3px;border:1px solid #1e40af;font-size:9px;text-align:center;background:rgba(0,0,0,.2)" class="shp-col-${cat}_pct">%</th>`,
             ].join('')).join('')}
-            <th colspan="${4+(hasComp?2:0)}" style="padding:3px;border:1px solid #1e40af"></th>
-            <!-- Selected Total sub-headers - injected by JS -->
+            <th colspan="${4+(hasComp?1:0)}" style="padding:3px;border:1px solid #1e40af"></th>
+            <!-- Selected Total sub-headers + Added sub-header - injected by JS -->
           </tr>
         </thead>
         <tbody id="ekyc-shop-tbody"></tbody>
@@ -7328,6 +7380,235 @@ function switchEkycTab(tab){
   if(copyBtn) copyBtn.title=`📸 Copy ${tabName}`;
   if(xlBtn)   xlBtn.title=`📥 Excel ${tabName}`;
   if(prBtn)   prBtn.title=`🖨️ Print ${tabName}`;
+  // Update district summary boxes to reflect selected category
+  if(ekyc.blocks){
+    const catMap={
+      all:{label:'ALL',consF:b=>b.total_cons,compF:b=>b.total_comp,pendF:b=>Math.max(0,b.total_cons-b.total_comp)},
+      aay:{label:'AAY',consF:b=>b.aay_cons,compF:b=>b.aay_comp,pendF:b=>Math.max(0,b.aay_cons-b.aay_comp)},
+      phh:{label:'PHH',consF:b=>b.phh_cons,compF:b=>b.phh_comp,pendF:b=>Math.max(0,b.phh_cons-b.phh_comp)},
+      nph:{label:'NPHH',consF:b=>b.nph_cons,compF:b=>b.nph_comp,pendF:b=>Math.max(0,b.nph_cons-b.nph_comp)},
+      shop:{label:'ALL',consF:b=>b.total_cons,compF:b=>b.total_comp,pendF:b=>Math.max(0,b.total_cons-b.total_comp)},
+    };
+    const cd=catMap[tab]||catMap.all;
+    const tCons=ekyc.blocks.reduce((s,b)=>s+cd.consF(b),0);
+    const tComp=ekyc.blocks.reduce((s,b)=>s+cd.compF(b),0);
+    const tPend=ekyc.blocks.reduce((s,b)=>s+cd.pendF(b),0);
+    const tPct=tCons>0?tComp/tCons:0;
+    const oc=pctGradient(tPct);
+    const ec=document.getElementById('ekyc-stat-cons'); if(ec) ec.textContent=fmtN(tCons);
+    const ep=document.getElementById('ekyc-stat-comp'); if(ep) ep.textContent=fmtN(tComp);
+    const en=document.getElementById('ekyc-stat-pend'); if(en) en.textContent=fmtN(tPend);
+    const et=document.getElementById('ekyc-stat-pct');  if(et){et.textContent=fmtPct(tPct);et.style.color=oc.solid;}
+    const el=document.getElementById('ekyc-stat-cat');  if(el) el.textContent=cd.label;
+  }
+}
+
+// ── Block Abstract Selected Total ─────────────────────────────────────────
+// State lives ONLY in ekyc.blkSelTotal — never re-read from DOM after a checkbox change.
+// The table updates in-place (no full re-render) when checkboxes change.
+
+function ekycBlkSelDefaults(){
+  return {active:false,aay:true,phh:true,nph:false,cons:true,done:true,pend:true,pct:true};
+}
+
+// Short helper: return 'checked' or '' based on current state
+function ekycBST(field){
+  const s=ekyc.blkSelTotal||ekycBlkSelDefaults();
+  if(field==='active') return s.active?'checked':'';
+  if(field==='aay')    return s.aay!==false?'checked':'';
+  if(field==='phh')    return s.phh!==false?'checked':'';
+  if(field==='nph')    return s.nph?'checked':'';
+  if(field==='cons')   return s.cons!==false?'checked':'';
+  if(field==='done')   return s.done!==false?'checked':'';
+  if(field==='pend')   return s.pend!==false?'checked':'';
+  if(field==='pct')    return s.pct!==false?'checked':'';
+  return '';
+}
+
+// Toggle a single field and update table in-place (NO full re-render)
+function ekycBlkSelToggle(field, val){
+  if(!ekyc.blkSelTotal) ekyc.blkSelTotal = ekycBlkSelDefaults();
+  ekyc.blkSelTotal[field] = val;
+  ekycBlkSelApply();
+}
+
+// Toggle all sub-cols at once
+function ekycBlkSelToggleAllSub(val){
+  if(!ekyc.blkSelTotal) ekyc.blkSelTotal = ekycBlkSelDefaults();
+  ekyc.blkSelTotal.cons = val;
+  ekyc.blkSelTotal.done = val;
+  ekyc.blkSelTotal.pend = val;
+  ekyc.blkSelTotal.pct  = val;
+  // Update individual checkboxes
+  ['cons','done','pend','pct'].forEach(f=>{
+    const el=document.getElementById('blk-sel-'+f);
+    if(el) el.checked = val;
+  });
+  ekycBlkSelApply();
+}
+
+// Apply current state to table IN PLACE — no full re-render, no page jump
+function ekycBlkSelApply(){
+  const s = ekyc.blkSelTotal || ekycBlkSelDefaults();
+  const tbl = document.getElementById('ekyc-blk-tbl-all');
+  if(!tbl || !ekyc.blocks) return;
+
+  // Rebuild thead + tbody in place
+  const oldRows=ekyc.oldData?parseEkycRows(ekyc.oldData):null;
+  const oldMap={};
+  if(ekyc.oldBlocks) ekyc.oldBlocks.forEach(b=>oldMap[b.block]=b);
+  const hasComp=!!ekyc.oldBlocks;
+  const cat={k:'all',consF:b=>b.total_cons,compF:b=>b.total_comp,pendF:b=>Math.max(0,b.total_cons-b.total_comp)};
+  const catSortKey='ekyc_blk_sort_all';
+  const sortedB=ekyc.blocks.slice()
+    .filter(b=>!ekyc.filter||!ekyc.filter.active||ekycBlockPassesFilter(cat.consF(b),cat.compF(b)))
+    .sort((a,b2)=>{
+      const sk=ekyc[catSortKey]||{col:'pct',dir:'asc'};
+      if(sk.col==='pend'){const pa=cat.pendF(a),pb=cat.pendF(b2);return sk.dir==='desc'?pb-pa:pa-pb;}
+      if(sk.col==='added'&&hasComp){
+        const oa=ekyc.oldBlocks.find(x=>x.block===a.block),ob2=ekyc.oldBlocks.find(x=>x.block===b2.block);
+        return sk.dir==='desc'?(cat.compF(b2)-(ob2?cat.compF(ob2):0))-(cat.compF(a)-(oa?cat.compF(oa):0))
+          :(cat.compF(a)-(oa?cat.compF(oa):0))-(cat.compF(b2)-(ob2?cat.compF(ob2):0));
+      }
+      const pa=cat.consF(a)>0?cat.compF(a)/cat.consF(a):0,pb=cat.consF(b2)>0?cat.compF(b2)/cat.consF(b2):0;
+      return sk.dir==='desc'?pb-pa:pa-pb;
+    });
+
+  // Rebuild thead
+  const lbl=[s.aay?'AAY':'',s.phh?'PHH':'',s.nph?'NPHH':''].filter(Boolean).join('+') || 'Sel';
+  const bgs=['#5b21b6','#4c1d95','#3b0764','#2d1b69'];
+  const subcols=[s.cons?{k:'cons',l:'Cons'}:null,s.done?{k:'done',l:'Done'}:null,s.pend?{k:'pend',l:'Pend'}:null,s.pct?{k:'pct',l:'%'}:null].filter(Boolean);
+
+  // Row 1 ⊕ headers: colspan for the group label + individual THs
+  let r1sel='', r2sel='';
+  if(s.active && subcols.length){
+    r1sel = `<th colspan="${subcols.length}" style="padding:6px 4px;border:1px solid #7c3aed;text-align:center;background:#5b21b6;color:white;font-size:11px">⊕ ${lbl}</th>`;
+    r2sel = subcols.map((sub,i)=>`<th style="padding:4px;border:1px solid #7c3aed;font-size:10px;text-align:center;background:${bgs[i%bgs.length]};color:white">${sub.l}</th>`).join('');
+  }
+
+  // Rewrite thead rows
+  const thead = tbl.querySelector('thead');
+  if(thead){
+    const rows = thead.querySelectorAll('tr');
+    // Row 1: remove old ⊕ THs, add new ones
+    rows[0] && rows[0].querySelectorAll('th.ekyc-blk-sel-th').forEach(el=>el.remove());
+    if(r1sel && rows[0]){
+      const tmp=document.createElement('tr');
+      tmp.innerHTML=r1sel;
+      Array.from(tmp.children).forEach(th=>{th.classList.add('ekyc-blk-sel-th');rows[0].appendChild(th);});
+    }
+    // Row 2: remove old ⊕ sub-THs, add new ones
+    if(rows[1]){
+      rows[1].querySelectorAll('th.ekyc-blk-sel-th').forEach(el=>el.remove());
+      if(r2sel){
+        const tmp=document.createElement('tr');
+        tmp.innerHTML=r2sel;
+        Array.from(tmp.children).forEach(th=>{th.classList.add('ekyc-blk-sel-th');rows[1].appendChild(th);});
+      }
+    }
+  }
+
+  // Rewrite tbody data TDs
+  const tbody = tbl.querySelector('tbody');
+  if(tbody){
+    const trs = tbody.querySelectorAll('tr');
+    trs.forEach((tr,i)=>{
+      tr.querySelectorAll('td.ekyc-blk-sel-td').forEach(el=>el.remove());
+      if(!s.active || !subcols.length) return;
+      const b = sortedB[i];
+      if(!b) return;
+      let sc=0,sd=0;
+      if(s.aay){sc+=b.aay_cons||0;sd+=b.aay_comp||0;}
+      if(s.phh){sc+=b.phh_cons||0;sd+=b.phh_comp||0;}
+      if(s.nph){sc+=b.nph_cons||0;sd+=b.nph_comp||0;}
+      const sp=Math.max(0,sc-sd),spct=sc>0?sd/sc:0;
+      const cbg=spct>=0.9?'#d1fae5':spct>=0.8?'#fef3c7':'#fee2e2';
+      const mkTd=(v,extra='')=>{const td=document.createElement('td');td.className='ekyc-blk-sel-td';td.style.cssText=`padding:6px 4px;border:1px solid #c4b5fd;text-align:center;background:rgba(91,33,182,.05);${extra}`;td.textContent=v;return td;};
+      if(s.cons){const td=mkTd(fmtN(sc));tr.appendChild(td);}
+      if(s.done){const td=mkTd(fmtN(sd),'color:#059669');tr.appendChild(td);}
+      if(s.pend){const td=mkTd(fmtN(sp),'color:#dc2626;font-weight:700');tr.appendChild(td);}
+      if(s.pct) {const td=mkTd(fmtPct(spct),`background:${cbg};color:#1e293b;font-weight:700`);tr.appendChild(td);}
+    });
+  }
+
+  // Rewrite TOTAL row ⊕ TDs (tfoot)
+  const tfoot = tbl.querySelector('tfoot') || tbl.querySelector('tbody tr:last-child');
+  const totRow = tbl.querySelector('tr.ekyc-blk-total-row');
+  if(totRow){
+    totRow.querySelectorAll('td.ekyc-blk-sel-td').forEach(el=>el.remove());
+    if(s.active && subcols.length){
+      let sc=0,sd=0;
+      sortedB.forEach(b=>{
+        if(s.aay){sc+=b.aay_cons||0;sd+=b.aay_comp||0;}
+        if(s.phh){sc+=b.phh_cons||0;sd+=b.phh_comp||0;}
+        if(s.nph){sc+=b.nph_cons||0;sd+=b.nph_comp||0;}
+      });
+      const sp=Math.max(0,sc-sd),spct=sc>0?sd/sc:0;
+      const cbg=spct>=0.9?'#d1fae5':spct>=0.8?'#fef3c7':'#fee2e2';
+      const mkTot=(v,extra='')=>{const td=document.createElement('td');td.className='ekyc-blk-sel-td';td.style.cssText=`padding:7px 4px;border:1px solid #7c3aed;text-align:center;background:rgba(91,33,182,.12);font-weight:700;${extra}`;td.textContent=v;return td;};
+      if(s.cons) totRow.appendChild(mkTot(fmtN(sc)));
+      if(s.done) totRow.appendChild(mkTot(fmtN(sd),'color:#059669'));
+      if(s.pend) totRow.appendChild(mkTot(fmtN(sp),'color:#dc2626'));
+      if(s.pct)  totRow.appendChild(mkTot(fmtPct(spct),`background:${cbg};color:#1e293b`));
+    }
+  }
+}
+
+// Legacy: called by sort/filter paths — just re-apply to existing table
+function ekycBlkSelSave(){
+  ekycBlkSelApply();
+}
+
+// Returns ⊕ column group label
+function ekycBlkSelLabel(){
+  const s=ekyc.blkSelTotal||ekycBlkSelDefaults();
+  return [s.aay?'AAY':'',s.phh?'PHH':'',s.nph?'NPHH':''].filter(Boolean).join('+') || '⊕ Sel';
+}
+
+// Used only in the initial renderEkycResults pass to inject static ⊕ THs
+// (the dynamic update path is ekycBlkSelApply)
+function ekycBlkSelMainHeader(){
+  const s=ekyc.blkSelTotal||ekycBlkSelDefaults();
+  if(!s.active) return '';
+  const lbl=ekycBlkSelLabel();
+  const subcols=[s.cons?'Cons':null,s.done?'Done':null,s.pend?'Pend':null,s.pct?'%':null].filter(Boolean);
+  if(!subcols.length) return '';
+  return `<th colspan="${subcols.length}" style="padding:6px 4px;border:1px solid #7c3aed;text-align:center;background:#5b21b6;color:white;font-size:11px">⊕ ${lbl}</th>`;
+}
+
+function ekycBlkSelSubHeaders(){
+  const s=ekyc.blkSelTotal||ekycBlkSelDefaults();
+  if(!s.active) return '';
+  const bgs=['#5b21b6','#4c1d95','#3b0764','#2d1b69'];
+  return [s.cons?'Cons':null,s.done?'Done':null,s.pend?'Pend':null,s.pct?'%':null].filter(Boolean)
+    .map((l,i)=>`<th class="ekyc-blk-sel-th" style="padding:4px;border:1px solid #7c3aed;font-size:10px;text-align:center;background:${bgs[i%bgs.length]};color:white">${l}</th>`)
+    .join('');
+}
+
+// Builds the ⊕ <td>s for INITIAL render (re-render path via renderEkycResults)
+// Dynamic updates use ekycBlkSelApply instead
+function ekycBlkSelCell(b, allBlocks){
+  const s=ekyc.blkSelTotal||ekycBlkSelDefaults();
+  if(!s.active) return '';
+  const src = b ? [b] : (allBlocks||[]);
+  let sc=0,sd=0;
+  src.forEach(row=>{
+    if(s.aay){sc+=row.aay_cons||0; sd+=row.aay_comp||0;}
+    if(s.phh){sc+=row.phh_cons||0; sd+=row.phh_comp||0;}
+    if(s.nph){sc+=row.nph_cons||0; sd+=row.nph_comp||0;}
+  });
+  const sp=Math.max(0,sc-sd), spct=sc>0?sd/sc:0;
+  const cbg=spct>=0.9?'#d1fae5':spct>=0.8?'#fef3c7':'#fee2e2';
+  const isTotal=!b;
+  const bdr='border:1px solid #c4b5fd';
+  const base=isTotal?'padding:7px 4px;font-weight:700':'padding:6px 4px';
+  const bg2=isTotal?'background:rgba(91,33,182,.12)':'background:rgba(91,33,182,.05)';
+  let out='';
+  if(s.cons) out+=`<td class="ekyc-blk-sel-td" style="${base};${bdr};${bg2};text-align:center">${fmtN(sc)}</td>`;
+  if(s.done) out+=`<td class="ekyc-blk-sel-td" style="${base};${bdr};${bg2};text-align:center;color:#059669">${fmtN(sd)}</td>`;
+  if(s.pend) out+=`<td class="ekyc-blk-sel-td" style="${base};${bdr};${bg2};text-align:center;color:#dc2626;font-weight:700">${fmtN(sp)}</td>`;
+  if(s.pct)  out+=`<td class="ekyc-blk-sel-td" style="${base};${bdr};text-align:center;font-weight:700;background:${cbg};color:#1e293b">${fmtPct(spct)}</td>`;
+  return out;
 }
 
 // ── Sort for Block Abstract tables (ALL/AAY/PHH/NPHH) ─────────────────────
@@ -7342,8 +7623,17 @@ function ekycBlockSetSort(catK, col){
   }
   if(ekyc.processedRows2 && ekyc.blocks){
     const oldRows=ekyc.oldData?parseEkycRows(ekyc.oldData):null;
+    // Remember column panel state before re-render
+    const panelWasOpen = document.getElementById('ekyc-col-toggle-all')?.style.display !== 'none';
     renderEkycResults(ekyc.processedRows2, ekyc.blocks, oldRows, ekyc.oldBlocks);
     switchEkycTab(catK);
+    restoreEkycFilterUI();
+    ekycBlkSelApply(); // re-apply ⊕ state after re-render
+    // Restore column panel open state
+    if(panelWasOpen){
+      const panel = document.getElementById('ekyc-col-toggle-all');
+      if(panel) panel.style.display = '';
+    }
   }
 }
 
@@ -7541,6 +7831,39 @@ function ekycBuildSelTotalHeaders(){
   }
 }
 
+// Append Added TH at the very end of both header rows (after ⊕ Selected Total)
+function ekycBuildAddedHeaderAtEnd(){
+  // Remove any existing dynamically-added Added THs
+  document.querySelectorAll('.shp-col-added-dyn').forEach(e=>e.remove());
+  const hasComp = !!ekyc.oldBlocks;
+  if(!hasComp) return;
+
+  const thead1 = document.getElementById('ekyc-shop-thead');
+  if(!thead1) return;
+  const sort = ekyc.shopSort || {col:'pend',dir:'desc'};
+  const isActive = sort.col === 'added';
+  const arrow = isActive ? (sort.dir==='desc'?' ▼':' ▲') : ' ⇅';
+  const bg = isActive ? '#10b981' : '#065f46';
+
+  // Row 1: main "Added" TH
+  const th = document.createElement('th');
+  th.className = 'shp-col-added-dyn shp-col-added';
+  th.style.cssText = `padding:7px 5px;border:1px solid #1e40af;text-align:center;background:${bg};color:white;cursor:pointer;font-weight:700`;
+  th.innerHTML = 'Added' + arrow;
+  th.onclick = ()=>ekycShopSetSort('added');
+  thead1.appendChild(th);
+
+  // Row 2: empty sub-header (Added has no sub-cols)
+  const allRows = document.querySelectorAll('#ekyc-shop-wrap table thead tr');
+  const row2 = allRows[1];
+  if(row2){
+    const th2 = document.createElement('th');
+    th2.className = 'shp-col-added-dyn shp-col-added';
+    th2.style.cssText = 'padding:3px;border:1px solid #1e40af;background:#1e3a8a';
+    row2.appendChild(th2);
+  }
+}
+
 function ekycShopToggleCol(colId, visible){
   // Store state
   if(!ekyc.shopColVis) ekyc.shopColVis = {};
@@ -7665,12 +7988,12 @@ function renderEkycShopTable(rows){
       <td style="padding:5px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:700;color:#dc2626" class="shp-col-tot_pend">${fmtN(bpend)}</td>
       ${hasComp?`<td style="padding:5px 4px;border:1px solid #cbd5e1" class="shp-col-old_pct"></td>`:''}
       <td style="padding:5px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:700;background:${c.bg};color:${c.fg}" class="shp-col-tot_pct">${fmtPct(bb.pct||0)}</td>
-      ${hasComp?'<td style="padding:5px 4px;border:1px solid #cbd5e1" class="shp-col-added"></td>':''}
       ${cfg.active?`
         ${cfg.cons?`<td style="padding:5px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:700;background:#fffbeb" class="shp-col-sel_cons">${fmtN(bSelCons)}</td>`:''}
         ${cfg.done?`<td style="padding:5px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:700;background:#fffbeb" class="shp-col-sel_done">${fmtN(bSelComp)}</td>`:''}
         ${cfg.pend?`<td style="padding:5px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:700;color:#dc2626;background:#fffbeb" class="shp-col-sel_pend">${fmtN(bSelPend)}</td>`:''}
         ${cfg.pct?`<td style="padding:5px 4px;border:1px solid #cbd5e1;text-align:center;font-weight:700;background:${bSelPct>=0.9?'#d1fae5':bSelPct>=0.8?'#fef3c7':'#fee2e2'}" class="shp-col-sel_pct">${fmtPct(bSelPct)}</td>`:''}`:''}
+      ${hasComp?'<td style="padding:5px 4px;border:1px solid #cbd5e1" class="shp-col-added"></td>':''}
     </tr>`;
 
     // Sort shops within this block using the current sort (respects Selected Total)
@@ -7694,14 +8017,14 @@ function renderEkycShopTable(rows){
         <td style="padding:4px;border:1px solid #e2e8f0;text-align:center;color:#dc2626" class="shp-col-tot_pend">${fmtN(pend)}</td>
         ${hasComp?`<td style="padding:4px;border:1px solid #e2e8f0;text-align:center" class="shp-col-old_pct">${oldPct!==null?fmtPct(oldPct):'—'}</td>`:''}
         <td style="padding:4px;border:1px solid #e2e8f0;text-align:center;font-weight:700;background:${cShop.bg};color:${cShop.fg}" class="shp-col-tot_pct">${fmtPct(r.total_pct)}</td>
-        ${hasComp?`<td style="padding:4px;border:1px solid #e2e8f0;text-align:center;font-size:11px;font-weight:700;color:${added>0?'#059669':added<0?'#dc2626':'#64748b'}" class="shp-col-added">${added!==null?(added>0?'+':'')+fmtN(added):'—'}</td>`:''}
         ${ekycGetSelTotalCells(r, false)}
+        ${hasComp?`<td style="padding:4px;border:1px solid #e2e8f0;text-align:center;font-size:11px;font-weight:700;color:${added>0?'#059669':added<0?'#dc2626':'#64748b'}" class="shp-col-added">${added!==null?(added>0?'+':'')+fmtN(added):'—'}</td>`:''}
       </tr>`;
     });
   });
 
   const tbody=document.getElementById('ekyc-shop-tbody');
-  if(tbody){ tbody.innerHTML=html; reapplyShopColVisibility(); ekycBuildSelTotalHeaders(); }
+  if(tbody){ tbody.innerHTML=html; reapplyShopColVisibility(); ekycBuildSelTotalHeaders(); ekycBuildAddedHeaderAtEnd(); }
 }
 
 
@@ -7812,11 +8135,11 @@ function printEkycShopwise(orientation){
   if(visCols.includes('tot_pend')) pdfCols.push('Pending');
   if(hasComp&&visCols.includes('old_pct')) pdfCols.push(ekyc.oldDate+' %');
   if(visCols.includes('tot_pct'))  pdfCols.push(ekyc.date+' %');
-  if(hasComp&&visCols.includes('added')) pdfCols.push('Added');
   if(visCols.includes('sel_cons')) pdfCols.push(selLabel+' Cons');
   if(visCols.includes('sel_done')) pdfCols.push(selLabel+' Done');
   if(visCols.includes('sel_pend')) pdfCols.push(selLabel+' Pend');
   if(visCols.includes('sel_pct'))  pdfCols.push(selLabel+' %');
+  if(hasComp&&visCols.includes('added')) pdfCols.push('Added');
 
   // Helper: build a row from a shop/block record
   function buildRow(r, siStr, isBlock, blockLabel){
@@ -7848,11 +8171,11 @@ function printEkycShopwise(orientation){
     if(visCols.includes('tot_pend')) row.push(String(pend));
     if(hasComp&&visCols.includes('old_pct')) row.push(oldPct!==null?fmtPct(oldPct):'—');
     if(visCols.includes('tot_pct'))  row.push(fmtPct(pct));
-    if(hasComp&&visCols.includes('added')) row.push(added!==null?(added>0?'+':'')+String(added):'—');
     if(visCols.includes('sel_cons')) row.push(String(sc));
     if(visCols.includes('sel_done')) row.push(String(sd));
     if(visCols.includes('sel_pend')) row.push(String(sPend));
     if(visCols.includes('sel_pct'))  row.push(fmtPct(sPct));
+    if(hasComp&&visCols.includes('added')) row.push(added!==null?(added>0?'+':'')+String(added):'—');
     return {data:row, isBlock, pct, sPct, pendPct:pend/(cons||1), sPend, pend};
   }
 
@@ -7991,6 +8314,71 @@ function downloadEkycExcel(){
                       [4,22,14,14,12,12,...(hasComp?[12,10]:[])];
     XLSX.utils.book_append_sheet(wb,makeSheet(data,widths),cat.label+' Block');
   });
+  // ⊕ Selected Total sheet (block-wise, only if active)
+  if(ekyc.blkSelTotal && ekyc.blkSelTotal.active){
+    const s = ekyc.blkSelTotal;
+    const cats=[s.aay?'AAY':'',s.phh?'PHH':'',s.nph?'NPHH':''].filter(Boolean);
+    const catLabel = cats.join('+') || 'Sel';
+    // Build header
+    const selHdr = ['#','Block'];
+    if(s.cons) selHdr.push(catLabel+' Considered');
+    if(s.done) selHdr.push(catLabel+' Completed');
+    if(s.pend) selHdr.push(catLabel+' Pending');
+    if(s.pct)  selHdr.push(catLabel+' % Done');
+    // Same sort as ALL block abstract
+    const sortedBSel = ekyc.blocks.slice().sort((a,b2)=>{
+      const sk = ekyc['ekyc_blk_sort_all']||{col:'pct',dir:'asc'};
+      if(sk.col==='pend'){
+        let pa=0,pb=0;
+        cats.forEach(cat=>{
+          if(cat==='AAY'){pa+=Math.max(0,a.aay_cons-a.aay_comp);pb+=Math.max(0,b2.aay_cons-b2.aay_comp);}
+          if(cat==='PHH'){pa+=Math.max(0,a.phh_cons-a.phh_comp);pb+=Math.max(0,b2.phh_cons-b2.phh_comp);}
+          if(cat==='NPHH'){pa+=Math.max(0,a.nph_cons-a.nph_comp);pb+=Math.max(0,b2.nph_cons-b2.nph_comp);}
+        });
+        return sk.dir==='desc'?pb-pa:pa-pb;
+      }
+      // default: sort by % asc
+      let ca=0,da=0,cb2=0,db2=0;
+      cats.forEach(cat=>{
+        if(cat==='AAY'){ca+=a.aay_cons;da+=a.aay_comp;cb2+=b2.aay_cons;db2+=b2.aay_comp;}
+        if(cat==='PHH'){ca+=a.phh_cons;da+=a.phh_comp;cb2+=b2.phh_cons;db2+=b2.phh_comp;}
+        if(cat==='NPHH'){ca+=a.nph_cons;da+=a.nph_comp;cb2+=b2.nph_cons;db2+=b2.nph_comp;}
+      });
+      const pa=ca>0?da/ca:0,pb2=cb2>0?db2/cb2:0;
+      return sk.dir==='desc'?pb2-pa:pa-pb2;
+    });
+    // Apply filter if active
+    const filteredBSel = ekyc.filter&&ekyc.filter.active
+      ? sortedBSel.filter(b=>ekycBlockPassesFilter(b.total_cons,b.total_comp))
+      : sortedBSel;
+    const selData=[['e-KYC ⊕ '+catLabel+' — Block Abstract — As on '+ekyc.date],[],selHdr];
+    let sTc=0,sTd=0;
+    filteredBSel.forEach((b,i)=>{
+      let sc=0,sd=0;
+      if(s.aay){sc+=b.aay_cons||0;sd+=b.aay_comp||0;}
+      if(s.phh){sc+=b.phh_cons||0;sd+=b.phh_comp||0;}
+      if(s.nph){sc+=b.nph_cons||0;sd+=b.nph_comp||0;}
+      sTc+=sc; sTd+=sd;
+      const sp=Math.max(0,sc-sd),spct=sc>0?sd/sc:0;
+      const row=[i+1,b.block];
+      if(s.cons) row.push(sc);
+      if(s.done) row.push(sd);
+      if(s.pend) row.push(sp);
+      if(s.pct)  row.push((spct*100).toFixed(2)+'%');
+      selData.push(row);
+    });
+    // Total row
+    const sTp=Math.max(0,sTc-sTd),sTPct=sTc>0?sTd/sTc:0;
+    const totRow=['','TOTAL'];
+    if(s.cons) totRow.push(sTc);
+    if(s.done) totRow.push(sTd);
+    if(s.pend) totRow.push(sTp);
+    if(s.pct)  totRow.push((sTPct*100).toFixed(2)+'%');
+    selData.push(totRow);
+    const selWidths=[4,22,...Array(selHdr.length-2).fill(16)];
+    XLSX.utils.book_append_sheet(wb,makeSheet(selData,selWidths),'⊕ '+catLabel);
+  }
+
   // Shop-wise
   const oldSM={};if(ekyc.oldData)parseEkycRows(ekyc.oldData).forEach(r=>{oldSM[r.shopcode]=r;});
   let swHdr=['#','Block','Shop Code','Shop Name','Considered','Completed','Pending','% Completed'];
@@ -10690,6 +11078,28 @@ initReminder();
 // ============================================================
 ekyc.filter = { pctOp: null, pctVal: null, pendOp: null, pendVal: null, active: false };
 
+// Restore filter input values from ekyc.filter state after re-render
+function restoreEkycFilterUI(){
+  const f = ekyc.filter;
+  if(!f) return;
+  const pv  = document.getElementById('ekyc-pct-val');
+  const pnd = document.getElementById('ekyc-pend-val');
+  const po  = document.getElementById('ekyc-pct-op');
+  const pdo = document.getElementById('ekyc-pend-op');
+  if(pv  && f.pctVal  !== null && f.pctVal  !== undefined) pv.value  = f.pctVal;
+  if(pnd && f.pendVal !== null && f.pendVal !== undefined) pnd.value = f.pendVal;
+  if(po  && f.pctOp)  po.value  = f.pctOp;
+  if(pdo && f.pendOp) pdo.value = f.pendOp;
+  // Update filter status label if active
+  if(f.active){
+    const parts=[];
+    if(f.pctVal!==null&&f.pctVal!==undefined)  parts.push(`% ${f.pctOp==='lt'?'<':'≥'} ${f.pctVal}%`);
+    if(f.pendVal!==null&&f.pendVal!==undefined) parts.push(`Pending ${f.pendOp==='gt'?'>':'≤'} ${f.pendVal}`);
+    const el = document.getElementById('ekyc-filter-status');
+    if(el && parts.length) el.textContent = `🔎 Active filter: ${parts.join(' AND ')}`;
+  }
+}
+
 function ekycApplyFilter(){
   const pctValRaw = document.getElementById('ekyc-pct-val')?.value.trim();
   const pendValRaw = document.getElementById('ekyc-pend-val')?.value.trim();
@@ -10711,6 +11121,9 @@ function ekycApplyFilter(){
   if(ekyc.processedRows2 && ekyc.blocks){
     const oldRows = ekyc.oldData ? parseEkycRows(ekyc.oldData) : null;
     renderEkycResults(ekyc.processedRows2, ekyc.blocks, oldRows, ekyc.oldBlocks);
+    restoreEkycFilterUI();
+    switchEkycTab(ekyc._activeTab||'all');
+    ekycBlkSelApply(); // re-apply ⊕ state after filter re-render
   }
   filterEkycShops();
 
@@ -10795,11 +11208,11 @@ function downloadEkycShopExcel(){
   if(visCols.includes('tot_pend')) headers.push('Pending');
   if(hasComp&&visCols.includes('old_pct')) headers.push(ekyc.oldDate+' %');
   if(visCols.includes('tot_pct'))  headers.push(ekyc.date+' %');
-  if(hasComp&&visCols.includes('added')) headers.push('Added');
   if(visCols.includes('sel_cons')) headers.push(selLabel+' Cons');
   if(visCols.includes('sel_done')) headers.push(selLabel+' Done');
   if(visCols.includes('sel_pend')) headers.push(selLabel+' Pend');
   if(visCols.includes('sel_pct'))  headers.push(selLabel+' %');
+  if(hasComp&&visCols.includes('added')) headers.push('Added');
 
   // Helper: build data row
   function buildRow(r, siNum, isBlock, blockLabel){
@@ -10831,11 +11244,12 @@ function downloadEkycShopExcel(){
     if(visCols.includes('tot_pend')) row.push(pend);
     if(hasComp&&visCols.includes('old_pct')) row.push(oPct);
     if(visCols.includes('tot_pct'))  row.push(pct);
-    if(hasComp&&visCols.includes('added')) row.push(added!==null?(added>0?'+':'')+added:'—');
     if(visCols.includes('sel_cons')) row.push(sc);
     if(visCols.includes('sel_done')) row.push(sd);
     if(visCols.includes('sel_pend')) row.push(sPend);
     if(visCols.includes('sel_pct'))  row.push(sPct);
+    // Added: push as Number for Excel filtering (not formatted string)
+    if(hasComp&&visCols.includes('added')) row.push(added!==null?added:null);
     return row;
   }
 
