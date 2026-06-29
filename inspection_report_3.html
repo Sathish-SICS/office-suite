@@ -7322,7 +7322,8 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
             ${sortTh('pend','Pending','min-width:60px;'+' class="shp-col-tot_pend"')}
             ${hasComp?sortTh('pct_old',od+' %','background:#7c3aed;min-width:65px; class="shp-col-old_pct"'):''}
             ${sortTh('pct',hasComp?d+' %':'%','min-width:65px; class="shp-col-tot_pct"')}
-            <!-- Selected Total headers + Added column - injected by JS at end -->
+            <!-- Selected Total headers injected BEFORE the Added TH below -->
+            ${hasComp?`<th id="shp-added-th-r1" style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#065f46;color:white;cursor:pointer;user-select:none" onclick="ekycShopSetSort('added')" class="shp-col-added">Added ${ekyc.shopSort&&ekyc.shopSort.col==='added'?(ekyc.shopSort.dir==='desc'?'▼':'▲'):'⇅'}</th>`:''}
           </tr>
           <tr style="background:#3b82f6;color:white">
             <th colspan="4" style="padding:3px;border:1px solid #1e40af"></th>
@@ -7333,7 +7334,8 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
               `<th style="padding:3px;border:1px solid #1e40af;font-size:9px;text-align:center;background:rgba(0,0,0,.2)" class="shp-col-${cat}_pct">%</th>`,
             ].join('')).join('')}
             <th colspan="${4+(hasComp?1:0)}" style="padding:3px;border:1px solid #1e40af"></th>
-            <!-- Selected Total sub-headers + Added sub-header - injected by JS -->
+            <!-- Selected Total sub-headers injected BEFORE the Added sub-TH below -->
+            ${hasComp?'<th id="shp-added-th-r2" style="padding:3px;border:1px solid #1e40af;background:#065f46" class="shp-col-added"></th>':''}
           </tr>
         </thead>
         <tbody id="ekyc-shop-tbody"></tbody>
@@ -7800,7 +7802,7 @@ function ekycBuildSelTotalHeaders(){
   const subCount = [cfg.cons,cfg.done,cfg.pend,cfg.pct].filter(Boolean).length;
   if(subCount===0) return;
 
-  // Row 1: group header spanning subCount columns
+  // Row 1: group header spanning subCount columns — insert BEFORE Added TH if it exists
   const thead1 = document.getElementById('ekyc-shop-thead');
   if(thead1){
     const th = document.createElement('th');
@@ -7808,10 +7810,11 @@ function ekycBuildSelTotalHeaders(){
     th.colSpan = subCount;
     th.style.cssText = 'padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#92400e;color:white;font-size:11px;font-weight:700;white-space:nowrap';
     th.textContent = `⊕ ${label}`;
-    thead1.appendChild(th);
+    const addedTh = document.getElementById('shp-added-th-r1');
+    addedTh ? thead1.insertBefore(th, addedTh) : thead1.appendChild(th);
   }
 
-  // Row 2: sub-column labels (Cons, Done, Pend, %)
+  // Row 2: sub-column labels (Cons, Done, Pend, %) — insert BEFORE Added sub-TH if it exists
   const allRows = document.querySelectorAll('#ekyc-shop-wrap table thead tr');
   const row2 = allRows[1]; // second thead row
   if(row2){
@@ -7821,12 +7824,13 @@ function ekycBuildSelTotalHeaders(){
       {show:cfg.pend, label:'Pend', cls:'sel-sub-pend'},
       {show:cfg.pct,  label:'%',    cls:'sel-sub-pct'},
     ];
+    const addedSubTh = document.getElementById('shp-added-th-r2');
     subLabels.filter(s=>s.show).forEach(s=>{
       const th = document.createElement('th');
       th.className = s.cls;
       th.style.cssText = 'padding:3px;border:1px solid #1e40af;font-size:9px;text-align:center;background:#78350f;color:white';
       th.textContent = s.label;
-      row2.appendChild(th);
+      addedSubTh ? row2.insertBefore(th, addedSubTh) : row2.appendChild(th);
     });
   }
 }
@@ -8024,7 +8028,7 @@ function renderEkycShopTable(rows){
   });
 
   const tbody=document.getElementById('ekyc-shop-tbody');
-  if(tbody){ tbody.innerHTML=html; reapplyShopColVisibility(); ekycBuildSelTotalHeaders(); ekycBuildAddedHeaderAtEnd(); }
+  if(tbody){ tbody.innerHTML=html; reapplyShopColVisibility(); ekycBuildSelTotalHeaders(); }
 }
 
 
@@ -8052,6 +8056,13 @@ function filterEkycShops(){
     btn.style.color=active?'white':'';
     btn.textContent=(col==='pend'?'Pending':col==='pct'?'%':'Added')+' '+(active?(ekyc.shopSort.dir==='desc'?'▼':'▲'):'⇅');
   });
+  // Also update the static Added TH in thead (always rightmost)
+  const addedStaticTh = document.getElementById('shp-added-th-r1');
+  if(addedStaticTh){
+    const active = ekyc.shopSort && ekyc.shopSort.col === 'added';
+    addedStaticTh.style.background = active ? '#10b981' : '#065f46';
+    addedStaticTh.textContent = 'Added ' + (active ? (ekyc.shopSort.dir==='desc'?'▼':'▲') : '⇅');
+  }
 }
 
 function showEkycPrintDialog(){
