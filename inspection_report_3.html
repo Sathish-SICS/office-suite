@@ -5310,7 +5310,11 @@ const CMP_FIELDS = [
   {key:'cards',    label:'அட்டைகள்',       pats:[/அட்டை/,/cards?/i]}
 ];
 // Which fields are flagged as "mismatch" (all the meaningful ones)
-const CMP_MISMATCH_FIELDS = ['society','shopname','timetype','building','area','agency','godown','seller','phone','cards','taluk'];
+const CMP_MISMATCH_FIELDS = ['society','shopname','timetype','building','area','agency','godown','seller','phone'];
+// taluk excluded by default: old files often record block names in this column, not real
+// taluk names, making it incomparable. cards excluded by default: card counts naturally
+// drift over time and aren't a "data entry mistake" — re-add either via the diagnostic chips if needed.
+const CMP_OPTIONAL_FIELDS = ['taluk','cards'];
 
 // Normalise text for noise-free comparison: lowercase, strip spaces & punctuation
 function cmpNorm(v){
@@ -5397,6 +5401,7 @@ function applyMappingAndCompare(){
   cmpReady = true;
   cmpBlockFilter = '';
   cmpExcludedFields = new Set();
+  cmpIncludedOptional = new Set();
   document.getElementById('compare-controls').style.display='block';
   document.getElementById('master-status').innerHTML += ' · <span style="color:var(--green)">✓ ஒப்பீட்டிற்கு தயார் ('+masterData.length+' பழைய கடைகள்)</span>';
   compareView('summary');
@@ -5424,19 +5429,57 @@ function compareView(mode){
   else if (mode==='reconcile')cmpRenderReconcile(div);
 }
 
-// Click a block row in the summary → jump to the most relevant detail view, filtered to that block
+// Click a block row in the summary → show exactly which shops caused the Δ (missing + extra side by side)
 function cmpDrillBlock(block){
   cmpBlockFilter = block;
   const m = cmpBuildModel();
   const miss = m.missing.filter(o=>o.block===block).length;
   const ext  = m.extra.filter(r=>g(r,'block')===block).length;
   const mis  = m.mismatches.filter(mm=>mm.block===block).length;
-  // Jump to whichever has the most issues for this block; default to missing
-  let target = 'missing';
-  if (ext>miss && ext>=mis) target='extra';
-  else if (mis>miss && mis>ext) target='mismatch';
   if (!miss && !ext && !mis) { showToast('✓ '+block+' — வேறுபாடு இல்லை', 'green'); cmpBlockFilter=''; return; }
-  compareView(target);
+  // The Δ shown in the summary = shop-count change = missing + extra. That's the question
+  // being asked when someone clicks the Δ, so always answer THAT first — never auto-route
+  // to mismatches (a different question: "which fields changed on matched shops").
+  cmpCurrentView = 'delta';
+  document.querySelectorAll('.cmp-tab').forEach(b=> b.classList.remove('btn-blue'));
+  cmpRenderBlockDelta(document.getElementById('compare-result'), block);
+}
+
+// Combined missing+extra answer for one block — directly answers "which shops caused the Δ?"
+function cmpRenderBlockDelta(div, block){
+  const m = cmpBuildModel();
+  const missList = m.missing.filter(o=>o.block===block).sort((a,b)=>(a.shopcode||'').localeCompare(b.shopcode||''));
+  const extList  = m.extra.filter(r=>g(r,'block')===block).sort((a,b)=>g(a,'shopcode').localeCompare(g(b,'shopcode')));
+  const misCount = m.mismatches.filter(mm=>mm.block===block).length;
+  const delta = extList.length - missList.length;
+
+  let html = `<div style="display:flex;align-items:center;gap:8px;background:#4f8ef718;border:1px solid #4f8ef740;color:var(--blue);padding:7px 12px;border-radius:8px;margin-bottom:12px;font-size:11px">
+    📍 <b>${block}</b> — கடை எண்ணிக்கை மாற்றம்: <b style="color:${delta>=0?'var(--green)':'var(--red)'}">${delta>=0?'+':''}${delta}</b>
+    <button class="btn btn-outline" style="font-size:10px;padding:2px 8px;margin-left:auto" onclick="cmpClearBlockFilter()">✕ அனைத்து ஒன்றியங்களும்</button>
+  </div>`;
+
+  html += `<div class="grid2">
+    <div class="card" style="margin:0">
+      <div class="card-title" style="color:var(--red)">❌ பழையதில் உள்ளது, புதியதில் இல்லை (${missList.length})</div>
+      ${missList.length ? `<div class="table-wrap"><table><thead><tr><th>குறியீடு</th><th>நிறுவனம்</th><th>கடை பெயர்</th><th>F/P</th></tr></thead><tbody>
+        ${missList.map(o=>`<tr><td class="td-mono" style="color:var(--teal)">${o.shopcode}</td><td style="font-size:11px">${o.society||''}</td><td>${o.shopname||''}</td><td style="font-size:11px">${o.timetype||''}</td></tr>`).join('')}
+      </tbody></table></div>` : `<div style="text-align:center;color:var(--muted);padding:16px;font-size:12px">இல்லை</div>`}
+    </div>
+    <div class="card" style="margin:0">
+      <div class="card-title" style="color:var(--teal)">➕ புதியதில் உள்ளது, பழையதில் இல்லை (${extList.length})</div>
+      ${extList.length ? `<div class="table-wrap"><table><thead><tr><th>குறியீடு</th><th>நிறுவனம்</th><th>கடை பெயர்</th><th>F/P</th></tr></thead><tbody>
+        ${extList.map(r=>`<tr><td class="td-mono" style="color:var(--teal)">${g(r,'shopcode')}</td><td style="font-size:11px">${g(r,'society')}</td><td>${g(r,'shopname')}</td><td style="font-size:11px">${g(r,'timetype')}</td></tr>`).join('')}
+      </tbody></table></div>` : `<div style="text-align:center;color:var(--muted);padding:16px;font-size:12px">இல்லை</div>`}
+    </div>
+  </div>`;
+
+  html += `<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <button class="btn btn-outline" onclick="cmpExportList('missing')" style="font-size:11px">⬇ பழையதில் மட்டும் (Excel)</button>
+    <button class="btn btn-outline" onclick="cmpExportList('extra')" style="font-size:11px">⬇ புதியதில் மட்டும் (Excel)</button>
+    ${misCount ? `<button class="btn btn-outline" style="font-size:11px;color:var(--purple);border-color:#a78bfa44;margin-left:auto" onclick="compareView('mismatch')">⚠️ இந்த ஒன்றியத்தில் ${misCount} field வேறுபாடுகளும் உள்ளன — பார்க்க</button>` : ''}
+  </div>`;
+
+  div.innerHTML = html;
 }
 
 function cmpClearBlockFilter(){ cmpBlockFilter=''; compareView(cmpCurrentView); }
@@ -5452,16 +5495,65 @@ function cmpBlockFilterBar(count){
 // ── Build the matched/missing/extra/mismatch model (cached) ──
 // Known English↔Tamil (and other) value equivalences, so a field isn't falsely
 // flagged just because the old file used English words for the same meaning.
+// ── VALUE EQUIVALENCE ──────────────────────────────────────
+// Simple 1:1 equivalences (old word == new word, just translated/cased differently)
 const CMP_VALUE_EQUIV = {
   timetype: { 'full':'முழுநேரம்','fulltime':'முழுநேரம்','full time':'முழுநேரம்','full-time':'முழுநேரம்',
               'part':'பகுதிநேரம்','parttime':'பகுதிநேரம்','part time':'பகுதிநேரம்','part-time':'பகுதிநேரம்' },
   area: { 'urban':'நகர்புறம்','rural':'கிராமபுறம்','town':'நகர்புறம்','village':'கிராமபுறம்' },
   pos: { 'yes':'உள்ளது','y':'உள்ளது','available':'உள்ளது','no':'இல்லை','n':'இல்லை','notavailable':'இல்லை','na':'இல்லை' },
   haspacker: { 'yes':'உள்ளது','y':'உள்ளது','no':'இல்லை','n':'இல்லை' },
-  agency: { 'coop':'cooperative','cooperative society':'cooperative' },
-  building: { 'own':'சொந்தம்','owned':'சொந்தம்','govtfree':'அரசுஇலவசம்','govtrent':'அரசுவாடகை',
-              'privaterent':'தனியார்வாடகை','privatefree':'தனியார்இலவசம்' }
+  agency: { 'coop':'cooperative','cooperative society':'cooperative' }
 };
+
+// Many-to-one GROUP equivalence — for fields where the OLD file used broader/coarser
+// categories than the new one. A value is "matched" if old-group and new-value share
+// a group ID. A genuine category jump (old group ≠ new's group) still flags correctly.
+// கட்டிட வகை: old data commonly only had வாடகை/அரசு/தனியார் இலவசம்/சொந்த கட்டிடம் (coarse);
+// new data has 5 granular categories. Map old → the set of new categories it could mean.
+const CMP_GROUP_EQUIV = {
+  building: {
+    // old value (normalised) -> array of new values it's considered equivalent to
+    'வாடகை':        ['அரசு வாடகை','தனியார் வாடகை'],
+    'rent':         ['அரசு வாடகை','தனியார் வாடகை'],
+    'அரசு':         ['அரசு இலவசம்','அரசு வாடகை'],
+    'govt':         ['அரசு இலவசம்','அரசு வாடகை'],
+    'government':   ['அரசு இலவசம்','அரசு வாடகை'],
+    'தனியார் இலவசம்':['தனியார் இலவசம்'],
+    'private free': ['தனியார் இலவசம்'],
+    'சொந்த கட்டிடம்': ['சொந்தம்'],
+    'சொந்தம்':       ['சொந்தம்'],
+    'own':          ['சொந்தம்'],
+    'owned':        ['சொந்தம்']
+  }
+};
+function cmpGroupMatch(fieldKey, oldVal, newVal){
+  const grp = CMP_GROUP_EQUIV[fieldKey];
+  if (!grp) return false;
+  const ok = cmpNorm(oldVal);
+  const candidates = grp[ok] || grp[oldVal];
+  if (!candidates) return false;
+  const nk = cmpNorm(newVal);
+  return candidates.some(c => cmpNorm(c)===nk);
+}
+
+// Word-order-insensitive match for name-like fields — "ச. புவனேஸ்வரி" vs "புவனேஸ்வரி ச"
+// is the same name written with initial first vs last. Strip lone single-letter initials,
+// sort remaining words, then compare. This catches reordering, not genuine name changes.
+const CMP_NAME_FIELDS = new Set(['seller','shopname','society']);
+function cmpNameTokenMatch(oldVal, newVal){
+  const tok = s => (s||'').toString()
+    .replace(/[.,]/g,' ')
+    .split(/\s+/)
+    .map(w=>w.trim())
+    .filter(w=>w && !/^[a-zA-Z\u0B80-\u0BFF]{1,2}$/.test(w))  // drop lone initials (1-2 chars)
+    .map(w=>cmpNorm(w))
+    .sort();
+  const a = tok(oldVal), b = tok(newVal);
+  if (!a.length || !b.length) return false;
+  return a.length===b.length && a.every((w,i)=>w===b[i]);
+}
+
 // Normalise + apply known equivalences for a given field before comparing
 function cmpNormField(fieldKey, v){
   const n = cmpNorm(v);
@@ -5472,6 +5564,12 @@ function cmpNormField(fieldKey, v){
 
 // Fields temporarily excluded from mismatch comparison (e.g. a runaway false-positive field)
 let cmpExcludedFields = new Set();
+// Optional fields (taluk, cards) — OFF by default, can be turned on from the diagnostic panel
+let cmpIncludedOptional = new Set();
+function cmpToggleOptional(fk){
+  if (cmpIncludedOptional.has(fk)) cmpIncludedOptional.delete(fk); else cmpIncludedOptional.add(fk);
+  compareView(cmpCurrentView);
+}
 function cmpToggleExclude(fk){
   if (cmpExcludedFields.has(fk)) cmpExcludedFields.delete(fk); else cmpExcludedFields.add(fk);
   compareView(cmpCurrentView);
@@ -5488,20 +5586,22 @@ function cmpBuildModel(){
   // matched + field mismatches
   const matched = [];
   const mismatches = [];   // {key, code, block, diffs:[{field,label,old,new}]}
+  const activeFields = CMP_MISMATCH_FIELDS.concat(CMP_OPTIONAL_FIELDS.filter(fk=>cmpIncludedOptional.has(fk)));
   masterData.forEach(o=>{
     const r = newByKey[o._key];
     if (!r) return;
     matched.push({old:o, new:r});
     const diffs = [];
-    CMP_MISMATCH_FIELDS.forEach(fk=>{
+    activeFields.forEach(fk=>{
       if (!cmpColMap[fk]) return;           // old file didn't have this column → skip
       if (cmpExcludedFields.has(fk)) return; // user excluded this field (likely vocabulary mismatch)
       const ov = o[fk]||'';
       const nv = g(r, fk)||'';
-      if (cmpNormField(fk, ov) !== cmpNormField(fk, nv)) {
-        const lbl = (CMP_FIELDS.find(f=>f.key===fk)||{}).label || fk;
-        diffs.push({field:fk, label:lbl, old:ov, new:nv});
-      }
+      if (cmpNormField(fk, ov) === cmpNormField(fk, nv)) return;       // exact/translated match
+      if (cmpGroupMatch(fk, ov, nv)) return;                          // coarse-category match (e.g. building type)
+      if (CMP_NAME_FIELDS.has(fk) && cmpNameTokenMatch(ov, nv)) return; // same name, different word order/initials
+      const lbl = (CMP_FIELDS.find(f=>f.key===fk)||{}).label || fk;
+      diffs.push({field:fk, label:lbl, old:ov, new:nv});
     });
     if (diffs.length) mismatches.push({key:o._key, code:g(r,'shopcode'), block:g(r,'block'), shopname:g(r,'shopname'), diffs});
   });
@@ -5579,6 +5679,23 @@ function cmpRenderSummary(div){
         }).join('')}
       </div>
       ${worstPct>=80 ? `<div style="font-size:11px;color:var(--amber);margin-top:8px">⚠ <b>${(CMP_FIELDS.find(f=>f.key===worst)||{}).label||worst}</b> ${worstPct}% கடைகளில் வேறுபடுகிறது — இது உண்மையான தரவு பிழையாக இருக்காது, பழைய file-ல் வேறு சொல் வடிவில் (எ.கா. English/Tamil) இருக்கலாம். மேலே ✕ click செய்து இந்த field-ஐ ஒப்பீட்டில் இருந்து தற்காலிகமாக தவிர்க்கலாம்.</div>` : ''}
+      <div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:10px;color:var(--muted)">இயல்பாக ஒப்பிடப்படாதவை (taluk/cards அடிக்கடி மாறும்/ஒப்பிட முடியாதவை):</span>
+        ${CMP_OPTIONAL_FIELDS.map(fk=>{
+          const lbl=(CMP_FIELDS.find(f=>f.key===fk)||{}).label||fk;
+          const on = cmpIncludedOptional.has(fk);
+          return `<button class="btn btn-outline" style="font-size:10px;padding:3px 9px;${on?'color:var(--purple);border-color:#a78bfa66':''}" onclick="cmpToggleOptional('${fk}')">${on?'✓ ':'+ '}${lbl} ஒப்பிடு</button>`;
+        }).join('')}
+      </div>
+    </div>`;
+  } else {
+    diagHtml = `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <span style="font-size:10px;color:var(--muted)">இயல்பாக ஒப்பிடப்படாதவை:</span>
+      ${CMP_OPTIONAL_FIELDS.map(fk=>{
+        const lbl=(CMP_FIELDS.find(f=>f.key===fk)||{}).label||fk;
+        const on = cmpIncludedOptional.has(fk);
+        return `<button class="btn btn-outline" style="font-size:10px;padding:3px 9px;${on?'color:var(--purple);border-color:#a78bfa66':''}" onclick="cmpToggleOptional('${fk}')">${on?'✓ ':'+ '}${lbl} ஒப்பிடு</button>`;
+      }).join('')}
     </div>`;
   }
 
