@@ -1975,6 +1975,31 @@ function processReports(){
   // Deduct exactly those rows (one per officer per shop) from their monthly count.
   // All other rows (squad shops inspected on non-squad dates, or non-squad shops) count normally.
 
+  // ── FIX (2 Jul 2026): A shop appearing on the squad list belongs to some block,
+  // but the squad inspector assigned to it comes FROM A DIFFERENT BLOCK.
+  // When the shop's OWN block officer inspects it, that is regular duty and must NOT be deducted.
+  // Only inspections where inspector_block ≠ shop_block are true squad-duty visits.
+  // Build a Tamil-designation → English-block map from state.shopMap.Block to compare.
+  const tamilToEngBlock = {
+    'திருவண்ணாமலை HQ':'Tiruvannamalai HQ','திருவண்ணாமலை 1':'Tiruvannamalai-1','திருவண்ணாமலை 2':'Tiruvannamalai-2',
+    'துரிஞ்சாபுரம்':'Thurinjapuram','கீழ்ப்பென்னாத்துர்':'Kilpennathur','செங்கம்':'Chengam','புதுப்பாளையம்':'Pudhupalayam',
+    'தண்டராம்பட்டு':'Thandrampet','கலசபாக்கம்':'Kalasapakkam','போளுர்':'Polur','ஜமுனாமரத்துர்':'Jamunamarathur','சேத்துப்பட்டு':'Chetpet',
+    'ஆரணி  கிழக்கு':'Arani East','ஆரணி கிழக்கு':'Arani East','ஆரணி மேற்கு':'Arani West',
+    'செய்யார்':'Cheyyar','அனக்காவூர்':'Anakavoor',
+    'வெம்பாக்கம்  1':'Vembakkam 1','வெம்பாக்கம் 1':'Vembakkam 1',
+    'வெம்பாக்கம்  2':'Vembakkam 2','வெம்பாக்கம் 2':'Vembakkam 2',
+    'வந்தவாசி':'Vandavasi','பெரணமல்லூர் ':'Pernamallur','பெரணமல்லூர்':'Pernamallur','தெள்ளார்':'Thellar'
+  };
+  // Helper: does officer's block match shop's block?
+  function officerBlockMatchesShop(desig, shopBlk){
+    if(!shopBlk) return false; // shop's block unknown → cannot rule out squad
+    const eng = tamilToEngBlock[desig] || tamilToEngBlock[(desig||'').trim()];
+    if(!eng) return false; // designation not a block name (e.g. DR/JR) → not a block officer match
+    // Normalize both sides (case-insensitive, strip spaces/hyphens)
+    const norm = s => (s||'').toString().toLowerCase().replace(/[\s\-_]+/g,'');
+    return norm(eng) === norm(shopBlk);
+  }
+
   // Step 1: Build a Set of row keys that are squad inspections: "phone|shopCode|isoDate"
   // Also track per (phone,shopCode) — deduct only ONE occurrence per officer per shop
   const squadRowSet = new Set(); // "phone|shopCode|isoDate" → is a squad row
@@ -1991,9 +2016,17 @@ function processReports(){
       const phone = String(Math.round(Number(r[colPhone]||0)));
 
       if(daysDiff >= 0 && daysDiff <= squadTol){
-        // This row is a squad inspection
-        squadRowSet.add(phone + '|' + shopCode + '|' + isoDate);
-        // Update checklist (closest to squad date wins)
+        // Check officer's block vs shop's block — only mark as squad if they DIFFER.
+        // If a block officer inspects their OWN block's shops, that is regular duty (not squad).
+        const lookup = phoneLookup[phone];
+        const shopBlk = shopLookup[shopCode] || shopLookup[(r[colFps]||'').toString().trim()];
+        const isBlockOfficer = lookup && lookup.role === 'Block Staff';
+        const sameBlock = isBlockOfficer && officerBlockMatchesShop(lookup.designation, shopBlk);
+        if(!sameBlock){
+          // This row is a squad inspection
+          squadRowSet.add(phone + '|' + shopCode + '|' + isoDate);
+        }
+        // Update checklist (closest to squad date wins) — regardless of who inspected
         if(!squadCheckList[shopCode].found || daysDiff < (squadCheckList[shopCode].daysDiff||99)){
           squadCheckList[shopCode] = {code:shopCode, found:true, inspDate:isoDate, onTime:true, daysDiff};
         }
