@@ -857,6 +857,15 @@ document.addEventListener('keydown', e=>{
     <input type="file" id="file-pdl-mis" accept=".xlsx,.xls">
   </div>
   <div id="pdl-mis-status" style="margin-top:10px;font-size:13px;color:var(--muted)"></div>
+  <div style="margin-top:12px">
+    <button class="btn secondary" id="btn-pdl-use-inspection" onclick="pdlUseInspectionReportData()"
+      style="font-size:13px;padding:9px 14px">
+      🔗 Use data from Inspection Report tab
+    </button>
+    <span style="font-size:11px;color:var(--muted);margin-left:8px">
+      (no re-upload needed — reuses the MIS + squad overrides from the Inspection Report tab)
+    </span>
+  </div>
 </div>
 
 <div class="panel" id="pdl-panel-squad" style="display:none">
@@ -1704,7 +1713,8 @@ const state = {
   phoneMap: BUILT_IN_PHONE_MAP, phoneName: null,
   shopMap: null, shopName: null,
   results: null,
-  squadCodes: null  // Set of shop codes fetched from GSheet
+  squadCodes: null, // Set of shop codes fetched from GSheet
+  squadOverrides: new Set() // shop codes user manually moved from Squad to Regular Monthly
 };
 
 // Inspector role classification helper
@@ -1828,6 +1838,10 @@ function processReports(){
 
   const headers = allRows[headerRow];
   const dataRows = allRows.slice(headerRow+1).filter(r=>r && r[0]!=null);
+
+  // Cache parsed data for Head Office PDL tab reuse (avoid re-uploading MIS)
+  state.misHeaders = headers;
+  state.misParsedRows = dataRows;
 
   const idx = name=>headers.indexOf(name);
   const colFps = idx('FPS Code');
@@ -1979,21 +1993,58 @@ function processReports(){
   // but the squad inspector assigned to it comes FROM A DIFFERENT BLOCK.
   // When the shop's OWN block officer inspects it, that is regular duty and must NOT be deducted.
   // Only inspections where inspector_block ≠ shop_block are true squad-duty visits.
-  // Build a Tamil-designation → English-block map from state.shopMap.Block to compare.
+  // Map keys use the EXACT designations from BUILT_IN_PHONE_MAP (which is what MIS rows carry).
   const tamilToEngBlock = {
-    'திருவண்ணாமலை HQ':'Tiruvannamalai HQ','திருவண்ணாமலை 1':'Tiruvannamalai-1','திருவண்ணாமலை 2':'Tiruvannamalai-2',
-    'துரிஞ்சாபுரம்':'Thurinjapuram','கீழ்ப்பென்னாத்துர்':'Kilpennathur','செங்கம்':'Chengam','புதுப்பாளையம்':'Pudhupalayam',
-    'தண்டராம்பட்டு':'Thandrampet','கலசபாக்கம்':'Kalasapakkam','போளுர்':'Polur','ஜமுனாமரத்துர்':'Jamunamarathur','சேத்துப்பட்டு':'Chetpet',
-    'ஆரணி  கிழக்கு':'Arani East','ஆரணி கிழக்கு':'Arani East','ஆரணி மேற்கு':'Arani West',
-    'செய்யார்':'Cheyyar','அனக்காவூர்':'Anakavoor',
-    'வெம்பாக்கம்  1':'Vembakkam 1','வெம்பாக்கம் 1':'Vembakkam 1',
-    'வெம்பாக்கம்  2':'Vembakkam 2','வெம்பாக்கம் 2':'Vembakkam 2',
-    'வந்தவாசி':'Vandavasi','பெரணமல்லூர் ':'Pernamallur','பெரணமல்லூர்':'Pernamallur','தெள்ளார்':'Thellar'
+    'திருவண்ணாமலை HQ':'Tiruvannamalai HQ',
+    'திருவண்ணாமலை 1':'Tiruvannamalai-1',
+    'திருவண்ணாமலை 2':'Tiruvannamalai-2',
+    'கீழ்பென்னாத்தூர்':'Kilpennathur',
+    'கீழ்ப்பென்னாத்துர்':'Kilpennathur',
+    'செங்கம்':'Chengam',
+    'தண்டராம்பட்டு':'Thandrampet',
+    'கலசப்பாக்கம்':'Kalasapakkam',
+    'கலசபாக்கம்':'Kalasapakkam',
+    'போளூர்':'Polur',
+    'போளுர்':'Polur',
+    'ஜமுனாமரத்தூர்':'Jamunamarathur',
+    'ஜமுனாமரத்துர்':'Jamunamarathur',
+    'சேத்துபட்டு':'Chetpet',
+    'சேத்துப்பட்டு':'Chetpet',
+    'ஆரணி கிழக்கு':'Arani East',
+    'ஆரணி  கிழக்கு':'Arani East',
+    'ஆரணி மேற்கு':'Arani West',
+    'ஆரணி  மேற்கு':'Arani West',
+    'செய்யார்':'Cheyyar',
+    'வெம்பாக்கம் 1':'Vembakkam 1',
+    'வெம்பாக்கம்  1':'Vembakkam 1',
+    'வெம்பாக்கம் 2':'Vembakkam 2',
+    'வெம்பாக்கம்  2':'Vembakkam 2',
+    'வந்தவாசி':'Vandavasi',
+    'பெரணமல்லூர்':'Pernamallur',
+    'பெரணமல்லூர் ':'Pernamallur',
+    'தெள்ளார்':'Thellar',
+    'துரிஞ்சாபுரம்':'Thurinjapuram',
+    'புதுப்பாளையம்':'Pudhupalayam',
+    'அனக்காவூர்':'Anakavoor'
   };
+  // Normalize designation before lookup: strip "(Ic)"/"(i/c)" role suffixes and other parens (keeping content like கிழக்கு)
+  function normDesigForBlockLookup(s){
+    return (s||'').toString()
+      .replace(/\(\s*(Ic|i\/c|IC|I\/C|i\.c|I\.C|In\s*charge|in\s*charge)\s*\)/g,'')
+      .replace(/[()（）]/g,' ')
+      .replace(/\s+/g,' ')
+      .trim();
+  }
   // Helper: does officer's block match shop's block?
   function officerBlockMatchesShop(desig, shopBlk){
     if(!shopBlk) return false; // shop's block unknown → cannot rule out squad
-    const eng = tamilToEngBlock[desig] || tamilToEngBlock[(desig||'').trim()];
+    const cleaned = normDesigForBlockLookup(desig);
+    let eng = tamilToEngBlock[cleaned] || tamilToEngBlock[cleaned.replace(/\s+/g,' ')];
+    if(!eng){
+      // Fallback: try loose match — check if any map key is a substring of cleaned
+      const found = Object.keys(tamilToEngBlock).find(k => cleaned.indexOf(k)>=0 || k.indexOf(cleaned)>=0);
+      if(found) eng = tamilToEngBlock[found];
+    }
     if(!eng) return false; // designation not a block name (e.g. DR/JR) → not a block officer match
     // Normalize both sides (case-insensitive, strip spaces/hyphens)
     const norm = s => (s||'').toString().toLowerCase().replace(/[\s\-_]+/g,'');
@@ -2006,36 +2057,61 @@ function processReports(){
 
   if(squadSrc !== 'none' && squadCodes.size > 0 && squadDate){
     const anchorMs = new Date(squadDate).getTime();
+    // ── Pass 1: collect candidate squad rows (in-tolerance, non-override, different-block) ──
+    // Then sort by date ascending and cap at 3 per phone.
+    const candidates = []; // [{phone,shopCode,isoDate,daysDiff,sameBlock}]
     dataRows.forEach(r=>{
       const shopCode = (r[colFps]||'').toString().trim().toUpperCase();
       if(!squadCodes.has(shopCode)) return;
+      if(state.squadOverrides && state.squadOverrides.has(shopCode)) return; // user override → treat as regular
       const isoDate = toIsoDate(r[colDate]);
       if(!isoDate) return;
       const rowMs = new Date(isoDate).getTime();
       const daysDiff = Math.round((rowMs - anchorMs)/86400000);
       const phone = String(Math.round(Number(r[colPhone]||0)));
+      const lookup = phoneLookup[phone];
+      const shopBlk = shopLookup[shopCode] || shopLookup[(r[colFps]||'').toString().trim()];
+      const isBlockOfficer = lookup && lookup.role === 'Block Staff';
+      const sameBlock = isBlockOfficer && officerBlockMatchesShop(lookup.designation, shopBlk);
 
+      // Update checklist (closest-to-squad-date wins), track byWhom + same-block status
       if(daysDiff >= 0 && daysDiff <= squadTol){
-        // Check officer's block vs shop's block — only mark as squad if they DIFFER.
-        // If a block officer inspects their OWN block's shops, that is regular duty (not squad).
-        const lookup = phoneLookup[phone];
-        const shopBlk = shopLookup[shopCode] || shopLookup[(r[colFps]||'').toString().trim()];
-        const isBlockOfficer = lookup && lookup.role === 'Block Staff';
-        const sameBlock = isBlockOfficer && officerBlockMatchesShop(lookup.designation, shopBlk);
-        if(!sameBlock){
-          // This row is a squad inspection
-          squadRowSet.add(phone + '|' + shopCode + '|' + isoDate);
-        }
-        // Update checklist (closest to squad date wins) — regardless of who inspected
-        if(!squadCheckList[shopCode].found || daysDiff < (squadCheckList[shopCode].daysDiff||99)){
-          squadCheckList[shopCode] = {code:shopCode, found:true, inspDate:isoDate, onTime:true, daysDiff};
+        if(!squadCheckList[shopCode].found || daysDiff < (squadCheckList[shopCode].daysDiff??99)){
+          squadCheckList[shopCode] = {code:shopCode, found:true, inspDate:isoDate, onTime:true, daysDiff, phone, sameBlock};
         }
       } else if(daysDiff > squadTol){
-        // Late — update checklist only if not already found on time
         if(!squadCheckList[shopCode].found){
-          squadCheckList[shopCode] = {code:shopCode, found:true, inspDate:isoDate, onTime:false, daysDiff};
+          squadCheckList[shopCode] = {code:shopCode, found:true, inspDate:isoDate, onTime:false, daysDiff, phone, sameBlock};
         }
       }
+
+      // Only in-tolerance different-block rows are squad candidates
+      if(daysDiff >= 0 && daysDiff <= squadTol && !sameBlock){
+        candidates.push({phone,shopCode,isoDate,daysDiff});
+      }
+    });
+
+    // Sort candidates: by phone, then by daysDiff ascending (earlier = counted as squad first)
+    candidates.sort((a,b)=> a.phone.localeCompare(b.phone) || a.daysDiff-b.daysDiff);
+
+    // Cap 3 squad deductions per phone. Excess become regular monthly.
+    const CAP_PER_PHONE = 3;
+    const phoneSquadCount = {};
+    const phoneShopSeen = {}; // "phone|shop" seen — dedupe within cap
+    candidates.forEach(cand=>{
+      const key = cand.phone + '|' + cand.shopCode;
+      if(phoneShopSeen[key]) {
+        // already counted this shop for this phone → still deduct this dup row
+        squadRowSet.add(cand.phone + '|' + cand.shopCode + '|' + cand.isoDate);
+        return;
+      }
+      phoneSquadCount[cand.phone] = (phoneSquadCount[cand.phone]||0);
+      if(phoneSquadCount[cand.phone] < CAP_PER_PHONE){
+        phoneSquadCount[cand.phone]++;
+        phoneShopSeen[key] = true;
+        squadRowSet.add(cand.phone + '|' + cand.shopCode + '|' + cand.isoDate);
+      }
+      // else: beyond cap → treat as regular (don't add to squadRowSet)
     });
 
     // Step 2: Rebuild block staff counts
@@ -2339,31 +2415,48 @@ function openSquadChecklist(){
   if(!r || !r.squadCheckList || r.squadCheckList.length===0){
     toast('No squad shops configured',true);return;
   }
-  const onTime  = r.squadCheckList.filter(x=>x.found && x.onTime);
-  const late    = r.squadCheckList.filter(x=>x.found && !x.onTime);
-  const notDone = r.squadCheckList.filter(x=>!x.found);
+  // Categorize:
+  //   onTimeSquad   = done in tolerance by different-block officer → real squad
+  //   byBlockOfficer = done (in or out of tolerance) by same-block officer → regular monthly, NOT squad
+  //   lateSquad     = done after tolerance by different-block officer → real squad, late
+  //   notDone       = never inspected
+  //   overridden    = user manually moved to monthly (via toggle)
+  const overrides = state.squadOverrides || new Set();
+  const onTimeSquad     = r.squadCheckList.filter(x=>x.found && x.onTime && !x.sameBlock && !overrides.has(x.code));
+  const byBlockOfficer  = r.squadCheckList.filter(x=>x.found && (x.sameBlock || overrides.has(x.code)));
+  const lateSquad       = r.squadCheckList.filter(x=>x.found && !x.onTime && !x.sameBlock && !overrides.has(x.code));
+  const notDone         = r.squadCheckList.filter(x=>!x.found && !overrides.has(x.code));
   const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   function fmtD(isoDate){if(!isoDate)return '';const d=new Date(isoDate);return `${d.getDate()}-${months[d.getMonth()]}-${d.getFullYear()}`;}
 
   let html = `
-    <div style="font-size:13px;color:var(--gray);margin-bottom:14px">
+    <div style="font-size:13px;color:var(--gray);margin-bottom:6px">
       Squad Date: <b>${fmtD(r.squadDate)}</b> &nbsp;|&nbsp;
       Tolerance: <b>+${r.squadTol} day${r.squadTol!==1?'s':''}</b> &nbsp;|&nbsp;
-      Total shops: <b>${r.squadCheckList.length}</b>
+      Total shops: <b>${r.squadCheckList.length}</b> &nbsp;|&nbsp;
+      Cap: <b>3 squad/phone</b>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:14px;padding:6px 10px;background:rgba(59,130,246,.08);border-radius:6px">
+      💡 <b>By block officer</b> = inspected by same block's officer as regular monthly duty (not counted as squad).
+      Use the <b>toggle</b> to manually move any shop from Squad → Regular Monthly.
     </div>
 
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">
       <div style="background:#d1fae5;border-radius:8px;padding:10px;text-align:center">
-        <div style="font-size:22px;font-weight:700;color:#065f46">${onTime.length}</div>
-        <div style="font-size:11px;color:#047857;font-weight:600">✅ Done on time</div>
+        <div style="font-size:22px;font-weight:700;color:#065f46">${onTimeSquad.length}</div>
+        <div style="font-size:10px;color:#047857;font-weight:600">✅ Squad on time</div>
       </div>
       <div style="background:#fef3c7;border-radius:8px;padding:10px;text-align:center">
-        <div style="font-size:22px;font-weight:700;color:#92400e">${late.length}</div>
-        <div style="font-size:11px;color:#b45309;font-weight:600">🕐 Done late</div>
+        <div style="font-size:22px;font-weight:700;color:#92400e">${lateSquad.length}</div>
+        <div style="font-size:10px;color:#b45309;font-weight:600">🕐 Squad late</div>
+      </div>
+      <div style="background:#dbeafe;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:22px;font-weight:700;color:#1e40af">${byBlockOfficer.length}</div>
+        <div style="font-size:10px;color:#1d4ed8;font-weight:600">👤 By block officer</div>
       </div>
       <div style="background:#fee2e2;border-radius:8px;padding:10px;text-align:center">
         <div style="font-size:22px;font-weight:700;color:#b91c1c">${notDone.length}</div>
-        <div style="font-size:11px;color:#dc2626;font-weight:600">❌ Not done</div>
+        <div style="font-size:10px;color:#dc2626;font-weight:600">❌ Not done</div>
       </div>
     </div>`;
 
@@ -2376,30 +2469,78 @@ function openSquadChecklist(){
         <th style="padding:8px 10px;text-align:center">Status</th>
         <th style="padding:8px 10px;text-align:center">Inspected On</th>
         <th style="padding:8px 10px;text-align:center">Days after</th>
+        <th style="padding:8px 10px;text-align:center">Move to<br>Regular Monthly</th>
       </tr>
     </thead><tbody>`;
 
-  // Sort: not done first, then late, then on time
-  const sorted = [...notDone, ...late, ...onTime];
+  // Sort: not done first, then late squad, then squad on time, then by block officer (last)
+  const sorted = [...notDone, ...lateSquad, ...onTimeSquad, ...byBlockOfficer];
   sorted.forEach((item,i)=>{
     const bg = i%2===0?'#f8fafc':'#fff';
-    const statusCell = item.found
-      ? (item.onTime
-          ? '<span style="color:#059669;font-weight:600">✅ On time</span>'
-          : `<span style="color:#d97706;font-weight:600">🕐 Late (+${item.daysDiff}d)</span>`)
-      : '<span style="color:#dc2626;font-weight:600">❌ Not done</span>';
+    const isOverridden = overrides.has(item.code);
+    let statusCell;
+    if(!item.found){
+      statusCell = '<span style="color:#dc2626;font-weight:600">❌ Not done</span>';
+    } else if(item.sameBlock || isOverridden){
+      statusCell = '<span style="color:#1d4ed8;font-weight:600">👤 By block officer</span>';
+    } else if(item.onTime){
+      statusCell = '<span style="color:#059669;font-weight:600">✅ On time</span>';
+    } else {
+      statusCell = `<span style="color:#d97706;font-weight:600">🕐 Late (+${item.daysDiff}d)</span>`;
+    }
+    // Toggle: only shown for shops that could be reclassified (Late, Not done, or Squad on-time by different block)
+    // Same-block auto-classified rows show a lock icon instead
+    const canToggle = !item.sameBlock; // same-block auto-classified — no need for user toggle
+    const toggleCell = canToggle
+      ? `<label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:11px">
+           <input type="checkbox" ${isOverridden?'checked':''} onchange="toggleSquadOverride('${item.code}',this.checked)">
+           <span style="color:#475569">${isOverridden?'Monthly':'Squad'}</span>
+         </label>`
+      : `<span style="color:#94a3b8;font-size:11px" title="Auto: inspected by same-block officer">🔒 auto</span>`;
+
     html += `<tr style="background:${bg}">
       <td style="padding:7px 10px;text-align:center;color:#64748b">${i+1}</td>
       <td style="padding:7px 10px;font-family:monospace;font-weight:600">${item.code}</td>
       <td style="padding:7px 10px;text-align:center">${statusCell}</td>
       <td style="padding:7px 10px;text-align:center;color:#475569">${item.inspDate?fmtD(item.inspDate):'—'}</td>
-      <td style="padding:7px 10px;text-align:center;color:#475569">${item.daysDiff!==null?'+'+item.daysDiff+'d':'—'}</td>
+      <td style="padding:7px 10px;text-align:center;color:#475569">${item.daysDiff!==null&&item.daysDiff!==undefined?'+'+item.daysDiff+'d':'—'}</td>
+      <td style="padding:7px 10px;text-align:center">${toggleCell}</td>
     </tr>`;
   });
   html += `</tbody></table></div>`;
+  html += `<div style="margin-top:14px;text-align:right">
+    <button class="btn secondary" onclick="rebuildInspectionReport()" style="font-size:13px;padding:8px 14px">
+      🔄 Recompute with current overrides
+    </button>
+  </div>`;
 
   document.getElementById('squad-checklist-content').innerHTML = html;
   document.getElementById('squad-checklist-modal').style.display = 'flex';
+}
+
+// Toggle a shop between Squad and Regular Monthly classification
+function toggleSquadOverride(shopCode, checked){
+  if(!state.squadOverrides) state.squadOverrides = new Set();
+  if(checked) state.squadOverrides.add(shopCode);
+  else state.squadOverrides.delete(shopCode);
+}
+
+// Re-run report generation with current overrides & re-open checklist
+function rebuildInspectionReport(){
+  const btn = document.getElementById('btn-process');
+  if(btn){
+    btn.click();
+    // Re-open the checklist after regeneration
+    setTimeout(()=>{
+      if(typeof showSquadChecklist==='function'){
+        // Modal was closed by regen; re-open
+        const modal = document.getElementById('squad-checklist-modal');
+        if(modal) showSquadChecklist();
+      }
+    }, 250);
+  } else {
+    toast('Please click "Generate Reports" again to apply overrides');
+  }
 }
 
 // ── SQUAD SOURCE UI EVENTS ─────────────────────────────────────────────────
@@ -4507,6 +4648,73 @@ function setupPdlMisUpload(){
   inp.addEventListener('change',e=>{
     if(e.target.files[0]) loadPdlMis(e.target.files[0]);
   });
+}
+
+// Reuse the MIS data already loaded on the Inspection Report tab (no re-upload needed).
+// Also copies over squad codes, squad date, tolerance, and any override state.
+function pdlUseInspectionReportData(){
+  if(!state.misHeaders || !state.misParsedRows){
+    toast('First generate the Inspection Report — no data cached yet',true);
+    return;
+  }
+  const headers = state.misHeaders;
+  const dataRows = state.misParsedRows;
+
+  pdl.misCols = headers;
+  pdl.misRows = dataRows.map(r=>{
+    const o = {};
+    headers.forEach((h,i)=>o[h]=r[i]);
+    return o;
+  });
+
+  document.getElementById('name-pdl-mis').textContent = '🔗 Synced from Inspection Report';
+  document.getElementById('box-pdl-mis').classList.add('has-file');
+  document.getElementById('pdl-mis-status').innerHTML =
+    `🔗 Using data from Inspection Report tab · <b>${pdl.misRows.length}</b> rows`;
+
+  document.getElementById('pdl-panel-squad').style.display='block';
+  document.getElementById('pdl-panel-targets').style.display='block';
+  document.getElementById('pdl-panel-generate').style.display='block';
+
+  // Auto-copy squad codes + date + tolerance from the Inspection Report tab, if set
+  const inspSquadDate = document.getElementById('insp-squad-date')?.value;
+  const inspSquadTol  = document.getElementById('insp-squad-tolerance')?.value;
+  const inspSquadSrc  = document.querySelector('input[name="insp-squad-src"]:checked')?.value;
+
+  if(inspSquadSrc && inspSquadSrc !== 'none' && inspSquadDate){
+    // Collect squad codes: pasted + gsheet + user overrides removed
+    const squadCodes = new Set();
+    if(inspSquadSrc === 'paste'){
+      const raw = document.getElementById('insp-squad-codes')?.value || '';
+      raw.split(/[\n,\s]+/).map(s=>s.trim().toUpperCase()).filter(Boolean).forEach(c=>squadCodes.add(c));
+    } else if(inspSquadSrc === 'gsheet' && state.squadCodes){
+      state.squadCodes.forEach(c=>squadCodes.add(c));
+    }
+    // Remove user-override shops from the squad code list (they're now Regular Monthly)
+    if(state.squadOverrides){
+      state.squadOverrides.forEach(c=>squadCodes.delete(c));
+    }
+
+    // Switch PDL squad-mode to "codes" and populate
+    const radioCodes = document.querySelector('input[name="squad-mode"][value="codes"]');
+    if(radioCodes){
+      radioCodes.checked = true;
+      radioCodes.dispatchEvent(new Event('change'));
+    }
+    const ta = document.getElementById('squad-codes-input');
+    if(ta){
+      ta.value = [...squadCodes].join('\n');
+      ta.dispatchEvent(new Event('input'));
+    }
+    const dt = document.getElementById('squad-date-codes');
+    if(dt) dt.value = inspSquadDate;
+    const tol = document.getElementById('squad-tolerance');
+    if(tol) tol.value = inspSquadTol || '2';
+  }
+
+  const overrideNote = (state.squadOverrides && state.squadOverrides.size)
+    ? ` · applied <b>${state.squadOverrides.size}</b> override(s)` : '';
+  toast('✅ Synced from Inspection Report' + overrideNote);
 }
 
 async function loadPdlMis(file){
