@@ -972,12 +972,23 @@ document.addEventListener('keydown', e=>{
   </p>
 
   <div style="background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
-    <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">Cooperative Department Categories (from Col J)</div>
+    <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">Cooperative Department Categories (from Col J — "Inspected By")</div>
     <div id="fine-coop-cats" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">
-      ${['TVM CSR Inspectio','TVM CSR Inspection','TVM DR Inspection','TVM JR Inspection','TVM SI Inspection'].map(cat=>`
-        <label style="display:flex;align-items:center;gap:5px;font-size:12px;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);border-radius:5px;padding:4px 9px;cursor:pointer">
-          <input type="checkbox" class="fine-coop-cat" value="${cat}" checked> ${cat}
-        </label>`).join('')}
+      <label style="display:flex;align-items:center;gap:5px;font-size:12px;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);border-radius:5px;padding:4px 9px;cursor:pointer">
+        <input type="checkbox" class="fine-coop-cat" value="TVM CSR Inspectio" checked> TVM CSR Inspectio
+      </label>
+      <label style="display:flex;align-items:center;gap:5px;font-size:12px;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);border-radius:5px;padding:4px 9px;cursor:pointer">
+        <input type="checkbox" class="fine-coop-cat" value="TVM CSR Inspection" checked> TVM CSR Inspection
+      </label>
+      <label style="display:flex;align-items:center;gap:5px;font-size:12px;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);border-radius:5px;padding:4px 9px;cursor:pointer">
+        <input type="checkbox" class="fine-coop-cat" value="TVM DR Inspection" checked> TVM DR Inspection
+      </label>
+      <label style="display:flex;align-items:center;gap:5px;font-size:12px;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);border-radius:5px;padding:4px 9px;cursor:pointer">
+        <input type="checkbox" class="fine-coop-cat" value="TVM JR Inspection" checked> TVM JR Inspection
+      </label>
+      <label style="display:flex;align-items:center;gap:5px;font-size:12px;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);border-radius:5px;padding:4px 9px;cursor:pointer">
+        <input type="checkbox" class="fine-coop-cat" value="TVM SI Inspection" checked> TVM SI Inspection
+      </label>
     </div>
     <div style="font-size:11px;color:var(--muted)">All other "Inspected By" values → Revenue Department</div>
   </div>
@@ -991,7 +1002,7 @@ document.addEventListener('keydown', e=>{
   <div id="fine-pdl-results" style="margin-top:8px"></div>
 </div>
 
-</div>
+</div><!-- end tab-hopdl -->
 
 <!-- ================================================================ -->
 <!-- WHATSAPP REMINDER MODULE -->
