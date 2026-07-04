@@ -4790,6 +4790,7 @@ async function loadPdlMis(file){
     document.getElementById('pdl-panel-squad').style.display='block';
     document.getElementById('pdl-panel-targets').style.display='block';
     document.getElementById('pdl-panel-generate').style.display='block';
+    document.getElementById('pdl-fine-panel').style.display='block';
 
     toast('MIS loaded');
   }catch(err){
@@ -11380,8 +11381,13 @@ function computeFinePDLData(){
     return null;
   }
 
-  // Shop→block map: prefer pdl.shopMap, then state.shopMap
+  // Shop→block map: pdl.shopMap → state.shopMap → BUILT_IN_SHOP_BLOCK (always available)
   const shopLookup = {};
+  // First populate from BUILT_IN_SHOP_BLOCK (covers all 1629 shops)
+  if(typeof BUILT_IN_SHOP_BLOCK !== 'undefined'){
+    Object.entries(BUILT_IN_SHOP_BLOCK).forEach(([code,blk])=>{ shopLookup[code.toUpperCase()]=blk; });
+  }
+  // Override/supplement with any uploaded shop map
   const smap = (pdl.shopMap && pdl.shopMap.length) ? pdl.shopMap : (state.shopMap||[]);
   smap.forEach(s=>{
     const code = (s.Shop_Code||s.shop_code||s['Shop Code']||'').toString().trim().toUpperCase();
@@ -11389,6 +11395,11 @@ function computeFinePDLData(){
   });
 
   const coopCats = new Set(getCoopCats());
+  // If no checkboxes found (panel hidden / not yet in DOM), use defaults
+  if(coopCats.size === 0){
+    ['TVM CSR Inspectio','TVM CSR Inspection','TVM DR Inspection','TVM JR Inspection','TVM SI Inspection']
+      .forEach(v=>coopCats.add(v));
+  }
 
   // Fine rates for cross-check
   const riceFields = ['Raw Rice(kg)','Boiled Rice (kg)','Raw Rice AAY (kg)','Boiled Rice AAY (kg)',
@@ -11409,7 +11420,7 @@ function computeFinePDLData(){
     if(!blocks[blk]) blocks[blk]={coop:{fine:0,agency:0,govt:0,count:0,rows:[]},rev:{fine:0,agency:0,govt:0,count:0,rows:[]}};
     const agency = parseFloat(row['Remittance To Agency']||0)||0;
     const govt   = parseFloat(row['Remittance To Government']||0)||0;
-    const ib = (row['Inspected By']||'').toString().trim();
+    const ib = ((row['Inspected By']||row['Inspector Type']||'')+'').trim();
     const isCoop = coopCats.has(ib);
 
     // Cross-check calc
