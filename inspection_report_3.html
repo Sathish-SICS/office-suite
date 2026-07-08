@@ -9532,20 +9532,20 @@ async function pdlUploadBasicData(input){
         rows = data.slice(1).filter(r=>r[9]&&String(r[9]).trim()); // col 10 = shop code
         break;
       }
-      // Old format: shop code at col 2, FT/PT at col 10
-      if(h[1] && String(h[1]).includes('குறியீடு') && h[9] && String(h[9]).includes('நேரம்')){
+      // Old format: col7=shop code (கடை குறியீடு எண்), col9=FT/PT (முழுநேரம்), col10=cards, col17=urban
+      if(h[7] && String(h[7]).includes('குறியீடு') && h[9] && String(h[9]).includes('நேரம்')){
         format = 'old';
-        rows = data.slice(1).filter(r=>r[1]&&String(r[1]).trim());
+        rows = data.slice(1).filter(r=>r[7]&&String(r[7]).trim());
         break;
       }
-      // Fallback: try to detect by column count/content
+      // Old format fallback: shop code at col7 matches FPS code pattern
       if(data[1] && data[1].length >= 10){
         const sample = data[1];
-        if(String(sample[1]||'').match(/^\d{2}[A-Z]/)){
-          format = 'old'; rows = data.slice(1).filter(r=>r[1]); break;
+        if(String(sample[7]||'').match(/^0[0-9][A-Z]{2}\d{3}/)){
+          format = 'old'; rows = data.slice(1).filter(r=>r[7]&&String(r[7]).trim()); break;
         }
-        if(String(sample[9]||'').match(/^\d{2}[A-Z]/)){
-          format = 'new'; rows = data.slice(1).filter(r=>r[9]); break;
+        if(String(sample[9]||'').match(/^0[0-9][A-Z]{2}\d{3}/)){
+          format = 'new'; rows = data.slice(1).filter(r=>r[9]&&String(r[9]).trim()); break;
         }
       }
     }
@@ -9595,15 +9595,28 @@ function pdlParseBasicData(rows, format){
   const col = format === 'new' ? {
     shopCode:9, shopName:10, ftpt:11, cards:12, building:16, urban:8, agency:6
   } : {
-    shopCode:1, shopName:7, ftpt:9, cards:10, building:12, urban:19, agency:5
+    // Old format: col0=sl, col1=block, col7=shopCode, col9=FT/PT, col10=cards,
+    // col11=building type, col12=building detail, col17=urban/rural
+    shopCode:7, shopName:6, ftpt:9, cards:10, building:11, urban:17, agency:4
   };
 
   let rural_ft=0,rural_pt=0,urban_ft=0,urban_pt=0,shg_ft=0,shg_pt=0,tncsc_ft=0,tncsc_pt=0;
   let ft_own=0,ft_govt=0,ft_rent=0,ft_free=0,pt_own=0,pt_govt=0,pt_rent=0,pt_free=0;
-  const cardBuckets = {
-    '1-100':0,'101-200':0,'201-300':0,'301-400':0,'401-500':0,
-    '501-600':0,'601-700':0,'701-800':0,'801-900':0,'901-1000':0,'>1000':0
-  };
+  const FORM11_BANDS = [
+    [1,100,'1-100'],[101,200,'101-200'],[201,300,'201-300'],[301,400,'301-400'],
+    [401,500,'401-500'],[501,600,'501-600'],[601,700,'601-700'],[701,800,'701-800'],
+    [801,900,'801-900'],[901,1000,'901-1000'],[1001,1100,'1001-1100'],
+    [1101,1200,'1101-1200'],[1201,1300,'1201-1300'],[1301,1400,'1301-1400'],
+    [1401,1500,'1401-1500'],[1501,1600,'1501-1600'],[1601,1700,'1601-1700'],
+    [1701,1800,'1701-1800'],[1801,1900,'1801-1900'],[1901,2000,'1901-2000'],
+    [2001,Infinity,'Above 2000']
+  ];
+  function getForm11Band(cards){
+    for(const [lo,hi,lbl] of FORM11_BANDS){ if(cards>=lo && cards<=hi) return lbl; }
+    return 'Above 2000';
+  }
+  const cardBuckets = {};
+  FORM11_BANDS.forEach(([lo,hi,lbl])=>cardBuckets[lbl]=0);
 
   rows.forEach(r=>{
     const ftpt  = String(r[col.ftpt]||'').trim();
@@ -9646,20 +9659,8 @@ function pdlParseBasicData(rows, format){
       else pt_govt++;
     }
 
-    // Card strength buckets
-    if(cards>0){
-      if(cards<=100) cardBuckets['1-100']++;
-      else if(cards<=200) cardBuckets['101-200']++;
-      else if(cards<=300) cardBuckets['201-300']++;
-      else if(cards<=400) cardBuckets['301-400']++;
-      else if(cards<=500) cardBuckets['401-500']++;
-      else if(cards<=600) cardBuckets['501-600']++;
-      else if(cards<=700) cardBuckets['601-700']++;
-      else if(cards<=800) cardBuckets['701-800']++;
-      else if(cards<=900) cardBuckets['801-900']++;
-      else if(cards<=1000) cardBuckets['901-1000']++;
-      else cardBuckets['>1000']++;
-    }
+    // Card strength buckets (21 bands)
+    if(cards>0){ cardBuckets[getForm11Band(cards)]++; }
   });
 
   // Update Form 5 data
@@ -9682,31 +9683,20 @@ function pdlParseBasicData(rows, format){
   // For now fill ft_r with FT total proportionally (exact split needs Urban flag per bucket)
   // Re-scan for FT/PT × urban breakdown per bucket
   const bucketData = {};
-  Object.keys(cardBuckets).forEach(k=>bucketData[k]={ft_r:0,ft_u:0,pt_r:0,pt_u:0});
+  FORM11_BANDS.forEach(([lo,hi,lbl])=>bucketData[lbl]={ft_r:0,ft_u:0,pt_r:0,pt_u:0});
   rows.forEach(r=>{
     const ftpt = String(r[col.ftpt]||'').trim();
     const isFT = ftpt.includes('முழு');
     const cards = +r[col.cards]||0;
     const urban = String(r[col.urban]||'').trim();
     const isUrban = urban.includes('நகர்');
-    let bucket = null;
-    if(cards<=100&&cards>0) bucket='1-100';
-    else if(cards<=200) bucket='101-200';
-    else if(cards<=300) bucket='201-300';
-    else if(cards<=400) bucket='301-400';
-    else if(cards<=500) bucket='401-500';
-    else if(cards<=600) bucket='501-600';
-    else if(cards<=700) bucket='601-700';
-    else if(cards<=800) bucket='701-800';
-    else if(cards<=900) bucket='801-900';
-    else if(cards<=1000) bucket='901-1000';
-    else if(cards>1000) bucket='>1000';
-    if(bucket){
+    if(cards>0){
+      const bucket = getForm11Band(cards);
       if(isFT){ if(isUrban) bucketData[bucket].ft_u++; else bucketData[bucket].ft_r++; }
       else     { if(isUrban) bucketData[bucket].pt_u++; else bucketData[bucket].pt_r++; }
     }
   });
-  pdlSheet.f11.rows = Object.entries(bucketData).map(([range,b])=>({range,...b}));
+  pdlSheet.f11.rows = FORM11_BANDS.map(([lo,hi,lbl])=>({range:lbl,...(bucketData[lbl]||{ft_r:0,ft_u:0,pt_r:0,pt_u:0})}));
 }
 
 // ── MIS OFFTAKE UPLOAD ───────────────────────────────────────
@@ -9989,21 +9979,12 @@ if(pdlSheet.f1.rows.length===0){
   ];
 }
 
-// Default Form 11 rows
+// Default Form 11 rows (21 bands, matches official format)
 if(pdlSheet.f11.rows.length===0){
-  pdlSheet.f11.rows = [
-    {range:'1-100',ft_r:4,ft_u:0,pt_r:37,pt_u:0},
-    {range:'101-200',ft_r:60,ft_u:0,pt_r:209,pt_u:0},
-    {range:'201-300',ft_r:138,ft_u:0,pt_r:159,pt_u:5},
-    {range:'301-400',ft_r:150,ft_u:1,pt_r:80,pt_u:1},
-    {range:'401-500',ft_r:161,ft_u:6,pt_r:48,pt_u:3},
-    {range:'501-600',ft_r:144,ft_u:12,pt_r:18,pt_u:2},
-    {range:'601-700',ft_r:120,ft_u:9,pt_r:17,pt_u:2},
-    {range:'701-800',ft_r:81,ft_u:19,pt_r:5,pt_u:0},
-    {range:'801-900',ft_r:49,ft_u:15,pt_r:2,pt_u:0},
-    {range:'901-1000',ft_r:48,ft_u:17,pt_r:0,pt_u:0},
-    {range:'>1000',ft_r:147,ft_u:65,pt_r:13,pt_u:0},
-  ];
+  const _f11bands=['1-100','101-200','201-300','301-400','401-500','501-600','601-700',
+    '701-800','801-900','901-1000','1001-1100','1101-1200','1201-1300','1301-1400',
+    '1401-1500','1501-1600','1601-1700','1701-1800','1801-1900','1901-2000','Above 2000'];
+  pdlSheet.f11.rows = _f11bands.map(r=>({range:r,ft_r:0,ft_u:0,pt_r:0,pt_u:0}));
 }
 
 // ── HELPER: editable number input ──────────────────────────
@@ -10353,42 +10334,62 @@ const PDL_FORM_RENDERERS = {
 
   f11(panel){
     const rows=pdlSheet.f11.rows;
+    const totFR=rows.reduce((s,r)=>s+(r.ft_r||0),0);
+    const totFU=rows.reduce((s,r)=>s+(r.ft_u||0),0);
+    const totPR=rows.reduce((s,r)=>s+(r.pt_r||0),0);
+    const totPU=rows.reduce((s,r)=>s+(r.pt_u||0),0);
     panel.innerHTML=`
     <div class="pdl-panel">
       <h3>📈 Form 11 — Card Strength Particulars</h3>
       <div class="pdl-source-box">
         <span class="pdl-source-label">🗄️ Basic Data</span>
-        <span style="font-size:11px;color:var(--muted);flex:1">Card strength distribution across shops</span>
+        <span style="font-size:11px;color:var(--muted);flex:1">Card strength distribution across shops (21 bands)</span>
         <button class="btn-tiny" onclick="pdlExportForm11()" style="background:rgba(52,211,153,.15);border-color:rgba(52,211,153,.4);color:#6ee7b7">📥 Download</button>
       </div>
-      <table class="pdls-table" style="max-width:680px">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Name of the Region: Thiruvannamalai &nbsp;·&nbsp; ${pdlMonthLabel?pdlMonthLabel():''}</div>
+      <div style="overflow-x:auto">
+      <table class="pdls-table" style="max-width:750px">
         <thead>
-          <tr><th>Card Strength</th><th class="num">FTS Rural</th><th class="num">FTS Urban</th><th class="num">FTS Total</th><th class="num">PTS Rural</th><th class="num">PTS Urban</th><th class="num">PTS Total</th></tr>
+          <tr>
+            <th rowspan="2" class="num" style="text-align:center;min-width:36px">Sl.No</th>
+            <th rowspan="2" style="min-width:100px">Card Strength</th>
+            <th colspan="3" style="text-align:center;background:rgba(6,95,70,.6)">No of FTS</th>
+            <th colspan="3" style="text-align:center;background:rgba(30,58,138,.6)">No of PTS</th>
+          </tr>
+          <tr>
+            <th class="num" style="background:rgba(6,95,70,.4)">Rural</th>
+            <th class="num" style="background:rgba(6,95,70,.4)">Urban</th>
+            <th class="num" style="background:rgba(6,95,70,.4)">Total</th>
+            <th class="num" style="background:rgba(30,58,138,.4)">Rural</th>
+            <th class="num" style="background:rgba(30,58,138,.4)">Urban</th>
+            <th class="num" style="background:rgba(30,58,138,.4)">Total</th>
+          </tr>
         </thead>
         <tbody>
           ${rows.map((r,i)=>{
             const ftTot=(r.ft_r||0)+(r.ft_u||0); const ptTot=(r.pt_r||0)+(r.pt_u||0);
             return `<tr>
+              <td class="num" style="color:var(--muted);font-size:11px">${i+1}</td>
               <td style="font-weight:600">${r.range}</td>
               <td class="num editable">${pdlNum(r.ft_r,'f11.rows.'+i+'.ft_r')}</td>
               <td class="num editable">${pdlNum(r.ft_u,'f11.rows.'+i+'.ft_u')}</td>
-              <td class="num" style="color:#93c5fd">${ftTot}</td>
+              <td class="num" style="color:#93c5fd;font-weight:700">${ftTot||0}</td>
               <td class="num editable">${pdlNum(r.pt_r,'f11.rows.'+i+'.pt_r')}</td>
               <td class="num editable">${pdlNum(r.pt_u,'f11.rows.'+i+'.pt_u')}</td>
-              <td class="num" style="color:#fbbf24">${ptTot}</td>
+              <td class="num" style="color:#fbbf24;font-weight:700">${ptTot||0}</td>
             </tr>`;
           }).join('')}
-          <tr style="background:rgba(30,58,138,.3);font-weight:700">
-            <td>Total</td>
-            <td class="num">${rows.reduce((s,r)=>s+(r.ft_r||0),0)}</td>
-            <td class="num">${rows.reduce((s,r)=>s+(r.ft_u||0),0)}</td>
-            <td class="num" style="color:#34d399">${rows.reduce((s,r)=>s+(r.ft_r||0)+(r.ft_u||0),0)}</td>
-            <td class="num">${rows.reduce((s,r)=>s+(r.pt_r||0),0)}</td>
-            <td class="num">${rows.reduce((s,r)=>s+(r.pt_u||0),0)}</td>
-            <td class="num" style="color:#34d399">${rows.reduce((s,r)=>s+(r.pt_r||0)+(r.pt_u||0),0)}</td>
+          <tr style="background:rgba(30,58,138,.4);font-weight:700">
+            <td colspan="2" style="text-align:center">Total</td>
+            <td class="num">${totFR}</td>
+            <td class="num">${totFU}</td>
+            <td class="num" style="color:#34d399">${totFR+totFU}</td>
+            <td class="num">${totPR}</td>
+            <td class="num">${totPU}</td>
+            <td class="num" style="color:#34d399">${totPR+totPU}</td>
           </tr>
         </tbody>
-      </table>
+      </table></div>
     </div>`;
   },
 
@@ -10659,16 +10660,31 @@ function pdlExportForm10(){
 
 function pdlExportForm11(){
   const rows=pdlSheet.f11.rows; const wb=XLSX.utils.book_new();
-  const ws=XLSX.utils.aoa_to_sheet([
-    ['Form 11 — Card Strength Particulars | '+pdlMonthLabel()],
-    ['Card Strength','FTS Rural','FTS Urban','FTS Total','PTS Rural','PTS Urban','PTS Total'],
-    ...rows.map(r=>[ r.range,r.ft_r,r.ft_u,(r.ft_r||0)+(r.ft_u||0),r.pt_r,r.pt_u,(r.pt_r||0)+(r.pt_u||0)]),
-    ['Total',
-      rows.reduce((s,r)=>s+(r.ft_r||0),0),rows.reduce((s,r)=>s+(r.ft_u||0),0),
-      rows.reduce((s,r)=>s+(r.ft_r||0)+(r.ft_u||0),0),
-      rows.reduce((s,r)=>s+(r.pt_r||0),0),rows.reduce((s,r)=>s+(r.pt_u||0),0),
-      rows.reduce((s,r)=>s+(r.pt_r||0)+(r.pt_u||0),0)]
-  ]);
+  const mon = pdlMonthLabel ? pdlMonthLabel() : (pdlSheet.month||'');
+  const totFR=rows.reduce((s,r)=>s+(r.ft_r||0),0);
+  const totFU=rows.reduce((s,r)=>s+(r.ft_u||0),0);
+  const totPR=rows.reduce((s,r)=>s+(r.pt_r||0),0);
+  const totPU=rows.reduce((s,r)=>s+(r.pt_u||0),0);
+  const wsData=[
+    ['FORM - 11','','','','','','',''],
+    ['Name of the Region  : Thiruvannamalai','Month:',mon,'','','','',''],
+    ['Form 11   -  Card Strength Particulars','','','','','','',''],
+    ['Sl.No','Card strength','No of FTS','','','No of PTS','',''],
+    ['','','Rural','Urban','Total','Rural','Urban','Total'],
+    ...rows.map((r,i)=>[i+1, r.range, r.ft_r||0, r.ft_u||0, (r.ft_r||0)+(r.ft_u||0), r.pt_r||0, r.pt_u||0, (r.pt_r||0)+(r.pt_u||0)]),
+    ['Total','', totFR, totFU, totFR+totFU, totPR, totPU, totPR+totPU]
+  ];
+  const ws=XLSX.utils.aoa_to_sheet(wsData);
+  ws['!cols']=[{wch:6},{wch:14},{wch:10},{wch:10},{wch:10},{wch:10},{wch:10},{wch:10}];
+  ws['!merges']=[
+    {s:{r:0,c:0},e:{r:0,c:7}},
+    {s:{r:1,c:2},e:{r:1,c:7}},
+    {s:{r:2,c:0},e:{r:2,c:7}},
+    {s:{r:3,c:0},e:{r:4,c:0}},
+    {s:{r:3,c:1},e:{r:4,c:1}},
+    {s:{r:3,c:2},e:{r:3,c:4}},
+    {s:{r:3,c:5},e:{r:3,c:7}},
+  ];
   XLSX.utils.book_append_sheet(wb,ws,'Form 11');
   XLSX.writeFile(wb,`PDL_Form11_${pdlSheet.month||'draft'}.xlsx`);
   toast('Form 11 downloaded');
