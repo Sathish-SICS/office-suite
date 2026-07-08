@@ -1018,6 +1018,7 @@ document.addEventListener('keydown', e=>{
       <option value="__all__">🌐 All Blocks (combined download)</option>
     </select>
     <button class="btn success" onclick="downloadDeficitPDL()">📥 Download Excel</button>
+    <button class="btn secondary" onclick="printDeficitPDF()">🖨️ Print / PDF</button>
     <button class="btn secondary" onclick="renderDeficitPreview()">🔄 Refresh</button>
   </div>
 
@@ -11928,6 +11929,98 @@ function downloadDeficitPDL(){
 
 // Auto-render preview after Fine PDL is generated
 const _origGenerateFinePDL = typeof generateFinePDL === 'function' ? generateFinePDL : null;
+
+// Print/PDF using html2canvas (preserves Tamil text) + jsPDF multi-page
+async function printDeficitPDF(){
+  const summary = computeDeficitSummary();
+  if(!summary){ toast('Load MIS report first', true); return; }
+  const sel = document.getElementById('deficit-block-select').value;
+  const isAll = sel === '__all__';
+  const month = pdl.month || new Date().toISOString().slice(0,7);
+  const preview = document.getElementById('deficit-preview');
+  if(!preview || !preview.querySelector('table')){
+    renderDeficitPreview();
+    await new Promise(r=>setTimeout(r,80));
+  }
+
+  toast('Preparing PDF — please wait...');
+
+  // Build an off-screen render container styled for PDF (white background)
+  const holder = document.createElement('div');
+  holder.style.cssText = 'position:fixed;left:-10000px;top:0;width:1100px;background:white;padding:20px;color:#1e293b;font-family:sans-serif';
+
+  // Header
+  const header = document.createElement('div');
+  header.style.cssText = 'text-align:center;margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid #1e40af';
+  header.innerHTML = `<div style="font-size:16px;font-weight:700;color:#1e40af">ஆய்வின் போது காணப்பட்ட குறைகளின் தொகுப்பு விவரம்</div>
+    <div style="font-size:12px;color:#475569;margin-top:4px">Deficit Summary PDL &nbsp;·&nbsp; Month: <b>${month}</b> &nbsp;·&nbsp; ${isAll?'All Blocks':sel}</div>`;
+  holder.appendChild(header);
+
+  // Clone the preview content into the holder
+  const previewClone = preview.cloneNode(true);
+  // Ensure white background for PDF
+  previewClone.querySelectorAll('*').forEach(el=>{
+    const cs = el.style;
+    if(cs && cs.color === 'var(--muted)') cs.color = '#64748b';
+    if(cs && cs.color === 'var(--ink)')   cs.color = '#1e293b';
+  });
+  holder.appendChild(previewClone);
+
+  document.body.appendChild(holder);
+
+  try{
+    const canvas = await html2canvas(holder, {
+      backgroundColor: '#ffffff', scale: 2, useCORS: true,
+      width: holder.scrollWidth, height: holder.scrollHeight,
+      windowWidth: holder.scrollWidth + 40
+    });
+
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({orientation:'portrait', unit:'mm', format:'a4'});
+    const pageW = 210, pageH = 297;
+    const margin = 8;
+    const contentW = pageW - margin*2;
+    const imgH = (canvas.height * contentW) / canvas.width;
+
+    if(imgH <= pageH - margin*2){
+      // Single page
+      const img = canvas.toDataURL('image/png');
+      pdf.addImage(img, 'PNG', margin, margin, contentW, imgH);
+    } else {
+      // Multi-page: slice the canvas vertically
+      const pageContentH = pageH - margin*2;
+      const pxPerMm = canvas.width / contentW;
+      const slicePx = pageContentH * pxPerMm;
+      let yPx = 0;
+      let pageNum = 0;
+
+      while(yPx < canvas.height){
+        const sliceHeight = Math.min(slicePx, canvas.height - yPx);
+        const tmp = document.createElement('canvas');
+        tmp.width = canvas.width;
+        tmp.height = sliceHeight;
+        const ctx = tmp.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, tmp.width, tmp.height);
+        ctx.drawImage(canvas, 0, yPx, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
+        const sliceMm = (sliceHeight / pxPerMm);
+        if(pageNum > 0) pdf.addPage();
+        pdf.addImage(tmp.toDataURL('image/png'), 'PNG', margin, margin, contentW, sliceMm);
+        yPx += sliceHeight;
+        pageNum++;
+      }
+    }
+
+    const suffix = isAll ? 'All_Blocks' : sel.replace(/\s+/g,'_');
+    pdf.save(`Deficit_Summary_${suffix}_${month}.pdf`);
+    toast('✓ PDF downloaded');
+  } catch(e){
+    console.error(e);
+    toast('PDF export failed: '+e.message, true);
+  } finally {
+    document.body.removeChild(holder);
+  }
+}
 
 // ── PDL TAB INIT ────────────────────────────────────────────
 const _pdlTabOrig = document.querySelector('[data-tab="pdlsheet"]');
