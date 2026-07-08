@@ -1002,6 +1002,28 @@ document.addEventListener('keydown', e=>{
   <div id="fine-pdl-results" style="margin-top:8px"></div>
 </div>
 
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- DEFICIT DETAILS PDL (Aparadhi Summary)                          -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="panel" id="pdl-deficit-panel" style="display:none">
+  <h2><span class="dot"></span> 📋 ஆய்வின் போது காணப்பட்ட குறைகளின் தொகுப்பு விவரம் — Deficit Summary PDL</h2>
+  <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
+    Categorised violation summary per block. Row 1 (Essential commodities) auto-populated from commodity deficits in MIS;<br>
+    Row 4 (Excess) auto-populated from positive commodity values; Rows 2, 3, 5, 6 left blank for manual entry.
+  </p>
+
+  <div style="background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px;display:flex;flex-wrap:wrap;gap:12px;align-items:center">
+    <label style="font-weight:700;font-size:12px;color:var(--muted)">Select Block:</label>
+    <select id="deficit-block-select" onchange="renderDeficitPreview()" style="background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:6px 10px;border-radius:6px;min-width:220px">
+      <option value="__all__">🌐 All Blocks (combined download)</option>
+    </select>
+    <button class="btn success" onclick="downloadDeficitPDL()">📥 Download Excel</button>
+    <button class="btn secondary" onclick="renderDeficitPreview()">🔄 Refresh</button>
+  </div>
+
+  <div id="deficit-preview" style="margin-top:8px"></div>
+</div>
+
 </div><!-- end tab-hopdl -->
 
 <!-- ================================================================ -->
@@ -4717,7 +4739,11 @@ function pdlUseInspectionReportData(){
   document.getElementById('pdl-panel-targets').style.display='block';
   document.getElementById('pdl-panel-generate').style.display='block';
   document.getElementById('pdl-fine-panel').style.display='block';
+  document.getElementById('pdl-deficit-panel').style.display='block';
+  populateDeficitBlockSelector();
   document.getElementById('pdl-fine-panel').style.display='block';
+  document.getElementById('pdl-deficit-panel').style.display='block';
+  populateDeficitBlockSelector();
 
   // Auto-copy squad codes + date + tolerance from the Inspection Report tab, if set
   const inspSquadDate = document.getElementById('insp-squad-date')?.value;
@@ -4791,6 +4817,8 @@ async function loadPdlMis(file){
     document.getElementById('pdl-panel-targets').style.display='block';
     document.getElementById('pdl-panel-generate').style.display='block';
     document.getElementById('pdl-fine-panel').style.display='block';
+  document.getElementById('pdl-deficit-panel').style.display='block';
+  populateDeficitBlockSelector();
 
     toast('MIS loaded');
   }catch(err){
@@ -11561,6 +11589,9 @@ function generateFinePDL(){
 
   document.getElementById('fine-pdl-results').innerHTML = html;
   toast('Fine PDL generated');
+  // Also refresh deficit preview
+  if(typeof populateDeficitBlockSelector === 'function') populateDeficitBlockSelector();
+  if(typeof renderDeficitPreview === 'function') renderDeficitPreview();
 }
 
 async function downloadFinePDLExcel(){
@@ -11650,6 +11681,253 @@ async function downloadFinePDLPDF(){
   doc.save(`Fine_PDL_${month}.pdf`);
   toast('Fine PDL PDF downloaded');
 }
+
+// ══════════════════════════════════════════════════════════════════════════
+// DEFICIT SUMMARY PDL (ஆய்வின் போது காணப்பட்ட குறைகளின் தொகுப்பு விவரம்)
+// ══════════════════════════════════════════════════════════════════════════
+
+// The 6 category rows shown in the official format
+const DEFICIT_CATS = [
+  {id:1, label:'அத்தியாவசியப் பொருட்கள் இருப்புக் குறைவு', labelEn:'Essential commodities stock deficit', auto:true},
+  {id:2, label:'கையிருப்புக் குறைவு',                     labelEn:'Hand stock deficit',              auto:false},
+  {id:3, label:'போலிப்பதிவுகள்',                          labelEn:'Fake entries',                    auto:true},
+  {id:4, label:'இருப்பு அதிகம்',                          labelEn:'Excess stock',                    auto:true},
+  {id:5, label:'காலிசாக்குகள் இருப்புக் குறைவை',           labelEn:'Empty gunnies deficit',           auto:false},
+  {id:6, label:'கட்டுப்பாடற்ற பொருட்கள் இருப்புக் குறைவு',  labelEn:'Uncontrolled items deficit',      auto:false},
+];
+
+function populateDeficitBlockSelector(){
+  const sel = document.getElementById('deficit-block-select');
+  if(!sel) return;
+  // Keep first "All" option, remove rest
+  const current = sel.value;
+  sel.innerHTML = '<option value="__all__">🌐 All Blocks (combined download)</option>';
+  FINE_PDL_BLOCK_ORDER.forEach(b=>{
+    const opt = document.createElement('option');
+    opt.value = b; opt.textContent = b;
+    sel.appendChild(opt);
+  });
+  if(current && [...sel.options].some(o=>o.value===current)) sel.value = current;
+}
+
+// Categorize a single MIS row into one of the 6 deficit categories.
+// Returns cat id (1..6) or null if the row doesn't count as a violation.
+function classifyDeficitRow(row){
+  const fine = parseFloat(row['Fine Amount (Rs)']||0)||0;
+  if(fine === 0) return null;
+
+  const remarks = ((row['Remarks']||'')+'').toLowerCase().trim();
+
+  // Row 3: Fake entries — Remarks contains 'fake' or 'போலி' or 'bogus'
+  if(remarks.includes('fake')||remarks.includes('போலி')||remarks.includes('bogus')) return 3;
+
+  // Row 5: Empty gunnies — Remarks contains 'gunny' or 'காலிசாக்கு'
+  if(remarks.includes('gunny')||remarks.includes('gunnies')||remarks.includes('காலிசாக்கு')||remarks.includes('காலிச்சாக்கு')) return 5;
+
+  // Row 6: Uncontrolled items — 'uncontrolled' or 'கட்டுப்பாடு'
+  if(remarks.includes('uncontrol')||remarks.includes('கட்டுப்பாட')) return 6;
+
+  // Row 2: Hand stock deficit — 'hand stock' or 'கையிருப்பு'
+  if(remarks.includes('hand stock')||remarks.includes('கையிருப்பு')) return 2;
+
+  // Auto-detect Row 1 (deficit) vs Row 4 (excess) from commodity qty
+  const commFields = ['Raw Rice(kg)','Boiled Rice (kg)','Raw Rice AAY (kg)','Boiled Rice AAY (kg)',
+    'P Boiled Rice (kg)','P Raw Rice (kg)','PHH Boiled Rice (kg)','PHH RAW RICE (kg)',
+    'Sugar (kg)','Wheat (kg)','ToorDhall (kg)','PalmOil (pkt)'];
+  let anyNeg=false, anyPos=false;
+  commFields.forEach(f=>{
+    const v = parseFloat(row[f]||0);
+    if(v < 0) anyNeg = true;
+    else if(v > 0) anyPos = true;
+  });
+
+  if(anyPos && !anyNeg) return 4; // pure excess
+  if(anyNeg) return 1;            // deficit (essential commodities)
+  return 1;                        // default to Row 1 (essential commodities)
+}
+
+// Compute per-block deficit summary
+function computeDeficitSummary(){
+  if(!pdl.misRows || pdl.misRows.length===0) return null;
+
+  // Shop→block map (same fallback chain as Fine PDL)
+  const shopLookup = {};
+  if(typeof BUILT_IN_SHOP_BLOCK !== 'undefined'){
+    Object.entries(BUILT_IN_SHOP_BLOCK).forEach(([code,blk])=>{ shopLookup[code.toUpperCase()]=blk; });
+  }
+  const smap = (pdl.shopMap && pdl.shopMap.length) ? pdl.shopMap : (state.shopMap||[]);
+  smap.forEach(s=>{
+    const code = (s.Shop_Code||s.shop_code||s['Shop Code']||'').toString().trim().toUpperCase();
+    if(code) shopLookup[code] = (s.Block||s.block||'').toString().trim();
+  });
+
+  // {block: {catId: {shopSet:Set, amount:number}}}
+  const summary = {};
+  FINE_PDL_BLOCK_ORDER.forEach(b=>{
+    summary[b] = {};
+    DEFICIT_CATS.forEach(c=>{
+      summary[b][c.id] = {shops:new Set(), amount:0};
+    });
+  });
+
+  pdl.misRows.forEach(row=>{
+    const sc = (row['FPS Code']||'').toString().trim().toUpperCase();
+    const blk = shopLookup[sc] || 'Unknown';
+    if(!summary[blk]) return;
+    const catId = classifyDeficitRow(row);
+    if(!catId) return;
+    const fine = parseFloat(row['Fine Amount (Rs)']||0)||0;
+    summary[blk][catId].shops.add(sc);
+    summary[blk][catId].amount += fine;
+  });
+
+  return summary;
+}
+
+function renderDeficitPreview(){
+  const summary = computeDeficitSummary();
+  const preview = document.getElementById('deficit-preview');
+  if(!summary){ preview.innerHTML = '<div style="color:var(--muted);padding:14px">Load MIS report first.</div>'; return; }
+
+  const sel = document.getElementById('deficit-block-select').value;
+  const isAll = sel === '__all__';
+  const blocksToShow = isAll ? FINE_PDL_BLOCK_ORDER : [sel];
+
+  let html = '';
+  if(isAll){
+    html += `<div style="color:var(--muted);font-size:12px;margin-bottom:10px">Showing preview for <b style="color:var(--ink)">${FINE_PDL_BLOCK_ORDER.length} blocks</b>. Excel download will include one sheet per block.</div>`;
+  }
+
+  blocksToShow.forEach(blk=>{
+    const bd = summary[blk] || {};
+    let totalShops = 0, totalAmount = 0;
+    html += `<div style="margin-bottom:22px">
+      <div style="background:#1e40af;color:white;padding:10px 14px;border-radius:8px 8px 0 0;font-weight:700">📋 ${blk}</div>
+      <div style="overflow-x:auto;background:white;border-radius:0 0 8px 8px;border:1px solid #cbd5e1;color:#1e293b">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="background:#3b82f6;color:white">
+            <th rowspan="2" style="padding:8px 6px;border:1px solid #93c5fd;text-align:center;width:40px">வ.எண்</th>
+            <th rowspan="2" style="padding:8px 6px;border:1px solid #93c5fd;text-align:left;min-width:200px">விவரம்</th>
+            <th rowspan="2" style="padding:8px 6px;border:1px solid #93c5fd;text-align:center">தவறு கண்டுபிடிக்கப்பட்ட FPS எண்</th>
+            <th rowspan="2" style="padding:8px 6px;border:1px solid #93c5fd;text-align:center">கண்டுபிடிக்கப்பட்ட தொகை ரூ.</th>
+            <th colspan="2" style="padding:8px 6px;border:1px solid #93c5fd;text-align:center;background:#1d4ed8">வசூல் விவரம்</th>
+          </tr>
+          <tr style="background:#3b82f6;color:white">
+            <th style="padding:6px;border:1px solid #93c5fd;text-align:center">தேதி</th>
+            <th style="padding:6px;border:1px solid #93c5fd;text-align:center">தொகை ரூ.</th>
+          </tr>
+        </thead>
+        <tbody>`;
+
+    DEFICIT_CATS.forEach(cat=>{
+      const d = bd[cat.id] || {shops:new Set(), amount:0};
+      const nShops = d.shops.size;
+      const amt = d.amount;
+      totalShops += nShops;
+      totalAmount += amt;
+      const dashIfZero = v => v===0 ? '<span style="color:#94a3b8">—</span>' : v;
+      html += `<tr>
+        <td style="padding:8px;border:1px solid #e2e8f0;text-align:center;color:#64748b">${cat.id}</td>
+        <td style="padding:8px;border:1px solid #e2e8f0"><div>${cat.label}</div><div style="font-size:10px;color:#64748b">${cat.labelEn}</div></td>
+        <td style="padding:8px;border:1px solid #e2e8f0;text-align:center;font-weight:${nShops?600:400}">${dashIfZero(nShops)}</td>
+        <td style="padding:8px;border:1px solid #e2e8f0;text-align:right;font-weight:${amt?600:400}">${amt?amt.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}):'<span style="color:#94a3b8">—</span>'}</td>
+        <td style="padding:8px;border:1px solid #e2e8f0;text-align:center;color:#94a3b8">—</td>
+        <td style="padding:8px;border:1px solid #e2e8f0;text-align:center;color:#94a3b8">—</td>
+      </tr>`;
+    });
+    // Total row
+    html += `<tr style="background:#f1f5f9;font-weight:700">
+      <td colspan="2" style="padding:8px;border:1px solid #cbd5e1;text-align:center">கூடுதல் (TOTAL)</td>
+      <td style="padding:8px;border:1px solid #cbd5e1;text-align:center">${totalShops||'<span style="color:#94a3b8">—</span>'}</td>
+      <td style="padding:8px;border:1px solid #cbd5e1;text-align:right">${totalAmount?totalAmount.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}):'<span style="color:#94a3b8">—</span>'}</td>
+      <td style="padding:8px;border:1px solid #cbd5e1;text-align:center;color:#94a3b8">—</td>
+      <td style="padding:8px;border:1px solid #cbd5e1;text-align:center;color:#94a3b8">—</td>
+    </tr>`;
+    html += `</tbody></table></div></div>`;
+  });
+
+  preview.innerHTML = html;
+}
+
+function downloadDeficitPDL(){
+  const summary = computeDeficitSummary();
+  if(!summary){ toast('Load MIS report first', true); return; }
+  const sel = document.getElementById('deficit-block-select').value;
+  const isAll = sel === '__all__';
+  const blocks = isAll ? FINE_PDL_BLOCK_ORDER : [sel];
+
+  const wb = XLSX.utils.book_new();
+  const month = pdl.month || new Date().toISOString().slice(0,7);
+
+  function buildBlockSheet(blk){
+    const bd = summary[blk] || {};
+    const rows = [];
+    rows.push(['ஆய்வின் போது காணப்பட்ட குறைகளின் தொகுப்பு விவரம்']);
+    rows.push(['Block:', blk, '', 'Month:', month]);
+    rows.push([]);
+    rows.push(['வ.எண்','விவரம்','தவறு கண்டுபிடிக்கப்பட்ட நியாய விலைக் கடைகளின் எண்ணிக்கை','கண்டுபிடிக்கப்பட்ட தொகை ரூ.','வசூல் விவரம் — தேதி','வசூல் விவரம் — தொகை ரூ.']);
+    let totS=0, totA=0;
+    DEFICIT_CATS.forEach(cat=>{
+      const d = bd[cat.id] || {shops:new Set(), amount:0};
+      const nS = d.shops.size, a = d.amount;
+      totS += nS; totA += a;
+      rows.push([cat.id, cat.label, nS||'', a||'', '', '']);
+    });
+    rows.push(['','கூடுதல் (Total)', totS||'', totA||'', '', '']);
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{wch:6},{wch:38},{wch:18},{wch:18},{wch:14},{wch:14}];
+    ws['!merges'] = [
+      {s:{r:0,c:0},e:{r:0,c:5}}, // title spans all cols
+    ];
+    return ws;
+  }
+
+  if(isAll){
+    // Overview sheet + one sheet per block
+    const overview = [
+      ['ஆய்வின் போது காணப்பட்ட குறைகளின் தொகுப்பு விவரம் — District Overview'],
+      ['Month:', month],
+      [],
+      ['Block','Total FPS','Total Amount Rs',
+       ...DEFICIT_CATS.map(c=>c.labelEn+' — FPS'),
+       ...DEFICIT_CATS.map(c=>c.labelEn+' — Rs')]
+    ];
+    FINE_PDL_BLOCK_ORDER.forEach(blk=>{
+      const bd = summary[blk] || {};
+      let totS=0, totA=0;
+      const fpsCells = [], amtCells = [];
+      DEFICIT_CATS.forEach(cat=>{
+        const d = bd[cat.id] || {shops:new Set(), amount:0};
+        fpsCells.push(d.shops.size);
+        amtCells.push(d.amount);
+        totS += d.shops.size; totA += d.amount;
+      });
+      overview.push([blk, totS, totA, ...fpsCells, ...amtCells]);
+    });
+    const wsO = XLSX.utils.aoa_to_sheet(overview);
+    wsO['!cols'] = [{wch:22},{wch:11},{wch:14},...Array(12).fill({wch:18})];
+    wsO['!merges'] = [{s:{r:0,c:0},e:{r:0,c:14}}];
+    XLSX.utils.book_append_sheet(wb, wsO, 'Overview');
+
+    FINE_PDL_BLOCK_ORDER.forEach(blk=>{
+      const ws = buildBlockSheet(blk);
+      // Sheet name max 31 chars, sanitize
+      const shName = blk.replace(/[^A-Za-z0-9_ -]/g,'').substring(0,31) || 'Sheet';
+      XLSX.utils.book_append_sheet(wb, ws, shName);
+    });
+    XLSX.writeFile(wb, `Deficit_Summary_All_Blocks_${month}.xlsx`);
+    toast('Downloaded — all blocks combined');
+  } else {
+    const ws = buildBlockSheet(sel);
+    XLSX.utils.book_append_sheet(wb, ws, sel.replace(/[^A-Za-z0-9_ -]/g,'').substring(0,31) || 'Sheet');
+    XLSX.writeFile(wb, `Deficit_Summary_${sel.replace(/\s+/g,'_')}_${month}.xlsx`);
+    toast(`Downloaded — ${sel}`);
+  }
+}
+
+// Auto-render preview after Fine PDL is generated
+const _origGenerateFinePDL = typeof generateFinePDL === 'function' ? generateFinePDL : null;
 
 // ── PDL TAB INIT ────────────────────────────────────────────
 const _pdlTabOrig = document.querySelector('[data-tab="pdlsheet"]');
