@@ -2678,19 +2678,34 @@ async function fetchSquadGSheet(){
         // Check if header contains the month name or first data looks like shop codes
         const headerStr = (rows[0]||[]).join(' ').toLowerCase();
         const monthLower = tabName.toLowerCase();
-        const isMonthTab = headerStr.includes(monthLower.split('-')[0].toLowerCase())
-                         || (rows[1]&&rows[1][0]&&/^0[0-9A-Z]/i.test(String(rows[1][0]).trim()));
+        // Detect if this tab is a month tab: header contains month name OR
+        // any column in row 1 has an FPS-code pattern
+        const anyColHasShopCode = rows[1] && rows[1].some(v=>/^0[0-9][A-Z]{2}\d{3}/i.test(String(v||'').trim()));
+        const isMonthTab = headerStr.includes(monthLower.split('-')[0].toLowerCase()) || anyColHasShopCode;
         if(!isMonthTab && gid < 5) continue;
-        // Parse shop codes from column A (skip header row if it looks like a header)
-        const startRow = /^0[0-9A-Z]/i.test(String(rows[0][0]||'').trim()) ? 0 : 1;
+
+        // Scan ALL columns to find the one with shop-code pattern (sheet may have serial# in col A)
+        let shopCol = 0;
+        if(rows.length > 1){
+          for(let ci=0; ci<(rows[0]||[]).length; ci++){
+            let hits=0;
+            for(let r=1; r<Math.min(rows.length,8); r++){
+              const raw = String((rows[r]||[])[ci]||'').trim().toUpperCase();
+              if(/^0[0-9][A-Z]{2}\d{3}[A-Z]{1,2}$/.test(raw)) hits++;
+            }
+            if(hits >= 2){ shopCol = ci; break; }
+          }
+        }
+        // Parse shop codes from the detected column (skip header row if not a code)
+        const startRow = /^0[0-9][A-Z]{2}\d{3}/i.test(String((rows[0]||[])[shopCol]||'').trim()) ? 0 : 1;
         const codes = [];
         for(let r=startRow; r<rows.length; r++){
-          const c = String(rows[r][0]||'').trim().toUpperCase();
-          if(c && /^[A-Z0-9]{5,}/.test(c)) codes.push(c);
+          const c = String((rows[r]||[])[shopCol]||'').trim().toUpperCase();
+          if(c && /^0[0-9][A-Z]{2}\d{3}/.test(c)) codes.push(c);
         }
         if(codes.length > 0){
           state.squadCodes = new Set(codes);
-          statusEl.textContent = `✓ Loaded ${codes.length} shop codes from "${tabName}"`;
+          statusEl.textContent = `✓ Loaded ${codes.length} shop codes from "${tabName}" (col ${String.fromCharCode(65+shopCol)})`;
           statusEl.style.color = '#34d399';
           found = true;
           break;
@@ -2756,6 +2771,86 @@ const MAPPING_BASE_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSpzRL
 const MAPPING_GID = { phone: '152457480', shop: '1361470057' };
 const MAPPING_LS_KEY = { phone: 'insp_phone_map_cache_v1', shop: 'insp_shop_map_cache_v1' };
 
+// ── Smart column detection helpers ────────────────────────────────────────
+// Sheets may have a serial-number column A, so we can't assume phone is col 0.
+// These helpers scan the header row + a few data rows to find the right column.
+function findPhoneCol(rows){
+  const header = rows[0] || [];
+  // Try header first
+  for(let i=0;i<header.length;i++){
+    const h = String(header[i]||'').toLowerCase();
+    if(h.includes('phone')||h.includes('mobile')||h.includes('கைபேசி')||h.includes('எண்.')&&i>0) return i;
+  }
+  // Fall back to content pattern: 10-digit number in first few rows
+  for(let i=0;i<header.length;i++){
+    let hits=0, checked=0;
+    for(let r=1;r<Math.min(rows.length,6);r++){
+      const raw = String((rows[r]||[])[i]||'').trim();
+      const digits = raw.replace(/[^\d]/g,'');
+      if(digits.length >= 10 && digits.length <= 13) hits++;
+      if(raw) checked++;
+    }
+    if(checked>0 && hits/checked >= 0.6) return i;
+  }
+  return 0; // fallback
+}
+function findDesignationCol(rows, phoneCol){
+  const header = rows[0] || [];
+  for(let i=0;i<header.length;i++){
+    if(i===phoneCol) continue;
+    const h = String(header[i]||'').toLowerCase();
+    if(h.includes('designation')||h.includes('post')||h.includes('name')||h.includes('பதவி')||h.includes('பெயர்')) return i;
+  }
+  // Fall back: first text column that isn't the phone column and isn't purely numeric
+  for(let i=0;i<header.length;i++){
+    if(i===phoneCol) continue;
+    let textHits=0, checked=0;
+    for(let r=1;r<Math.min(rows.length,6);r++){
+      const raw = String((rows[r]||[])[i]||'').trim();
+      if(raw){ checked++; if(!/^\d+$/.test(raw)) textHits++; }
+    }
+    if(checked>0 && textHits/checked >= 0.5) return i;
+  }
+  return phoneCol+1; // fallback
+}
+function findShopCodeCol(rows){
+  const header = rows[0] || [];
+  // Try header first
+  for(let i=0;i<header.length;i++){
+    const h = String(header[i]||'').toLowerCase();
+    if(h.includes('code')||h.includes('shop code')||h.includes('குறியீடு')||h.includes('fps')) return i;
+  }
+  // Fall back: FPS code pattern like 05AB001PN
+  for(let i=0;i<header.length;i++){
+    let hits=0, checked=0;
+    for(let r=1;r<Math.min(rows.length,6);r++){
+      const raw = String((rows[r]||[])[i]||'').trim().toUpperCase();
+      if(/^0[0-9][A-Z]{2}\d{3}[A-Z]{1,2}$/.test(raw)) hits++;
+      if(raw) checked++;
+    }
+    if(checked>0 && hits/checked >= 0.6) return i;
+  }
+  return 0;
+}
+function findBlockCol(rows, shopCol){
+  const header = rows[0] || [];
+  for(let i=0;i<header.length;i++){
+    if(i===shopCol) continue;
+    const h = String(header[i]||'').toLowerCase();
+    if(h.includes('block')||h.includes('ஒன்றிய')||h.includes('name')) return i;
+  }
+  for(let i=0;i<header.length;i++){
+    if(i===shopCol) continue;
+    let textHits=0, checked=0;
+    for(let r=1;r<Math.min(rows.length,6);r++){
+      const raw = String((rows[r]||[])[i]||'').trim();
+      if(raw){ checked++; if(!/^\d+$/.test(raw)) textHits++; }
+    }
+    if(checked>0 && textHits/checked >= 0.5) return i;
+  }
+  return shopCol+1;
+}
+
 async function fetchMappingSheet(type){
   const statusEl = document.getElementById(`fetch-${type}-status`);
   const nameEl   = document.getElementById(`name-${type}`);
@@ -2769,10 +2864,13 @@ async function fetchMappingSheet(type){
     const rows = parseCSV(txt);
     if(!rows || rows.length < 2) throw new Error('Empty data');
     if(type === 'phone'){
+      // ── Smart column detection: sheet may have serial# in col A ──
+      const phoneCol = findPhoneCol(rows);
+      const postCol  = findDesignationCol(rows, phoneCol);
       const parsed = [];
       for(let i=1;i<rows.length;i++){
         if(!rows[i]) continue;
-        const rawPhone = String(rows[i][0]||'').trim();
+        const rawPhone = String(rows[i][phoneCol]||'').trim();
         // Handle scientific notation (e.g. 7.3387495E9) from Google Sheets CSV
         let phone = '';
         if(rawPhone.toLowerCase().includes('e')){
@@ -2780,25 +2878,30 @@ async function fetchMappingSheet(type){
         } else {
           phone = rawPhone.replace(/\D/g,'');
         }
-        const post  = String(rows[i][1]||'').trim();
-        if(phone && post) parsed.push({phone, post});
+        const post  = String(rows[i][postCol]||'').trim();
+        // Sanity: phone must be at least 10 digits (skip serial numbers)
+        if(phone && phone.length >= 10 && post) parsed.push({phone, post});
       }
-      if(parsed.length === 0) throw new Error('No valid rows found');
+      if(parsed.length === 0) throw new Error('No valid rows found (checked cols '+phoneCol+' and '+postCol+')');
       state.phoneMap = parsed.map(p=>({phone:p.phone, designation:p.post}));
       localStorage.setItem(MAPPING_LS_KEY.phone, JSON.stringify(parsed));
       if(nameEl) nameEl.textContent = `✓ Sheet (${parsed.length} entries)`;
       document.getElementById('box-phone')?.classList.add('has-file');
       if(statusEl){ statusEl.textContent = `✓ Loaded ${parsed.length} entries | Sample: ${parsed[0]?.phone}`; statusEl.style.color = '#34d399'; }
     } else {
+      // ── Smart column detection for shop→block sheet ──
+      const shopCol  = findShopCodeCol(rows);
+      const blockCol = findBlockCol(rows, shopCol);
       const parsedArr = [];
       for(let i=1;i<rows.length;i++){
         if(!rows[i]) continue;
-        const code  = String(rows[i][0]||'').trim().toUpperCase();
-        const block = String(rows[i][1]||'').trim();
-        if(code && block) parsedArr.push({'Shop_Code':code, 'Block':block});
+        const code  = String(rows[i][shopCol]||'').trim().toUpperCase();
+        const block = String(rows[i][blockCol]||'').trim();
+        // Sanity: code must look like a shop code (skip serial numbers)
+        if(code && block && /^[A-Z0-9]{5,}/.test(code) && !/^\d+$/.test(code)) parsedArr.push({'Shop_Code':code, 'Block':block});
       }
       const count = parsedArr.length;
-      if(count === 0) throw new Error('No valid rows found');
+      if(count === 0) throw new Error('No valid rows found (checked cols '+shopCol+' and '+blockCol+')');
       state.shopMap = parsedArr;
       localStorage.setItem(MAPPING_LS_KEY.shop, JSON.stringify(parsedArr));
       if(nameEl) nameEl.textContent = `✓ Sheet (${count} entries)`;
@@ -2819,10 +2922,15 @@ async function fetchMappingSheet(type){
     if(cachedPhone){
       const parsed = JSON.parse(cachedPhone);
       const arr = Array.isArray(parsed) ? parsed : [];
-      if(arr.length > 0){
-        state.phoneMap = arr.map(p=>({phone:p.phone, designation:p.designation||p.post||''}));
+      // Validate: phone must be 10+ digits (guards against old buggy cache with serial numbers)
+      const validArr = arr.filter(p=>p && String(p.phone||'').length >= 10);
+      if(validArr.length === 0 && arr.length > 0){
+        // Cache is bad — clear it so user can re-fetch
+        localStorage.removeItem(MAPPING_LS_KEY.phone);
+      } else if(validArr.length > 0){
+        state.phoneMap = validArr.map(p=>({phone:p.phone, designation:p.designation||p.post||''}));
         const nameEl = document.getElementById('name-phone');
-        if(nameEl) nameEl.textContent = `✓ Sheet cached (${arr.length} entries)`;
+        if(nameEl) nameEl.textContent = `✓ Sheet cached (${validArr.length} entries)`;
         const st = document.getElementById('fetch-phone-status');
         if(st){ st.textContent='✓ Cached'; st.style.color='#6ee7b7'; }
       }
@@ -2836,11 +2944,14 @@ async function fetchMappingSheet(type){
       const arr = Array.isArray(parsed)
         ? parsed
         : Object.entries(parsed).map(([k,v])=>({'Shop_Code':k,'Block':v}));
-      const count = arr.length;
-      if(count > 0){
-        state.shopMap = arr;
+      // Validate: Shop_Code must match FPS pattern (guards against old buggy cache)
+      const validArr = arr.filter(s=>s && /^[A-Z0-9]{5,}/.test(String(s.Shop_Code||'')) && !/^\d+$/.test(String(s.Shop_Code||'')));
+      if(validArr.length === 0 && arr.length > 0){
+        localStorage.removeItem(MAPPING_LS_KEY.shop);
+      } else if(validArr.length > 0){
+        state.shopMap = validArr;
         const nameEl = document.getElementById('name-shop');
-        if(nameEl) nameEl.textContent = `✓ Sheet cached (${count} entries)`;
+        if(nameEl) nameEl.textContent = `✓ Sheet cached (${validArr.length} entries)`;
         const st = document.getElementById('fetch-shop-status');
         if(st){ st.textContent='✓ Cached'; st.style.color='#6ee7b7'; }
       }
