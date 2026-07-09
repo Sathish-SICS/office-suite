@@ -7569,7 +7569,7 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
               <th style="padding:4px;border:1px solid #1e40af;font-size:10px;text-align:center" class="ekyc-col-${cat.k}-nph_done">Done</th>
               <th style="padding:4px;border:1px solid #1e40af;font-size:10px;text-align:center" class="ekyc-col-${cat.k}-nph_pend">Pend</th>
               <th style="padding:4px;border:1px solid #1e40af;font-size:10px;text-align:center;background:#7c3aed" class="ekyc-col-${cat.k}-nph_pct">%</th>
-              <th colspan="${4+(hasComp?2:0)}" style="padding:4px;border:1px solid #1e40af"></th>
+              <th id="ekyc-ovr-spacer-${cat.k}" colspan="${4+(hasComp?2:0)}" style="padding:4px;border:1px solid #1e40af"></th>
               ${cat.k==='all'?ekycBlkSelSubHeaders():''}
             </tr>`:''}          </thead>
           <tbody>
@@ -7770,7 +7770,7 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
               `<th style="padding:3px;border:1px solid #1e40af;font-size:9px;text-align:center" class="shp-col-${cat}_pend">Pend</th>`,
               `<th style="padding:3px;border:1px solid #1e40af;font-size:9px;text-align:center;background:rgba(0,0,0,.2)" class="shp-col-${cat}_pct">%</th>`,
             ].join('')).join('')}
-            <th colspan="${4+(hasComp?1:0)}" style="padding:3px;border:1px solid #1e40af"></th>
+            <th id="shp-ovr-spacer" colspan="${4+(hasComp?1:0)}" style="padding:3px;border:1px solid #1e40af"></th>
             <!-- Selected Total sub-headers injected BEFORE the Added sub-TH below -->
             ${hasComp?'<th id="shp-added-th-r2" style="padding:3px;border:1px solid #1e40af;background:#065f46" class="shp-col-added"></th>':''}
           </tr>
@@ -8156,6 +8156,24 @@ function ekycSyncGroupHeaders(catK){
       grpTh.colSpan = visCount;
     }
   });
+
+  // Row 1 has individual "Overall" THs (tot_cons … added), each hideable.
+  // Row 2 covers them with a single spacer TH whose colspan must match how many
+  // of them are actually visible — otherwise every column to the right shifts.
+  const spacer = document.getElementById('ekyc-ovr-spacer-'+catK);
+  if(spacer){
+    let ovrVis = 0;
+    ['tot_cons','tot_done','tot_pend','old_pct','tot_pct','added'].forEach(colId=>{
+      const th = thead.querySelector('.ekyc-col-'+catK+'-'+colId);
+      if(th && th.style.display !== 'none') ovrVis++;
+    });
+    if(ovrVis === 0){
+      spacer.style.display = 'none';
+    } else {
+      spacer.style.display = '';
+      spacer.colSpan = ovrVis;
+    }
+  }
 }
 
 // Same logic for the Shop-wise table (classes are shp-col-* / shp-grp-*)
@@ -8179,6 +8197,23 @@ function ekycSyncShopGroupHeaders(){
       grpTh.colSpan = visCount;
     }
   });
+
+  // Row-2 spacer must match the number of visible Overall columns in row 1.
+  // (Added is excluded — it has its own dedicated row-2 TH at the far right.)
+  const spacer = document.getElementById('shp-ovr-spacer');
+  if(spacer){
+    let ovrVis = 0;
+    ['tot_cons','tot_done','tot_pend','old_pct','tot_pct'].forEach(colId=>{
+      const th = thead.querySelector('.shp-col-'+colId);
+      if(th && th.style.display !== 'none') ovrVis++;
+    });
+    if(ovrVis === 0){
+      spacer.style.display = 'none';
+    } else {
+      spacer.style.display = '';
+      spacer.colSpan = ovrVis;
+    }
+  }
 }
 
 // ── Block Abstract Print Dialog ──────────────────────────────
