@@ -620,6 +620,7 @@ document.addEventListener('keydown', e=>{
       <input type="file" id="file-phone" accept=".xlsx,.xls">
       <button class="btn-tiny" id="btn-fetch-phone-map" onclick="event.stopPropagation();fetchMappingSheet('phone')" style="margin-top:6px;font-size:11px;width:100%;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.4);color:#93c5fd">🔄 Fetch from Google Sheet</button>
       <div id="fetch-phone-status" style="font-size:10px;color:var(--muted);margin-top:3px;min-height:14px"></div>
+      <button class="btn-tiny" onclick="event.stopPropagation();clearMappingCache('phone')" style="font-size:9px;background:transparent;border:none;color:#94a3b8;text-decoration:underline;cursor:pointer;padding:0;margin-top:2px">Clear cache & refetch</button>
     </div>
     <div class="upload-box has-file" id="box-shop" style="position:relative">
       <label for="file-shop">
@@ -630,6 +631,7 @@ document.addEventListener('keydown', e=>{
       <input type="file" id="file-shop" accept=".xlsx,.xls">
       <button class="btn-tiny" id="btn-fetch-shop-map" onclick="event.stopPropagation();fetchMappingSheet('shop')" style="margin-top:6px;font-size:11px;width:100%;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.4);color:#93c5fd">🔄 Fetch from Google Sheet</button>
       <div id="fetch-shop-status" style="font-size:10px;color:var(--muted);margin-top:3px;min-height:14px"></div>
+      <button class="btn-tiny" onclick="event.stopPropagation();clearMappingCache('shop')" style="font-size:9px;background:transparent;border:none;color:#94a3b8;text-decoration:underline;cursor:pointer;padding:0;margin-top:2px">Clear cache & refetch</button>
     </div>
   </div>
   <div class="action-bar">
@@ -2851,6 +2853,14 @@ function findBlockCol(rows, shopCol){
   return shopCol+1;
 }
 
+// Clear the cached mapping and re-fetch fresh from the sheet
+function clearMappingCache(type){
+  try { localStorage.removeItem(MAPPING_LS_KEY[type]); } catch(e){}
+  const statusEl = document.getElementById(`fetch-${type}-status`);
+  if(statusEl){ statusEl.textContent = '🗑️ Cache cleared — refetching...'; statusEl.style.color = 'var(--muted)'; }
+  fetchMappingSheet(type);
+}
+
 async function fetchMappingSheet(type){
   const statusEl = document.getElementById(`fetch-${type}-status`);
   const nameEl   = document.getElementById(`name-${type}`);
@@ -2861,7 +2871,9 @@ async function fetchMappingSheet(type){
     if(!resp || !resp.ok) throw new Error('HTTP '+(resp?resp.status:'no response'));
     const txt = await resp.text();
     if(!txt || txt.startsWith('<!DOCTYPE')||txt.startsWith('<html')) throw new Error('Not a CSV response');
-    const rows = parseCSV(txt);
+    // Strip UTF-8 BOM if present (Google Sheets sometimes includes it)
+    const cleaned = txt.replace(/^\uFEFF/,'');
+    const rows = parseCSV(cleaned);
     if(!rows || rows.length < 2) throw new Error('Empty data');
     if(type === 'phone'){
       // ── Smart column detection: sheet may have serial# in col A ──
@@ -2887,7 +2899,7 @@ async function fetchMappingSheet(type){
       localStorage.setItem(MAPPING_LS_KEY.phone, JSON.stringify(parsed));
       if(nameEl) nameEl.textContent = `✓ Sheet (${parsed.length} entries)`;
       document.getElementById('box-phone')?.classList.add('has-file');
-      if(statusEl){ statusEl.textContent = `✓ Loaded ${parsed.length} entries | Sample: ${parsed[0]?.phone}`; statusEl.style.color = '#34d399'; }
+      if(statusEl){ statusEl.textContent = `✓ ${parsed.length} entries (col ${String.fromCharCode(65+phoneCol)}) | Sample: ${parsed[0]?.phone}`; statusEl.style.color = '#34d399'; }
     } else {
       // ── Smart column detection for shop→block sheet ──
       const shopCol  = findShopCodeCol(rows);
@@ -12041,85 +12053,125 @@ function downloadDeficitPDL(){
 // Auto-render preview after Fine PDL is generated
 const _origGenerateFinePDL = typeof generateFinePDL === 'function' ? generateFinePDL : null;
 
-// Print/PDF using html2canvas (preserves Tamil text) + jsPDF multi-page
+// Print/PDF using html2canvas (preserves Tamil text) + jsPDF, per-block pages + JPEG compression
 async function printDeficitPDF(){
   const summary = computeDeficitSummary();
   if(!summary){ toast('Load MIS report first', true); return; }
   const sel = document.getElementById('deficit-block-select').value;
   const isAll = sel === '__all__';
   const month = pdl.month || new Date().toISOString().slice(0,7);
-  const preview = document.getElementById('deficit-preview');
-  if(!preview || !preview.querySelector('table')){
-    renderDeficitPreview();
-    await new Promise(r=>setTimeout(r,80));
+  const blocks = isAll ? FINE_PDL_BLOCK_ORDER : [sel];
+
+  toast('Generating PDF...');
+
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({orientation:'portrait', unit:'mm', format:'a4'});
+  const pageW = 210, pageH = 297;
+  const margin = 10;
+  const contentW = pageW - margin*2;
+
+  // Helper: build one block's table HTML in an off-screen container
+  function makeBlockContainer(blk, bd){
+    const holder = document.createElement('div');
+    holder.style.cssText = 'position:fixed;left:-10000px;top:0;width:900px;background:#ffffff;padding:20px;color:#1e293b;font-family:sans-serif;box-sizing:border-box';
+
+    let totalShops = 0, totalAmount = 0;
+    let html = `
+      <div style="text-align:center;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid #1e40af">
+        <div style="font-size:16px;font-weight:700;color:#1e40af">ஆய்வின் போது காணப்பட்ட குறைகளின் தொகுப்பு விவரம்</div>
+        <div style="font-size:11px;color:#475569;margin-top:3px">Deficit Summary PDL &nbsp;·&nbsp; Month: <b>${month}</b></div>
+      </div>
+      <div style="background:#1e40af;color:#ffffff;padding:8px 12px;font-weight:700;border-radius:6px 6px 0 0;font-size:14px">📋 ${blk}</div>
+      <table style="width:100%;border-collapse:collapse;font-size:11px;border:1px solid #cbd5e1">
+        <thead>
+          <tr style="background:#3b82f6;color:#ffffff">
+            <th rowspan="2" style="padding:6px 4px;border:1px solid #93c5fd;text-align:center;width:32px">வ.எண்</th>
+            <th rowspan="2" style="padding:6px 4px;border:1px solid #93c5fd;text-align:left">விவரம்</th>
+            <th rowspan="2" style="padding:6px 4px;border:1px solid #93c5fd;text-align:center">தவறு கண்டுபிடிக்கப்பட்ட FPS எண்</th>
+            <th rowspan="2" style="padding:6px 4px;border:1px solid #93c5fd;text-align:center">கண்டுபிடிக்கப்பட்ட தொகை ரூ.</th>
+            <th colspan="2" style="padding:6px 4px;border:1px solid #93c5fd;text-align:center;background:#1d4ed8">வசூல் விவரம்</th>
+          </tr>
+          <tr style="background:#3b82f6;color:#ffffff">
+            <th style="padding:4px;border:1px solid #93c5fd;text-align:center">தேதி</th>
+            <th style="padding:4px;border:1px solid #93c5fd;text-align:center">தொகை ரூ.</th>
+          </tr>
+        </thead>
+        <tbody>`;
+
+    DEFICIT_CATS.forEach(cat=>{
+      const d = bd[cat.id] || {shops:new Set(), amount:0};
+      const nShops = d.shops.size;
+      const amt = d.amount;
+      totalShops += nShops;
+      totalAmount += amt;
+      html += `<tr>
+        <td style="padding:6px;border:1px solid #e2e8f0;text-align:center;color:#64748b">${cat.id}</td>
+        <td style="padding:6px;border:1px solid #e2e8f0"><div>${cat.label}</div><div style="font-size:9px;color:#64748b">${cat.labelEn}</div></td>
+        <td style="padding:6px;border:1px solid #e2e8f0;text-align:center;font-weight:${nShops?600:400}">${nShops||'—'}</td>
+        <td style="padding:6px;border:1px solid #e2e8f0;text-align:right;font-weight:${amt?600:400}">${amt?amt.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}):'—'}</td>
+        <td style="padding:6px;border:1px solid #e2e8f0;text-align:center;color:#94a3b8">—</td>
+        <td style="padding:6px;border:1px solid #e2e8f0;text-align:center;color:#94a3b8">—</td>
+      </tr>`;
+    });
+    html += `<tr style="background:#f1f5f9;font-weight:700">
+      <td colspan="2" style="padding:6px;border:1px solid #cbd5e1;text-align:center">கூடுதல் (TOTAL)</td>
+      <td style="padding:6px;border:1px solid #cbd5e1;text-align:center">${totalShops||'—'}</td>
+      <td style="padding:6px;border:1px solid #cbd5e1;text-align:right">${totalAmount?totalAmount.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}):'—'}</td>
+      <td style="padding:6px;border:1px solid #cbd5e1;text-align:center;color:#94a3b8">—</td>
+      <td style="padding:6px;border:1px solid #cbd5e1;text-align:center;color:#94a3b8">—</td>
+    </tr></tbody></table>`;
+
+    holder.innerHTML = html;
+    return holder;
   }
 
-  toast('Preparing PDF — please wait...');
+  try {
+    for(let bi=0; bi<blocks.length; bi++){
+      const blk = blocks[bi];
+      const bd = summary[blk] || {};
+      const holder = makeBlockContainer(blk, bd);
+      document.body.appendChild(holder);
+      // Small delay to let fonts render
+      await new Promise(r=>setTimeout(r,50));
 
-  // Build an off-screen render container styled for PDF (white background)
-  const holder = document.createElement('div');
-  holder.style.cssText = 'position:fixed;left:-10000px;top:0;width:1100px;background:white;padding:20px;color:#1e293b;font-family:sans-serif';
+      // Scale 1.5 (balance of quality vs size), JPEG @ 0.72 quality — huge size reduction vs scale 2 PNG
+      const canvas = await html2canvas(holder, {
+        backgroundColor: '#ffffff',
+        scale: 1.5,
+        useCORS: true,
+        width: holder.scrollWidth,
+        height: holder.scrollHeight
+      });
+      const imgData = canvas.toDataURL('image/jpeg', 0.72);
+      const imgH = (canvas.height * contentW) / canvas.width;
 
-  // Header
-  const header = document.createElement('div');
-  header.style.cssText = 'text-align:center;margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid #1e40af';
-  header.innerHTML = `<div style="font-size:16px;font-weight:700;color:#1e40af">ஆய்வின் போது காணப்பட்ட குறைகளின் தொகுப்பு விவரம்</div>
-    <div style="font-size:12px;color:#475569;margin-top:4px">Deficit Summary PDL &nbsp;·&nbsp; Month: <b>${month}</b> &nbsp;·&nbsp; ${isAll?'All Blocks':sel}</div>`;
-  holder.appendChild(header);
+      if(bi > 0) pdf.addPage();
 
-  // Clone the preview content into the holder
-  const previewClone = preview.cloneNode(true);
-  // Ensure white background for PDF
-  previewClone.querySelectorAll('*').forEach(el=>{
-    const cs = el.style;
-    if(cs && cs.color === 'var(--muted)') cs.color = '#64748b';
-    if(cs && cs.color === 'var(--ink)')   cs.color = '#1e293b';
-  });
-  holder.appendChild(previewClone);
-
-  document.body.appendChild(holder);
-
-  try{
-    const canvas = await html2canvas(holder, {
-      backgroundColor: '#ffffff', scale: 2, useCORS: true,
-      width: holder.scrollWidth, height: holder.scrollHeight,
-      windowWidth: holder.scrollWidth + 40
-    });
-
-    const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF({orientation:'portrait', unit:'mm', format:'a4'});
-    const pageW = 210, pageH = 297;
-    const margin = 8;
-    const contentW = pageW - margin*2;
-    const imgH = (canvas.height * contentW) / canvas.width;
-
-    if(imgH <= pageH - margin*2){
-      // Single page
-      const img = canvas.toDataURL('image/png');
-      pdf.addImage(img, 'PNG', margin, margin, contentW, imgH);
-    } else {
-      // Multi-page: slice the canvas vertically
-      const pageContentH = pageH - margin*2;
-      const pxPerMm = canvas.width / contentW;
-      const slicePx = pageContentH * pxPerMm;
-      let yPx = 0;
-      let pageNum = 0;
-
-      while(yPx < canvas.height){
-        const sliceHeight = Math.min(slicePx, canvas.height - yPx);
-        const tmp = document.createElement('canvas');
-        tmp.width = canvas.width;
-        tmp.height = sliceHeight;
-        const ctx = tmp.getContext('2d');
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, tmp.width, tmp.height);
-        ctx.drawImage(canvas, 0, yPx, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
-        const sliceMm = (sliceHeight / pxPerMm);
-        if(pageNum > 0) pdf.addPage();
-        pdf.addImage(tmp.toDataURL('image/png'), 'PNG', margin, margin, contentW, sliceMm);
-        yPx += sliceHeight;
-        pageNum++;
+      if(imgH <= pageH - margin*2){
+        pdf.addImage(imgData, 'JPEG', margin, margin, contentW, imgH);
+      } else {
+        // Very tall block — split into slices
+        const pageContentH = pageH - margin*2;
+        const pxPerMm = canvas.width / contentW;
+        const slicePx = pageContentH * pxPerMm;
+        let yPx = 0;
+        let sliceNum = 0;
+        while(yPx < canvas.height){
+          const sliceHeight = Math.min(slicePx, canvas.height - yPx);
+          const tmp = document.createElement('canvas');
+          tmp.width = canvas.width; tmp.height = sliceHeight;
+          const ctx = tmp.getContext('2d');
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, tmp.width, tmp.height);
+          ctx.drawImage(canvas, 0, yPx, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
+          if(sliceNum > 0) pdf.addPage();
+          pdf.addImage(tmp.toDataURL('image/jpeg', 0.72), 'JPEG', margin, margin, contentW, sliceHeight/pxPerMm);
+          yPx += sliceHeight;
+          sliceNum++;
+        }
       }
+
+      document.body.removeChild(holder);
     }
 
     const suffix = isAll ? 'All_Blocks' : sel.replace(/\s+/g,'_');
@@ -12128,8 +12180,6 @@ async function printDeficitPDF(){
   } catch(e){
     console.error(e);
     toast('PDF export failed: '+e.message, true);
-  } finally {
-    document.body.removeChild(holder);
   }
 }
 
