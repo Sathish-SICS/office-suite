@@ -7500,22 +7500,22 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
           ${cat.k==='all'?`
           <div style="border-right:1px solid var(--border);padding-right:12px">
             <div style="font-size:10px;color:var(--muted);margin-bottom:4px;font-weight:700">AAY</div>
-            ${['cons','done','pend','pct'].map(c2=>`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-bottom:2px"><input type="checkbox" checked onchange="ekycToggleCol('${cat.k}','aay_${c2}',this.checked)"> ${c2==='cons'?'Considered':c2==='done'?'Completed':c2==='pend'?'Pending':'%'}</label>`).join('')}
+            ${['cons','done','pend','pct'].map(c2=>`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-bottom:2px"><input type="checkbox" id="ekyc-col-${cat.k}-aay_${c2}-cb" ${ekycColChecked(cat.k,'aay_'+c2)} onchange="ekycToggleCol('${cat.k}','aay_${c2}',this.checked)"> ${c2==='cons'?'Considered':c2==='done'?'Completed':c2==='pend'?'Pending':'%'}</label>`).join('')}
           </div>
           <div style="border-right:1px solid var(--border);padding-right:12px">
             <div style="font-size:10px;color:var(--muted);margin-bottom:4px;font-weight:700">PHH</div>
-            ${['cons','done','pend','pct'].map(c2=>`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-bottom:2px"><input type="checkbox" checked onchange="ekycToggleCol('${cat.k}','phh_${c2}',this.checked)"> ${c2==='cons'?'Considered':c2==='done'?'Completed':c2==='pend'?'Pending':'%'}</label>`).join('')}
+            ${['cons','done','pend','pct'].map(c2=>`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-bottom:2px"><input type="checkbox" id="ekyc-col-${cat.k}-phh_${c2}-cb" ${ekycColChecked(cat.k,'phh_'+c2)} onchange="ekycToggleCol('${cat.k}','phh_${c2}',this.checked)"> ${c2==='cons'?'Considered':c2==='done'?'Completed':c2==='pend'?'Pending':'%'}</label>`).join('')}
           </div>
           <div style="border-right:1px solid var(--border);padding-right:12px">
             <div style="font-size:10px;color:var(--muted);margin-bottom:4px;font-weight:700">NPHH</div>
-            ${['cons','done','pend','pct'].map(c2=>`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-bottom:2px"><input type="checkbox" checked onchange="ekycToggleCol('${cat.k}','nph_${c2}',this.checked)"> ${c2==='cons'?'Considered':c2==='done'?'Completed':c2==='pend'?'Pending':'%'}</label>`).join('')}
+            ${['cons','done','pend','pct'].map(c2=>`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-bottom:2px"><input type="checkbox" id="ekyc-col-${cat.k}-nph_${c2}-cb" ${ekycColChecked(cat.k,'nph_'+c2)} onchange="ekycToggleCol('${cat.k}','nph_${c2}',this.checked)"> ${c2==='cons'?'Considered':c2==='done'?'Completed':c2==='pend'?'Pending':'%'}</label>`).join('')}
           </div>
           `:''}
           <div>
             <div style="font-size:10px;color:var(--muted);margin-bottom:4px;font-weight:700">Overall</div>
-            ${['cons','done','pend','pct'].map(c2=>`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-bottom:2px"><input type="checkbox" checked onchange="ekycToggleCol('${cat.k}','tot_${c2}',this.checked)"> ${c2==='cons'?'Considered':c2==='done'?'Completed':c2==='pend'?'Pending':'%'}</label>`).join('')}
-            ${hasComp?`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-bottom:2px"><input type="checkbox" checked onchange="ekycToggleCol('${cat.k}','old_pct',this.checked)"> Old %</label>`:''}
-            ${hasComp?`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-bottom:2px"><input type="checkbox" checked onchange="ekycToggleCol('${cat.k}','added',this.checked)"> Added</label>`:''}
+            ${['cons','done','pend','pct'].map(c2=>`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-bottom:2px"><input type="checkbox" id="ekyc-col-${cat.k}-tot_${c2}-cb" ${ekycColChecked(cat.k,'tot_'+c2)} onchange="ekycToggleCol('${cat.k}','tot_${c2}',this.checked)"> ${c2==='cons'?'Considered':c2==='done'?'Completed':c2==='pend'?'Pending':'%'}</label>`).join('')}
+            ${hasComp?`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-bottom:2px"><input type="checkbox" id="ekyc-col-${cat.k}-old_pct-cb" ${ekycColChecked(cat.k,'old_pct')} onchange="ekycToggleCol('${cat.k}','old_pct',this.checked)"> Old %</label>`:''}
+            ${hasComp?`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-bottom:2px"><input type="checkbox" id="ekyc-col-${cat.k}-added-cb" ${ekycColChecked(cat.k,'added')} onchange="ekycToggleCol('${cat.k}','added',this.checked)"> Added</label>`:''}
           </div>
           ${cat.k==='all'?`
           <div style="border-left:1px solid var(--border);padding-left:12px;min-width:180px">
@@ -7546,9 +7546,9 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
               <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">#</th>
               <th style="padding:7px 10px;border:1px solid #1e40af;text-align:left;min-width:150px">Block</th>
               ${cat.k==='all'?`
-              <th colspan="4" style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#1e5a3a" class="ekyc-col-${cat.k}-aay_cons ekyc-col-${cat.k}-aay_done ekyc-col-${cat.k}-aay_pend ekyc-col-${cat.k}-aay_pct">AAY</th>
-              <th colspan="4" style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#1e3a8a" class="ekyc-col-${cat.k}-phh_cons ekyc-col-${cat.k}-phh_done ekyc-col-${cat.k}-phh_pend ekyc-col-${cat.k}-phh_pct">PHH</th>
-              <th colspan="4" style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#3a1e5a" class="ekyc-col-${cat.k}-nph_cons ekyc-col-${cat.k}-nph_done ekyc-col-${cat.k}-nph_pend ekyc-col-${cat.k}-nph_pct">NPHH</th>
+              <th colspan="4" style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#1e5a3a" class="ekyc-grp-${cat.k}-aay" data-grp="aay" data-cat="${cat.k}">AAY</th>
+              <th colspan="4" style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#1e3a8a" class="ekyc-grp-${cat.k}-phh" data-grp="phh" data-cat="${cat.k}">PHH</th>
+              <th colspan="4" style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#3a1e5a" class="ekyc-grp-${cat.k}-nph" data-grp="nph" data-cat="${cat.k}">NPHH</th>
               `:''}              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center" class="ekyc-col-${cat.k}-tot_cons">Considered</th>
               <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center" class="ekyc-col-${cat.k}-tot_done">Completed</th>
               <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','pend')" class="ekyc-col-${cat.k}-tot_pend">Pending ${ekyc[catSortKey].col==='pend'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th>
@@ -7751,9 +7751,9 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
             <th style="padding:7px 8px;border:1px solid #1e40af;text-align:left;min-width:130px">Block</th>
             <th style="padding:7px 5px;border:1px solid #1e40af">Shop Code</th>
             <th style="padding:7px 8px;border:1px solid #1e40af;min-width:150px">Shop Name</th>
-            <th colspan="4" style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#1e5a3a" class="shp-col-aay_cons shp-col-aay_done shp-col-aay_pend shp-col-aay_pct">AAY</th>
-            <th colspan="4" style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#1e3a8a" class="shp-col-phh_cons shp-col-phh_done shp-col-phh_pend shp-col-phh_pct">PHH</th>
-            <th colspan="4" style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#3a1e5a" class="shp-col-nph_cons shp-col-nph_done shp-col-nph_pend shp-col-nph_pct">NPHH</th>
+            <th colspan="4" style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#1e5a3a" class="shp-grp-aay" data-grp="aay">AAY</th>
+            <th colspan="4" style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#1e3a8a" class="shp-grp-phh" data-grp="phh">PHH</th>
+            <th colspan="4" style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#3a1e5a" class="shp-grp-nph" data-grp="nph">NPHH</th>
             <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center" class="shp-col-tot_cons">Considered</th>
             <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center" class="shp-col-tot_done">Completed</th>
             ${sortTh('pend','Pending','min-width:60px;'+' class="shp-col-tot_pend"')}
@@ -7784,6 +7784,8 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
   document.getElementById('ekyc-results-area').innerHTML=html;
   renderEkycShopTable(rows);
   switchEkycTab('all');
+  // Restore persisted column visibility and fix group-header colspans for every tab
+  ['all','aay','phh','nph'].forEach(k=>reapplyBlockColVisibility(k));
 }
 
 // Global export — routes to active tab's handler
@@ -7991,6 +7993,16 @@ function ekycBlkSelApply(){
       if(s.pct)  totRow.appendChild(mkTot(fmtPct(spct),`background:${cbg};color:#1e293b`));
     }
   }
+
+  // Re-apply per-column visibility, then fix AAY/PHH/NPHH group-header colspans.
+  // Both are required — otherwise hiding a sub-column leaves the group header
+  // spanning too many cells and every column to its right shifts out of alignment.
+  if(ekyc.blockColVis && ekyc.blockColVis['all']){
+    Object.entries(ekyc.blockColVis['all']).forEach(([colId, visible])=>{
+      document.querySelectorAll('.ekyc-col-all-'+colId).forEach(el=>{ el.style.display = visible ? '' : 'none'; });
+    });
+  }
+  ekycSyncGroupHeaders('all');
 }
 
 // Legacy: called by sort/filter paths — just re-apply to existing table
@@ -8006,13 +8018,15 @@ function ekycBlkSelLabel(){
 
 // Used only in the initial renderEkycResults pass to inject static ⊕ THs
 // (the dynamic update path is ekycBlkSelApply)
+// IMPORTANT: must carry class="ekyc-blk-sel-th" so ekycBlkSelApply() can remove it
+// on re-apply — otherwise a duplicate ⊕ header gets appended.
 function ekycBlkSelMainHeader(){
   const s=ekyc.blkSelTotal||ekycBlkSelDefaults();
   if(!s.active) return '';
   const lbl=ekycBlkSelLabel();
   const subcols=[s.cons?'Cons':null,s.done?'Done':null,s.pend?'Pend':null,s.pct?'%':null].filter(Boolean);
   if(!subcols.length) return '';
-  return `<th colspan="${subcols.length}" style="padding:6px 4px;border:1px solid #7c3aed;text-align:center;background:#5b21b6;color:white;font-size:11px">⊕ ${lbl}</th>`;
+  return `<th class="ekyc-blk-sel-th" colspan="${subcols.length}" style="padding:6px 4px;border:1px solid #7c3aed;text-align:center;background:#5b21b6;color:white;font-size:11px">⊕ ${lbl}</th>`;
 }
 
 function ekycBlkSelSubHeaders(){
@@ -8083,11 +8097,87 @@ function showEkycColToggle(catK){
   panel.style.display = panel.style.display==='none' ? '' : 'none';
 }
 
+// Returns 'checked' or '' for a block-abstract column checkbox, honouring saved state.
+// Defaults to checked when no state has been recorded yet.
+function ekycColChecked(catK, colId){
+  const vis = ekyc.blockColVis && ekyc.blockColVis[catK];
+  if(!vis || vis[colId] === undefined) return 'checked';
+  return vis[colId] ? 'checked' : '';
+}
+
 function ekycToggleCol(catK, colId, visible){
+  // Persist state so it survives re-render (sort / filter / ⊕ toggle)
+  if(!ekyc.blockColVis) ekyc.blockColVis = {};
+  if(!ekyc.blockColVis[catK]) ekyc.blockColVis[catK] = {};
+  ekyc.blockColVis[catK][colId] = visible;
   // Toggle all elements with class ekyc-col-{catK}-{colId}
   const cls = 'ekyc-col-'+catK+'-'+colId;
   document.querySelectorAll('.'+cls).forEach(el=>{
     el.style.display = visible ? '' : 'none';
+  });
+  // Keep AAY/PHH/NPHH group headers in sync (colspan must shrink, or header hidden)
+  ekycSyncGroupHeaders(catK);
+}
+
+// Re-apply persisted block column visibility + checkbox state after a re-render
+function reapplyBlockColVisibility(catK){
+  const vis = ekyc.blockColVis && ekyc.blockColVis[catK];
+  if(vis){
+    Object.entries(vis).forEach(([colId, visible])=>{
+      document.querySelectorAll('.ekyc-col-'+catK+'-'+colId).forEach(el=>{ el.style.display = visible ? '' : 'none'; });
+      const cb = document.getElementById('ekyc-col-'+catK+'-'+colId+'-cb');
+      if(cb) cb.checked = visible;
+    });
+  }
+  ekycSyncGroupHeaders(catK);
+}
+
+// Recompute colspan for AAY/PHH/NPHH group headers based on which sub-cols are visible.
+// Without this, hiding e.g. AAY "%" leaves the group header spanning 4 cells over 3 →
+// every column to the right shifts left and the header row detaches from the body.
+function ekycSyncGroupHeaders(catK){
+  const tbl = document.getElementById('ekyc-blk-tbl-'+catK);
+  if(!tbl) return;
+  const thead = tbl.querySelector('thead');
+  if(!thead) return;
+  ['aay','phh','nph'].forEach(grp=>{
+    const grpTh = thead.querySelector('.ekyc-grp-'+catK+'-'+grp);
+    if(!grpTh) return;
+    let visCount = 0;
+    ['cons','done','pend','pct'].forEach(sub=>{
+      // Scope to thead so we read the row-2 sub-header TH (not a body TD)
+      const subTh = thead.querySelector('.ekyc-col-'+catK+'-'+grp+'_'+sub);
+      if(subTh && subTh.style.display !== 'none') visCount++;
+    });
+    if(visCount === 0){
+      grpTh.style.display = 'none';
+    } else {
+      grpTh.style.display = '';
+      grpTh.colSpan = visCount;
+    }
+  });
+}
+
+// Same logic for the Shop-wise table (classes are shp-col-* / shp-grp-*)
+function ekycSyncShopGroupHeaders(){
+  const wrap = document.getElementById('ekyc-shop-wrap');
+  if(!wrap) return;
+  const thead = wrap.querySelector('thead');
+  if(!thead) return;
+  ['aay','phh','nph'].forEach(grp=>{
+    const grpTh = thead.querySelector('.shp-grp-'+grp);
+    if(!grpTh) return;
+    let visCount = 0;
+    ['cons','done','pend','pct'].forEach(sub=>{
+      const subTh = thead.querySelector('.shp-col-'+grp+'_'+sub);
+      if(subTh && subTh.style.display !== 'none') visCount++;
+    });
+    if(visCount === 0){
+      grpTh.style.display = 'none';
+    } else {
+      grpTh.style.display = '';
+      grpTh.colSpan = visCount;
+    }
   });
 }
 
@@ -8310,16 +8400,18 @@ function ekycShopToggleCol(colId, visible){
   if(!ekyc.shopColVis) ekyc.shopColVis = {};
   ekyc.shopColVis[colId] = visible;
   document.querySelectorAll('.shp-col-'+colId).forEach(el=>{ el.style.display = visible ? '' : 'none'; });
+  ekycSyncShopGroupHeaders();
 }
 
 function reapplyShopColVisibility(){
-  if(!ekyc.shopColVis) return;
+  if(!ekyc.shopColVis){ ekycSyncShopGroupHeaders(); return; }
   Object.entries(ekyc.shopColVis).forEach(([colId, visible])=>{
     document.querySelectorAll('.shp-col-'+colId).forEach(el=>{ el.style.display = visible ? '' : 'none'; });
     // Sync checkbox
     const cb = document.getElementById('shp-col-'+colId);
     if(cb) cb.checked = visible;
   });
+  ekycSyncShopGroupHeaders();
 }
 
 // Get currently visible shop columns for Excel/PDF export
