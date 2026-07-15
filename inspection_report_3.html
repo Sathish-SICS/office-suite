@@ -8658,7 +8658,7 @@ function showEkycPrintDialog(){
         </label>
       </div>
       <div id="wm-options">
-        <div style="font-size:11px;color:var(--muted);margin-bottom:5px">Language:</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:5px">Language: <span style="color:#fbbf24;font-size:10px">(Tamil renders correctly only in Block Abstract PDF — shop-wise uses English)</span></div>
         <div style="display:flex;gap:6px;margin-bottom:8px">
           <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;padding:5px 10px;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.4);border-radius:5px;color:#a5b4fc">
             <input type="radio" name="wm-lang" value="tamil" checked> தமிழ்
@@ -8756,21 +8756,15 @@ function ekycLaunchPrint(){
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// WATERMARK ENGINE
-// Draws the chosen watermark on EVERY page of a jsPDF document.
-// Must be called after the table is built (so page count is known).
+// WATERMARK ENGINE — jsPDF version (shop-wise PDF)
+// jsPDF only supports Latin characters reliably.
+// Tamil is handled by the CSS path in printEkycBlockAbstract (browser print).
 // ══════════════════════════════════════════════════════════════════════════
 function addEkycWatermark(doc){
   if(!ekyc._wmEnable) return;
-  const lang   = ekyc._wmLang  || 'tamil';
   const style  = ekyc._wmStyle || 'diagonal';
-
-  // Text lines depending on language selection
-  const tamilLines   = ['துணைப்பதிவாளர்','பொதுவிநியோகத்திட்டம்','திருவண்ணாமலை'];
-  const englishLines = ['Deputy Registrar','Public Distribution System','Thiruvannamalai'];
-  let lines = lang==='tamil'   ? tamilLines
-            : lang==='english' ? englishLines
-            : [...tamilLines, ...englishLines];  // both
+  // jsPDF cannot render Tamil Unicode — always use English lines here
+  const lines = ['Deputy Registrar','Public Distribution System','Thiruvannamalai'];
 
   const totalPages = doc.getNumberOfPages();
   const pw = doc.internal.pageSize.getWidth();
@@ -8779,62 +8773,61 @@ function addEkycWatermark(doc){
 
   for(let p=1; p<=totalPages; p++){
     doc.setPage(p);
-    doc.saveGraphicsState && doc.saveGraphicsState();
 
     if(style === 'diagonal' || style === 'bold_diagonal'){
-      // Large diagonal watermark — rotate around page centre
-      const opacity = style==='diagonal' ? 0.10 : 0.18;
-      const fontSize = style==='diagonal' ? 22 : 28;
-      const textColor = style==='diagonal' ? [147,197,253] : [167,139,250]; // light blue / purple
+      // Draw ALL lines in ONE rotated block to avoid multiple impressions.
+      // Strategy: draw each line at the correct vertical offset while rotating
+      // around the page centre.
+      const isBold   = style === 'bold_diagonal';
+      const fontSize = isBold ? 24 : 20;
+      const spacing  = isBold ? 12 : 10;     // mm between lines
+      const r = isBold ? [180,140,250] : [147,197,253];  // purple / blue
+      // opacity simulation via light colour (jsPDF doesn't have real opacity for text)
 
-      doc.setTextColor(...textColor);
+      doc.setFont('helvetica', isBold ? 'bold' : 'normal');
       doc.setFontSize(fontSize);
-      doc.setFont('helvetica', style==='bold_diagonal' ? 'bold' : 'normal');
+      doc.setTextColor(...r);
 
-      // jsPDF rotation is per text call
-      // Place lines stacked, centred, rotating the text by -35 degrees around page centre
-      const spacing = fontSize * 0.5 + 2;
-      const totalH  = spacing * (lines.length - 1);
+      // Total block height
+      const totalH = spacing * (lines.length - 1);
       lines.forEach((line, i)=>{
-        const yOff = -totalH/2 + i*spacing;
-        doc.text(line, cx, cy + yOff, {
-          align:'center',
-          angle: 35,
-          renderingMode:'fill',
-          // jsPDF opacity: use GState if available
-        });
+        const yOffset = -totalH/2 + i*spacing;
+        // Rotate each line individually around the page centre
+        // jsPDF angle is counter-clockwise in degrees
+        doc.text(line, cx, cy + yOffset, { align:'center', angle:35 });
       });
 
     } else if(style === 'stamp'){
-      // Centre stamp with rectangular border
-      doc.setTextColor(30, 58, 138);
-      doc.setFontSize(8);
+      const fontSize = 8;
+      const spacing  = 5.5;
       doc.setFont('helvetica','bold');
-      const boxW = 65, boxH = lines.length * 6 + 8;
-      const bx = cx - boxW/2, by = cy - boxH/2;
-      // Draw border
+      doc.setFontSize(fontSize);
+      doc.setTextColor(30,58,138);
+      const totalH = spacing * (lines.length - 1);
+      const boxPad = 5;
+      // Approximate text width for the longest line
+      const maxW = Math.max(...lines.map(l=>l.length)) * fontSize * 0.48;
+      const boxW = maxW + boxPad*2;
+      const boxH = totalH + boxPad*2 + 2;
       doc.setDrawColor(30,58,138);
-      doc.setLineWidth(0.8);
+      doc.setLineWidth(0.6);
       doc.setLineDash([2,2]);
-      doc.roundedRect(bx, by, boxW, boxH, 2, 2);
+      doc.roundedRect(cx-boxW/2, cy-boxH/2, boxW, boxH, 2, 2);
       doc.setLineDash([]);
       lines.forEach((line,i)=>{
-        doc.text(line, cx, by + 6 + i*6, {align:'center'});
+        doc.text(line, cx, cy - totalH/2 + i*spacing + 2, {align:'center'});
       });
 
     } else if(style === 'corner'){
-      // Top-right corner, small text
-      doc.setTextColor(5, 150, 105);
-      doc.setFontSize(6.5);
       doc.setFont('helvetica','bold');
-      const rightX = pw - 8;
+      doc.setFontSize(6.5);
+      doc.setTextColor(5,150,105);
       lines.forEach((line,i)=>{
-        doc.text(line, rightX, 10 + i*5.5, {align:'right'});
+        doc.text(line, pw-8, 10 + i*5, {align:'right'});
       });
     }
 
     doc.setTextColor(0);
-    doc.restoreGraphicsState && doc.restoreGraphicsState();
   }
 }
 
@@ -9010,7 +9003,7 @@ function printEkycShopwise(orientation){
       const pc=doc.getNumberOfPages(), pw=doc.internal.pageSize.getWidth(), ph=doc.internal.pageSize.getHeight();
       doc.setFontSize(6.5); doc.setTextColor(150);
       doc.text(`Page ${data.pageNumber} of ${pc}`, pw-18, ph-4);
-      doc.text('திருவண்ணாமலை மாவட்டம்', 10, ph-4);
+      doc.text('Thiruvannamalai District', 10, ph-4);
       doc.setTextColor(0);
     }
   });
@@ -12757,51 +12750,67 @@ function printEkycBlockAbstract(catK, orientation){
 
   const orient = orientation || 'portrait';
 
-  // Build CSS watermark based on current dialog settings (if dialog was used) or defaults
+  // Build watermark HTML element — injected into the print window body.
+  // Using a real <div> (not CSS content:) so Tamil Unicode renders correctly.
   const wmEnable = ekyc._wmEnable !== false;
   const wmLang   = ekyc._wmLang || 'tamil';
   const wmStyle  = ekyc._wmStyle || 'diagonal';
-  const tamilText   = 'துணைப்பதிவாளர் \\A பொதுவிநியோகத்திட்டம் \\A திருவண்ணாமலை';
-  const englishText = 'Deputy Registrar \\A Public Distribution System \\A Thiruvannamalai';
-  const bothText    = tamilText + ' \\A ' + englishText;
-  const wmText = wmLang==='tamil' ? tamilText : wmLang==='english' ? englishText : bothText;
-  const wmCSS = !wmEnable ? '' :
-    wmStyle==='corner' ? `
-    body::after { content:"${wmText}"; position:fixed; top:8mm; right:8mm;
-      font-family:'Latha','Arial Unicode MS',Arial,sans-serif; font-size:7pt; color:rgba(5,150,105,.6);
-      font-weight:700; text-align:right; white-space:pre; pointer-events:none; }
-    ` :
-    wmStyle==='stamp' ? `
-    body::before { content:"${wmText}"; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
-      font-family:'Latha','Arial Unicode MS',Arial,sans-serif; font-size:12pt; color:rgba(30,58,138,.22);
-      font-weight:700; text-align:center; white-space:pre; border:1.5px dashed rgba(30,58,138,.25);
-      padding:8px 16px; border-radius:4px; pointer-events:none; }
-    ` :
-    wmStyle==='bold_diagonal' ? `
-    body::before { content:"${wmText}"; position:fixed; top:45%; left:50%; transform:translate(-50%,-50%) rotate(-35deg);
-      font-family:'Latha','Arial Unicode MS',Arial,sans-serif; font-size:28pt; color:rgba(124,58,237,.20);
-      font-weight:900; letter-spacing:3px; text-align:center; white-space:pre; pointer-events:none; }
-    ` : /* diagonal (default) */ `
-    body::before { content:"${wmText}"; position:fixed; top:42%; left:50%; transform:translate(-50%,-50%) rotate(-35deg);
-      font-family:'Latha','Arial Unicode MS',Arial,sans-serif; font-size:24pt; color:rgba(30,58,138,.12);
-      font-weight:700; text-align:center; white-space:pre; pointer-events:none; }
-    `;
+
+  const tamilLines   = ['துணைப்பதிவாளர்','பொதுவிநியோகத்திட்டம்','திருவண்ணாமலை'];
+  const englishLines = ['Deputy Registrar','Public Distribution System','Thiruvannamalai'];
+  const allLines     = wmLang==='tamil' ? tamilLines : wmLang==='english' ? englishLines : [...tamilLines,...englishLines];
+
+  // Build the watermark element HTML + CSS
+  let wmHtml = '', wmExtraCSS = '';
+  if(wmEnable){
+    const linesHtml = allLines.map(l=>`<div>${l}</div>`).join('');
+    if(wmStyle==='corner'){
+      wmExtraCSS = `
+        .wm { position:fixed; top:8mm; right:8mm; text-align:right;
+          font-family:'Tamil Marutham','Latha','Arial Unicode MS',Arial,sans-serif;
+          font-size:7pt; font-weight:700; color:rgba(5,150,105,.65); pointer-events:none; }`;
+      wmHtml = `<div class="wm">${linesHtml}</div>`;
+    } else if(wmStyle==='stamp'){
+      wmExtraCSS = `
+        .wm { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+          text-align:center; border:1.5px dashed rgba(30,58,138,.28);
+          border-radius:4px; padding:8px 18px;
+          font-family:'Tamil Marutham','Latha','Arial Unicode MS',Arial,sans-serif;
+          font-size:12pt; font-weight:700; color:rgba(30,58,138,.22); pointer-events:none; }`;
+      wmHtml = `<div class="wm">${linesHtml}</div>`;
+    } else if(wmStyle==='bold_diagonal'){
+      wmExtraCSS = `
+        .wm { position:fixed; top:44%; left:50%; transform:translate(-50%,-50%) rotate(-35deg);
+          text-align:center; letter-spacing:2px;
+          font-family:'Tamil Marutham','Latha','Arial Unicode MS',Arial,sans-serif;
+          font-size:26pt; font-weight:900; color:rgba(124,58,237,.18); pointer-events:none; }`;
+      wmHtml = `<div class="wm">${linesHtml}</div>`;
+    } else { /* diagonal (default) */
+      wmExtraCSS = `
+        .wm { position:fixed; top:42%; left:50%; transform:translate(-50%,-50%) rotate(-35deg);
+          text-align:center;
+          font-family:'Tamil Marutham','Latha','Arial Unicode MS',Arial,sans-serif;
+          font-size:22pt; font-weight:700; color:rgba(30,58,138,.12); pointer-events:none; }`;
+      wmHtml = `<div class="wm">${linesHtml}</div>`;
+    }
+  }
 
   const printWin = window.open('','_blank','width=800,height=600');
   printWin.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
   <title>e-KYC Block Abstract — ${cat.label}</title>
   <style>
     @page { size: A4 ${orient}; margin: 15mm; }
-    body { font-family: 'Latha','Arial Unicode MS',Arial,sans-serif; font-size:12px; color:#1e293b; margin:0; }
+    body { font-family: 'Tamil Marutham','Latha','Arial Unicode MS',Arial,sans-serif; font-size:12px; color:#1e293b; margin:0; }
     .header { margin-bottom:10px; border-bottom:2px solid #1e3a8a; padding-bottom:6px; }
     table { width:100%; border-collapse:collapse; }
     th { background:#1e3a8a; color:white; padding:6px 5px; border:1px solid #1e40af; font-size:11px; text-align:center; }
     td { padding:5px 6px; border:1px solid #e2e8f0; font-size:11px; }
     tr:nth-child(even) { background:#f8fafc; }
     tfoot td { background:#f1f5f9; font-weight:700; }
-    ${wmCSS}
+    ${wmExtraCSS}
     .filter-note { font-size:10px; color:#7c3aed; margin-top:4px; }
   </style></head><body>
+  ${wmHtml}
   <div class="header">
     <div style="font-size:14px;font-weight:700">e-KYC Block Abstract — ${cat.label} | திருவண்ணாமலை மாவட்டம்</div>
     <div style="font-size:11px;color:#64748b">As on ${ekyc.date}${hasComp?' | Compared with '+ekyc.oldDate:''}</div>
