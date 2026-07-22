@@ -582,7 +582,10 @@ document.addEventListener('keydown', e=>{
     <h1>📋 Office Automation Suite <span class="badge">v0.1</span></h1>
     <div style="font-size:12px;color:var(--muted);margin-top:4px">DR PDS, Thiruvannamalai • Module: Inspection Reports</div>
   </div>
-  <div style="display:flex;gap:10px;align-items:center">
+  <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;padding:5px 10px;background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.3);border-radius:6px" title="Include Deputy Registrar / PDS / Thiruvannamalai watermark on every Copy button screenshot">
+      <input type="checkbox" id="global-wm-toggle" checked onchange="ekyc._imgWmEnable=this.checked;localStorage.setItem('img_wm_enable',this.checked?'1':'0')"> 🔏 Watermark screenshots
+    </label>
     <label style="font-size:12px;color:var(--muted)">Report Month:</label>
     <input type="month" id="reportMonth" class="month-input">
   </div>
@@ -3406,13 +3409,15 @@ async function captureConsistencyCanvas(){
   // Use html2canvas with full width to capture overflow content
   const table = wrap.querySelector('table');
   if(!table) return null;
-  return await html2canvas(table, {
+  const canvas = await html2canvas(table, {
     backgroundColor:'#ffffff',
     scale:2,
     windowWidth: table.scrollWidth + 50,
     width: table.scrollWidth,
     height: table.scrollHeight
   });
+  applyImgWatermark(canvas);
+  return canvas;
 }
 
 async function copyConsistencyImage(){
@@ -3540,11 +3545,64 @@ function downloadConsistencyPDF(){
 // ============================================================
 // SCREENSHOT (clipboard + download)
 // ============================================================
+
+// Global toggle state — restored from localStorage on load
+(function initImgWatermark(){
+  try{
+    const saved = localStorage.getItem('img_wm_enable');
+    // Default: enabled (matches checkbox default)
+    if(typeof ekyc==='undefined') window.ekyc = {};
+    ekyc._imgWmEnable = saved === null ? true : saved === '1';
+    // Restore checkbox state after DOM ready
+    document.addEventListener('DOMContentLoaded', ()=>{
+      const cb = document.getElementById('global-wm-toggle');
+      if(cb) cb.checked = ekyc._imgWmEnable;
+    });
+  }catch(e){}
+})();
+
+// Overlay a light diagonal watermark on a canvas produced by html2canvas.
+// This runs client-side after html2canvas returns, so it applies to EVERY
+// Copy/Download screenshot in the app when the global toggle is on.
+function applyImgWatermark(canvas){
+  if(!ekyc || !ekyc._imgWmEnable) return canvas;
+  const ctx = canvas.getContext('2d');
+  if(!ctx) return canvas;
+
+  const w = canvas.width, h = canvas.height;
+  ctx.save();
+
+  // The text — 3 lines, English (works for both Latin and system Tamil fallback in canvas)
+  const lines = ['Deputy Registrar','Public Distribution System','Thiruvannamalai'];
+
+  // Font size scales with canvas — bigger images get bigger watermarks
+  const fontSize = Math.max(28, Math.min(72, Math.floor(Math.min(w, h) * 0.05)));
+  const lineHeight = fontSize * 1.25;
+
+  ctx.font = `bold ${fontSize}px "Tamil Marutham","Latha","Arial Unicode MS",Arial,sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(120, 120, 130, 0.32)';   // MS Word-style light gray
+
+  // Translate to centre, rotate -35°, draw stacked lines
+  ctx.translate(w/2, h/2);
+  ctx.rotate(-35 * Math.PI / 180);
+
+  const totalH = lineHeight * (lines.length - 1);
+  lines.forEach((line, i)=>{
+    ctx.fillText(line, 0, -totalH/2 + i * lineHeight);
+  });
+
+  ctx.restore();
+  return canvas;
+}
+
 async function copyCard(id){
   const el = document.getElementById(id);
   if(!el){toast('Card not found',true);return}
   try{
     const canvas = await html2canvas(el,{backgroundColor:'#ffffff',scale:2});
+    applyImgWatermark(canvas);
     canvas.toBlob(async blob=>{
       try{
         await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
@@ -3563,6 +3621,7 @@ async function downloadCard(id,filename){
   if(!el) return;
   try{
     const canvas = await html2canvas(el,{backgroundColor:'#ffffff',scale:2});
+    applyImgWatermark(canvas);
     canvas.toBlob(blob=>saveAs(blob,filename+'.png'));
     toast('✓ PNG downloaded');
   }catch(err){toast('Download failed',true)}
@@ -7207,6 +7266,7 @@ async function copyEkycTableImg(wrapId){
       width:target.scrollWidth,height:target.scrollHeight,
       windowWidth:target.scrollWidth+100
     });
+    applyImgWatermark(canvas);
     canvas.toBlob(async blob=>{
       try{
         await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
@@ -8757,7 +8817,7 @@ function ekycLaunchPrint(){
 
 // ══════════════════════════════════════════════════════════════════════════
 // WATERMARK ENGINE — jsPDF (shop-wise PDF)
-// MS Word-style: very light gray, drawn BEFORE content so table sits on top.
+// MS Word-style: light gray, drawn BEFORE content so table sits on top.
 // Called from autoTable's willDrawPage hook — runs at the start of every page.
 // ══════════════════════════════════════════════════════════════════════════
 function drawEkycWatermarkOnPage(doc){
@@ -8770,54 +8830,60 @@ function drawEkycWatermarkOnPage(doc){
   const ph = doc.internal.pageSize.getHeight();
   const cx = pw/2, cy = ph/2;
 
-  // MS Word-style light gray — reads clearly as background even if drawn on top
-  const grayLight = [210, 210, 210];   // for regular diagonal / stamp
-  const grayMed   = [175, 175, 185];   // for bold diagonal — slightly darker but still very light
-  const greenSoft = [190, 210, 200];   // corner — soft muted green
+  // MS Word-style light gray — visible enough to read but doesn't obscure data
+  const grayLight = [175, 175, 178];   // regular diagonal / stamp — mid-light gray (~68%)
+  const grayMed   = [150, 150, 160];   // bold diagonal — slightly darker
+  const grayCorner= [110, 120, 115];   // corner — darker so top-right text is readable
 
   if(style === 'diagonal' || style === 'bold_diagonal'){
     const isBold   = style === 'bold_diagonal';
-    // Larger fonts for MS Word feel — real watermarks are big
-    const fontSize = isBold ? 42 : 34;
-    const spacing  = isBold ? 18 : 15;   // mm between lines
+    // Use a SHORTER single string for reliable placement — MS Word style.
+    // jsPDF's per-line rotation drifts, so combining into 1 line avoids that entirely.
+    const compact = lines.join(' · ');
+    const fontSize = isBold ? 34 : 28;
     const color    = isBold ? grayMed : grayLight;
 
-    doc.setFont('helvetica', isBold ? 'bold' : 'bold');
+    doc.setFont('helvetica','bold');
     doc.setFontSize(fontSize);
     doc.setTextColor(color[0], color[1], color[2]);
 
-    const totalH = spacing * (lines.length - 1);
-    lines.forEach((line, i)=>{
-      const yOffset = -totalH/2 + i*spacing;
-      doc.text(line, cx, cy + yOffset, { align:'center', angle:35 });
+    // Single call, rotated as one block around page centre.
+    // baseline:'middle' centres text vertically at cy; align:'center' centres horizontally at cx.
+    doc.text(compact, cx, cy, {
+      align:'center',
+      angle:-35,          // jsPDF angle: negative = clockwise (going lower-left → upper-right visually)
+      baseline:'middle'
     });
 
   } else if(style === 'stamp'){
-    const fontSize = 10;
-    const spacing  = 6.5;
+    const fontSize = 12;
+    const spacing  = 7;
     doc.setFont('helvetica','bold');
     doc.setFontSize(fontSize);
     doc.setTextColor(...grayLight);
     const totalH = spacing * (lines.length - 1);
-    const boxPad = 6;
+    const boxPad = 8;
     const maxW = Math.max(...lines.map(l=>l.length)) * fontSize * 0.48;
     const boxW = maxW + boxPad*2;
-    const boxH = totalH + boxPad*2 + 2;
+    const boxH = totalH + boxPad*2 + 4;
     doc.setDrawColor(...grayLight);
-    doc.setLineWidth(0.5);
+    doc.setLineWidth(0.6);
     doc.setLineDash([2,2]);
-    doc.roundedRect(cx-boxW/2, cy-boxH/2, boxW, boxH, 2, 2);
+    doc.roundedRect(cx-boxW/2, cy-boxH/2, boxW, boxH, 3, 3);
     doc.setLineDash([]);
     lines.forEach((line,i)=>{
       doc.text(line, cx, cy - totalH/2 + i*spacing + 2, {align:'center'});
     });
 
   } else if(style === 'corner'){
+    // Top-right corner — increase visibility, fit all 3 lines within top margin
     doc.setFont('helvetica','bold');
-    doc.setFontSize(7);
-    doc.setTextColor(...greenSoft);
+    doc.setFontSize(9);                    // was 7 — too small
+    doc.setTextColor(...grayCorner);
+    const startY = 8;                      // start well below page top edge
+    const lineH  = 5;
     lines.forEach((line,i)=>{
-      doc.text(line, pw-8, 10 + i*5, {align:'right'});
+      doc.text(line, pw-10, startY + i*lineH, {align:'right'});
     });
   }
 
@@ -8827,10 +8893,8 @@ function drawEkycWatermarkOnPage(doc){
 }
 
 // Kept for backward compatibility — now just delegates to per-page draw.
-// (Called at end of shopwise PDF for pages that autoTable already drew.)
 function addEkycWatermark(doc){
   // no-op — watermark is now drawn per-page via willDrawPage hook
-  // (retained so old call sites don't crash)
 }
 
 function printEkycShopwise(orientation){
@@ -12819,7 +12883,7 @@ function printEkycBlockAbstract(catK, orientation){
           text-align:center; letter-spacing:2px;
           font-family:'Tamil Marutham','Latha','Arial Unicode MS',Arial,sans-serif;
           font-size:36pt; font-weight:900;
-          color:rgba(140,140,150,.22);
+          color:rgba(100,100,110,.32);
           line-height:1.15;
         }`;
     } else { /* diagonal (default — MS Word style) */
@@ -12830,17 +12894,21 @@ function printEkycBlockAbstract(catK, orientation){
           text-align:center;
           font-family:'Tamil Marutham','Latha','Arial Unicode MS',Arial,sans-serif;
           font-size:30pt; font-weight:700;
-          color:rgba(170,170,175,.28);
+          color:rgba(120,120,130,.35);
           line-height:1.2;
         }`;
     }
 
     // Ensure watermark keeps printing on every page (Chrome & Edge respect this)
+    // print-color-adjust forces the browser to preserve the light watermark color
+    // (otherwise Chromium's print engine strips near-white colors as an "ink saving" optimisation)
     wmExtraCSS += `
       @media print {
         .wm-container { position:fixed !important; z-index:-1 !important; }
+        .wm-inner { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
         .page-content { position:relative; z-index:1; background:transparent; }
-      }`;
+      }
+      .wm-container, .wm-inner { -webkit-print-color-adjust:exact; print-color-adjust:exact; }`;
 
     wmHtml = `<div class="wm-container"><div class="wm-inner">${linesHtml}</div></div>`;
   }
