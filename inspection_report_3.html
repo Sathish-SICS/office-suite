@@ -8672,29 +8672,29 @@ function showEkycPrintDialog(){
         </div>
         <div style="font-size:11px;color:var(--muted);margin-bottom:5px">Appearance:</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-          <label title="Large diagonal text, very light grey" style="cursor:pointer;border:2px solid transparent;border-radius:6px;padding:5px" id="wm-preset-lbl-diagonal">
+          <label title="MS Word style — very light gray diagonal (recommended)" style="cursor:pointer;border:2px solid transparent;border-radius:6px;padding:5px" id="wm-preset-lbl-diagonal">
             <input type="radio" name="wm-style" value="diagonal" checked style="display:none">
-            <div style="font-size:18px;opacity:.18;transform:rotate(-35deg);text-align:center;line-height:1.1;font-weight:700;color:#1e3a8a;font-size:20px;letter-spacing:1px">DR PDS</div>
-            <div style="text-align:center;font-size:10px;color:#a5b4fc;margin-top:2px">① Diagonal · Light</div>
+            <div style="opacity:.35;transform:rotate(-35deg);text-align:center;line-height:1.1;font-weight:700;color:#94a3b8;font-size:20px;letter-spacing:1px">DR PDS</div>
+            <div style="text-align:center;font-size:10px;color:#a5b4fc;margin-top:2px">① Diagonal · MS Word style</div>
           </label>
-          <label title="Bold diagonal, medium opacity" style="cursor:pointer;border:2px solid transparent;border-radius:6px;padding:5px" id="wm-preset-lbl-bold">
+          <label title="Slightly stronger diagonal — still very light" style="cursor:pointer;border:2px solid transparent;border-radius:6px;padding:5px" id="wm-preset-lbl-bold">
             <input type="radio" name="wm-style" value="bold_diagonal" style="display:none">
-            <div style="font-size:18px;opacity:.30;transform:rotate(-35deg);text-align:center;font-weight:900;color:#7c3aed;letter-spacing:2px">DR PDS</div>
+            <div style="opacity:.40;transform:rotate(-35deg);text-align:center;font-weight:900;color:#94a3b8;letter-spacing:2px;font-size:22px">DR PDS</div>
             <div style="text-align:center;font-size:10px;color:#a5b4fc;margin-top:2px">② Diagonal · Bold</div>
           </label>
-          <label title="Centered, stamp-style with border" style="cursor:pointer;border:2px solid transparent;border-radius:6px;padding:5px" id="wm-preset-lbl-stamp">
+          <label title="Centered, stamp-style with dashed border" style="cursor:pointer;border:2px solid transparent;border-radius:6px;padding:5px" id="wm-preset-lbl-stamp">
             <input type="radio" name="wm-style" value="stamp" style="display:none">
-            <div style="text-align:center;border:2px solid rgba(30,58,138,.3);border-radius:4px;padding:2px 4px;opacity:.35;font-size:9px;font-weight:700;color:#1e3a8a">[ DR PDS TVM ]</div>
+            <div style="text-align:center;border:1.5px dashed rgba(160,160,160,.5);border-radius:4px;padding:2px 4px;opacity:.5;font-size:9px;font-weight:700;color:#94a3b8">[ DR PDS TVM ]</div>
             <div style="text-align:center;font-size:10px;color:#a5b4fc;margin-top:4px">③ Centre · Stamp</div>
           </label>
-          <label title="Top-right corner badge" style="cursor:pointer;border:2px solid transparent;border-radius:6px;padding:5px" id="wm-preset-lbl-corner">
+          <label title="Top-right corner badge (each page)" style="cursor:pointer;border:2px solid transparent;border-radius:6px;padding:5px" id="wm-preset-lbl-corner">
             <input type="radio" name="wm-style" value="corner" style="display:none">
-            <div style="text-align:right;opacity:.45;font-size:9px;font-weight:700;color:#059669">DR PDS TVM ↗</div>
+            <div style="text-align:right;opacity:.6;font-size:9px;font-weight:700;color:#94a3b8">DR PDS TVM ↗</div>
             <div style="text-align:center;font-size:10px;color:#a5b4fc;margin-top:4px">④ Corner · Subtle</div>
           </label>
         </div>
         <div id="wm-preset-note" style="font-size:10px;color:#6ee7b7;margin-top:6px;min-height:14px">
-          ① Diagonal Light — classic government watermark look (recommended)
+          ① Diagonal — MS Word style: very light gray, behind the data, doesn't obscure content (recommended)
         </div>
       </div>
     </div>
@@ -8714,10 +8714,10 @@ function showEkycPrintDialog(){
   if(filterNote) filterNote.textContent = filterStatus || '⚪ No filter active — all rows included';
   // Watermark preset highlight + description
   const presetDescs = {
-    'diagonal':      '① Diagonal Light — classic govt watermark, large text at –35°, very light (recommended)',
-    'bold_diagonal': '② Diagonal Bold — stronger diagonal, purple tint, high contrast',
-    'stamp':         '③ Centre Stamp — compact rectangular border at page centre, low opacity',
-    'corner':        '④ Corner Subtle — small text in top-right corner of every page'
+    'diagonal':      '① MS Word style — very light gray, sits behind data, doesn\'t obscure content (recommended)',
+    'bold_diagonal': '② Diagonal Bold — same behind-content placement, slightly heavier weight for stronger visibility',
+    'stamp':         '③ Centre Stamp — light gray dashed border at page centre, very subtle',
+    'corner':        '④ Corner Subtle — small text top-right on every page, minimal footprint'
   };
   dlg.querySelectorAll('input[name="wm-style"]').forEach(inp=>{
     const lbl = dlg.querySelector('#wm-preset-lbl-'+inp.value);
@@ -8756,79 +8756,81 @@ function ekycLaunchPrint(){
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// WATERMARK ENGINE — jsPDF version (shop-wise PDF)
-// jsPDF only supports Latin characters reliably.
-// Tamil is handled by the CSS path in printEkycBlockAbstract (browser print).
+// WATERMARK ENGINE — jsPDF (shop-wise PDF)
+// MS Word-style: very light gray, drawn BEFORE content so table sits on top.
+// Called from autoTable's willDrawPage hook — runs at the start of every page.
 // ══════════════════════════════════════════════════════════════════════════
-function addEkycWatermark(doc){
+function drawEkycWatermarkOnPage(doc){
   if(!ekyc._wmEnable) return;
-  const style  = ekyc._wmStyle || 'diagonal';
-  // jsPDF cannot render Tamil Unicode — always use English lines here
+  const style = ekyc._wmStyle || 'diagonal';
+  // jsPDF cannot render Tamil Unicode — always use English lines here.
   const lines = ['Deputy Registrar','Public Distribution System','Thiruvannamalai'];
 
-  const totalPages = doc.getNumberOfPages();
   const pw = doc.internal.pageSize.getWidth();
   const ph = doc.internal.pageSize.getHeight();
   const cx = pw/2, cy = ph/2;
 
-  for(let p=1; p<=totalPages; p++){
-    doc.setPage(p);
+  // MS Word-style light gray — reads clearly as background even if drawn on top
+  const grayLight = [210, 210, 210];   // for regular diagonal / stamp
+  const grayMed   = [175, 175, 185];   // for bold diagonal — slightly darker but still very light
+  const greenSoft = [190, 210, 200];   // corner — soft muted green
 
-    if(style === 'diagonal' || style === 'bold_diagonal'){
-      // Draw ALL lines in ONE rotated block to avoid multiple impressions.
-      // Strategy: draw each line at the correct vertical offset while rotating
-      // around the page centre.
-      const isBold   = style === 'bold_diagonal';
-      const fontSize = isBold ? 24 : 20;
-      const spacing  = isBold ? 12 : 10;     // mm between lines
-      const r = isBold ? [180,140,250] : [147,197,253];  // purple / blue
-      // opacity simulation via light colour (jsPDF doesn't have real opacity for text)
+  if(style === 'diagonal' || style === 'bold_diagonal'){
+    const isBold   = style === 'bold_diagonal';
+    // Larger fonts for MS Word feel — real watermarks are big
+    const fontSize = isBold ? 42 : 34;
+    const spacing  = isBold ? 18 : 15;   // mm between lines
+    const color    = isBold ? grayMed : grayLight;
 
-      doc.setFont('helvetica', isBold ? 'bold' : 'normal');
-      doc.setFontSize(fontSize);
-      doc.setTextColor(...r);
+    doc.setFont('helvetica', isBold ? 'bold' : 'bold');
+    doc.setFontSize(fontSize);
+    doc.setTextColor(color[0], color[1], color[2]);
 
-      // Total block height
-      const totalH = spacing * (lines.length - 1);
-      lines.forEach((line, i)=>{
-        const yOffset = -totalH/2 + i*spacing;
-        // Rotate each line individually around the page centre
-        // jsPDF angle is counter-clockwise in degrees
-        doc.text(line, cx, cy + yOffset, { align:'center', angle:35 });
-      });
+    const totalH = spacing * (lines.length - 1);
+    lines.forEach((line, i)=>{
+      const yOffset = -totalH/2 + i*spacing;
+      doc.text(line, cx, cy + yOffset, { align:'center', angle:35 });
+    });
 
-    } else if(style === 'stamp'){
-      const fontSize = 8;
-      const spacing  = 5.5;
-      doc.setFont('helvetica','bold');
-      doc.setFontSize(fontSize);
-      doc.setTextColor(30,58,138);
-      const totalH = spacing * (lines.length - 1);
-      const boxPad = 5;
-      // Approximate text width for the longest line
-      const maxW = Math.max(...lines.map(l=>l.length)) * fontSize * 0.48;
-      const boxW = maxW + boxPad*2;
-      const boxH = totalH + boxPad*2 + 2;
-      doc.setDrawColor(30,58,138);
-      doc.setLineWidth(0.6);
-      doc.setLineDash([2,2]);
-      doc.roundedRect(cx-boxW/2, cy-boxH/2, boxW, boxH, 2, 2);
-      doc.setLineDash([]);
-      lines.forEach((line,i)=>{
-        doc.text(line, cx, cy - totalH/2 + i*spacing + 2, {align:'center'});
-      });
+  } else if(style === 'stamp'){
+    const fontSize = 10;
+    const spacing  = 6.5;
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(fontSize);
+    doc.setTextColor(...grayLight);
+    const totalH = spacing * (lines.length - 1);
+    const boxPad = 6;
+    const maxW = Math.max(...lines.map(l=>l.length)) * fontSize * 0.48;
+    const boxW = maxW + boxPad*2;
+    const boxH = totalH + boxPad*2 + 2;
+    doc.setDrawColor(...grayLight);
+    doc.setLineWidth(0.5);
+    doc.setLineDash([2,2]);
+    doc.roundedRect(cx-boxW/2, cy-boxH/2, boxW, boxH, 2, 2);
+    doc.setLineDash([]);
+    lines.forEach((line,i)=>{
+      doc.text(line, cx, cy - totalH/2 + i*spacing + 2, {align:'center'});
+    });
 
-    } else if(style === 'corner'){
-      doc.setFont('helvetica','bold');
-      doc.setFontSize(6.5);
-      doc.setTextColor(5,150,105);
-      lines.forEach((line,i)=>{
-        doc.text(line, pw-8, 10 + i*5, {align:'right'});
-      });
-    }
-
-    doc.setTextColor(0);
+  } else if(style === 'corner'){
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(7);
+    doc.setTextColor(...greenSoft);
+    lines.forEach((line,i)=>{
+      doc.text(line, pw-8, 10 + i*5, {align:'right'});
+    });
   }
+
+  // Reset for subsequent drawing
+  doc.setTextColor(0);
+  doc.setDrawColor(0);
+}
+
+// Kept for backward compatibility — now just delegates to per-page draw.
+// (Called at end of shopwise PDF for pages that autoTable already drew.)
+function addEkycWatermark(doc){
+  // no-op — watermark is now drawn per-page via willDrawPage hook
+  // (retained so old call sites don't crash)
 }
 
 function printEkycShopwise(orientation){
@@ -8936,6 +8938,10 @@ function printEkycShopwise(orientation){
   const orient = orientation || (pdfCols.length>10?'landscape':'portrait');
   const doc = new jsPDF({orientation:orient,unit:'mm',format:'a4'});
 
+  // Draw watermark on page 1 FIRST so all subsequent content sits on top of it.
+  // (Pages 2+ get watermark via autoTable's willDrawPage hook — see below.)
+  drawEkycWatermarkOnPage(doc);
+
   const sortLabel = {'pend':'Pending','pct':'%','added':'Added','pct_old':'Old %'}[sortCol]||sortCol;
   const sortDesc = `Sorted by: ${sortLabel} ${sortDir==='desc'?'High → Low':'Low → High'}`;
   const filterParts=[];
@@ -8977,6 +8983,13 @@ function printEkycShopwise(orientation){
     headStyles:{fillColor:[30,58,138],textColor:255,fontSize:7,fontStyle:'bold',halign:'center'},
     bodyStyles:{fontSize:6.5,cellPadding:1.2},
     styles:{overflow:'linebreak',lineColor:[203,213,225],lineWidth:0.15},
+    willDrawPage(data){
+      // Draw watermark FIRST on every page from page 2 onwards
+      // (page 1 was already handled manually above so its watermark sits below the title)
+      if(data.pageNumber > 1){
+        drawEkycWatermarkOnPage(doc);
+      }
+    },
     willDrawCell(data){
       if(data.section!=='body') return;
       const row = tableBody[data.row.index]; if(!row) return;
@@ -12760,39 +12773,76 @@ function printEkycBlockAbstract(catK, orientation){
   const englishLines = ['Deputy Registrar','Public Distribution System','Thiruvannamalai'];
   const allLines     = wmLang==='tamil' ? tamilLines : wmLang==='english' ? englishLines : [...tamilLines,...englishLines];
 
-  // Build the watermark element HTML + CSS
+  // MS Word-style watermark: very light gray, sits BEHIND page content (z-index:-1),
+  // repeats on every page via position:fixed + print-media rules.
   let wmHtml = '', wmExtraCSS = '';
   if(wmEnable){
     const linesHtml = allLines.map(l=>`<div>${l}</div>`).join('');
+
+    // Common wrapper — makes watermark behind everything, non-selectable, non-clickable
+    const commonWrap = `
+      position:fixed; top:0; left:0; right:0; bottom:0;
+      z-index:-1; pointer-events:none; user-select:none;
+      display:flex; align-items:center; justify-content:center;`;
+
     if(wmStyle==='corner'){
+      // Top-right corner — subtle small text (green-tinted gray)
       wmExtraCSS = `
-        .wm { position:fixed; top:8mm; right:8mm; text-align:right;
+        .wm-container { ${commonWrap} }
+        .wm-inner {
+          position:absolute; top:8mm; right:8mm; text-align:right;
           font-family:'Tamil Marutham','Latha','Arial Unicode MS',Arial,sans-serif;
-          font-size:7pt; font-weight:700; color:rgba(5,150,105,.65); pointer-events:none; }`;
-      wmHtml = `<div class="wm">${linesHtml}</div>`;
+          font-size:8pt; font-weight:700;
+          color:rgba(130,150,140,.7);
+          line-height:1.3;
+        }`;
     } else if(wmStyle==='stamp'){
+      // Centre stamp with a soft dashed border — very light gray
       wmExtraCSS = `
-        .wm { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
-          text-align:center; border:1.5px dashed rgba(30,58,138,.28);
-          border-radius:4px; padding:8px 18px;
+        .wm-container { ${commonWrap} }
+        .wm-inner {
+          text-align:center;
+          border:1.5px dashed rgba(160,160,160,.35);
+          border-radius:6px; padding:10px 22px;
           font-family:'Tamil Marutham','Latha','Arial Unicode MS',Arial,sans-serif;
-          font-size:12pt; font-weight:700; color:rgba(30,58,138,.22); pointer-events:none; }`;
-      wmHtml = `<div class="wm">${linesHtml}</div>`;
+          font-size:14pt; font-weight:700;
+          color:rgba(150,150,150,.35);
+          line-height:1.4;
+          background:rgba(255,255,255,.4);
+        }`;
     } else if(wmStyle==='bold_diagonal'){
+      // Large diagonal, slightly darker but still light
       wmExtraCSS = `
-        .wm { position:fixed; top:44%; left:50%; transform:translate(-50%,-50%) rotate(-35deg);
+        .wm-container { ${commonWrap} }
+        .wm-inner {
+          transform:rotate(-35deg);
           text-align:center; letter-spacing:2px;
           font-family:'Tamil Marutham','Latha','Arial Unicode MS',Arial,sans-serif;
-          font-size:26pt; font-weight:900; color:rgba(124,58,237,.18); pointer-events:none; }`;
-      wmHtml = `<div class="wm">${linesHtml}</div>`;
-    } else { /* diagonal (default) */
+          font-size:36pt; font-weight:900;
+          color:rgba(140,140,150,.22);
+          line-height:1.15;
+        }`;
+    } else { /* diagonal (default — MS Word style) */
       wmExtraCSS = `
-        .wm { position:fixed; top:42%; left:50%; transform:translate(-50%,-50%) rotate(-35deg);
+        .wm-container { ${commonWrap} }
+        .wm-inner {
+          transform:rotate(-35deg);
           text-align:center;
           font-family:'Tamil Marutham','Latha','Arial Unicode MS',Arial,sans-serif;
-          font-size:22pt; font-weight:700; color:rgba(30,58,138,.12); pointer-events:none; }`;
-      wmHtml = `<div class="wm">${linesHtml}</div>`;
+          font-size:30pt; font-weight:700;
+          color:rgba(170,170,175,.28);
+          line-height:1.2;
+        }`;
     }
+
+    // Ensure watermark keeps printing on every page (Chrome & Edge respect this)
+    wmExtraCSS += `
+      @media print {
+        .wm-container { position:fixed !important; z-index:-1 !important; }
+        .page-content { position:relative; z-index:1; background:transparent; }
+      }`;
+
+    wmHtml = `<div class="wm-container"><div class="wm-inner">${linesHtml}</div></div>`;
   }
 
   const printWin = window.open('','_blank','width=800,height=600');
@@ -12800,17 +12850,20 @@ function printEkycBlockAbstract(catK, orientation){
   <title>e-KYC Block Abstract — ${cat.label}</title>
   <style>
     @page { size: A4 ${orient}; margin: 15mm; }
-    body { font-family: 'Tamil Marutham','Latha','Arial Unicode MS',Arial,sans-serif; font-size:12px; color:#1e293b; margin:0; }
+    html, body { background:#ffffff; }
+    body { font-family: 'Tamil Marutham','Latha','Arial Unicode MS',Arial,sans-serif; font-size:12px; color:#1e293b; margin:0; position:relative; }
+    .page-content { position:relative; z-index:1; }
     .header { margin-bottom:10px; border-bottom:2px solid #1e3a8a; padding-bottom:6px; }
-    table { width:100%; border-collapse:collapse; }
+    table { width:100%; border-collapse:collapse; background:#ffffff; }
     th { background:#1e3a8a; color:white; padding:6px 5px; border:1px solid #1e40af; font-size:11px; text-align:center; }
-    td { padding:5px 6px; border:1px solid #e2e8f0; font-size:11px; }
-    tr:nth-child(even) { background:#f8fafc; }
+    td { padding:5px 6px; border:1px solid #e2e8f0; font-size:11px; background:#ffffff; }
+    tr:nth-child(even) td { background:#f8fafc; }
     tfoot td { background:#f1f5f9; font-weight:700; }
     ${wmExtraCSS}
     .filter-note { font-size:10px; color:#7c3aed; margin-top:4px; }
   </style></head><body>
   ${wmHtml}
+  <div class="page-content">
   <div class="header">
     <div style="font-size:14px;font-weight:700">e-KYC Block Abstract — ${cat.label} | திருவண்ணாமலை மாவட்டம்</div>
     <div style="font-size:11px;color:#64748b">As on ${ekyc.date}${hasComp?' | Compared with '+ekyc.oldDate:''}</div>
@@ -12842,6 +12895,7 @@ function printEkycBlockAbstract(catK, orientation){
       </tr>
     </tfoot>
   </table>
+  </div><!-- /.page-content -->
   <script>window.onload=()=>{window.print();}<\/script>
   </body></html>`);
   printWin.document.close();
