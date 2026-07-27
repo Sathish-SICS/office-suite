@@ -2734,6 +2734,36 @@ function renderDetail(title, list, cardId, bg1, bg2){
       <div class="empty-state"><div class="icon">📭</div>No inspections found for ${title}</div>
     </div>
   `;
+  // Sort state per-card. Default: date ascending (chronological).
+  if(!window._detailSort) window._detailSort = {};
+  if(!window._detailSort[cardId]) window._detailSort[cardId] = {col:'date', dir:'asc'};
+  const sk = window._detailSort[cardId];
+
+  const sorted = list.slice().sort((a,b)=>{
+    let av, bv;
+    if(sk.col==='date'){
+      av = new Date(a.date).getTime()||0;
+      bv = new Date(b.date).getTime()||0;
+    } else if(sk.col==='block'){
+      av = (a.block||'').toLowerCase();
+      bv = (b.block||'').toLowerCase();
+    } else if(sk.col==='fpsCode'){
+      av = (a.fpsCode||'').toLowerCase();
+      bv = (b.fpsCode||'').toLowerCase();
+    } else if(sk.col==='fpsName'){
+      av = (a.fpsName||'').toLowerCase();
+      bv = (b.fpsName||'').toLowerCase();
+    } else {
+      av = 0; bv = 0;
+    }
+    if(av<bv) return sk.dir==='asc'?-1:1;
+    if(av>bv) return sk.dir==='asc'?1:-1;
+    return 0;
+  });
+
+  const arrow = (col)=> sk.col===col ? (sk.dir==='asc'?' ▲':' ▼') : ' ⇅';
+  const sortAttr = (col)=> `onclick="setDetailSort('${cardId}','${col}')" style="cursor:pointer;user-select:none" title="Click to sort"`;
+
   return `
   <div class="panel">
     <h2><span class="dot"></span> ${title} — Detailed Inspections (${list.length})</h2>
@@ -2743,10 +2773,17 @@ function renderDetail(title, list, cardId, bg1, bg2){
       </div>
       <table>
         <thead>
-          <tr><th>#</th><th>FPS Code</th><th>Block</th><th>FPS Name</th><th>Date of Inspection</th><th>Remarks</th></tr>
+          <tr>
+            <th>#</th>
+            <th ${sortAttr('fpsCode')}>FPS Code${arrow('fpsCode')}</th>
+            <th ${sortAttr('block')}>Block${arrow('block')}</th>
+            <th ${sortAttr('fpsName')}>FPS Name${arrow('fpsName')}</th>
+            <th ${sortAttr('date')}>Date of Inspection${arrow('date')}</th>
+            <th>Remarks</th>
+          </tr>
         </thead>
         <tbody>
-          ${list.map((d,i)=>`
+          ${sorted.map((d,i)=>`
             <tr>
               <td style="text-align:center">${i+1}</td>
               <td>${d.fpsCode}</td>
@@ -2768,6 +2805,21 @@ function renderDetail(title, list, cardId, bg1, bg2){
   </div>
   `;
 }
+
+// Click handler for detail table column sort — toggles direction, then re-renders that card
+window.setDetailSort = function(cardId, col){
+  if(!window._detailSort) window._detailSort = {};
+  const cur = window._detailSort[cardId] || {col:'date', dir:'asc'};
+  if(cur.col === col){
+    cur.dir = cur.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    cur.col = col;
+    cur.dir = 'asc';
+  }
+  window._detailSort[cardId] = cur;
+  // Re-render results panel so the sorted table is rebuilt in place
+  if(typeof renderResults === 'function') renderResults();
+};
 
 // ============================================================
 // MAPPING SHEET FETCH (Phone→Post & Shop→Block from Google Sheet)
@@ -3546,20 +3598,7 @@ function downloadConsistencyPDF(){
 // SCREENSHOT (clipboard + download)
 // ============================================================
 
-// Global toggle state — restored from localStorage on load
-(function initImgWatermark(){
-  try{
-    const saved = localStorage.getItem('img_wm_enable');
-    // Default: enabled (matches checkbox default)
-    if(typeof ekyc==='undefined') window.ekyc = {};
-    ekyc._imgWmEnable = saved === null ? true : saved === '1';
-    // Restore checkbox state after DOM ready
-    document.addEventListener('DOMContentLoaded', ()=>{
-      const cb = document.getElementById('global-wm-toggle');
-      if(cb) cb.checked = ekyc._imgWmEnable;
-    });
-  }catch(e){}
-})();
+// (ekyc._imgWmEnable is initialized just after const ekyc = {...} — see below)
 
 // Overlay a light diagonal watermark on a canvas produced by html2canvas.
 // This runs client-side after html2canvas returns, so it applies to EVERY
@@ -7240,6 +7279,22 @@ const BUILT_IN_SHOP_BLOCK = {
 };
 
 const ekyc = { data:null, oldData:null, date:'', oldDate:'', customShopMap:null, filter:{active:false} };
+// Restore image-watermark setting from localStorage (must run AFTER const ekyc declaration
+// above — otherwise the property gets wiped by the fresh object).
+try{
+  const _wmSaved = localStorage.getItem('img_wm_enable');
+  ekyc._imgWmEnable = _wmSaved === null ? true : _wmSaved === '1';
+}catch(e){ ekyc._imgWmEnable = true; }
+// Sync the header checkbox once DOM is ready
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', ()=>{
+    const cb = document.getElementById('global-wm-toggle');
+    if(cb) cb.checked = ekyc._imgWmEnable;
+  });
+} else {
+  const cb = document.getElementById('global-wm-toggle');
+  if(cb) cb.checked = ekyc._imgWmEnable;
+}
 
 function ekycGetBlock(code){
   const c = String(code||'').trim();
@@ -7525,10 +7580,30 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
     const catSortKey = 'ekyc_blk_sort_'+cat.k;
     if(!ekyc[catSortKey]) ekyc[catSortKey] = hasComp ? {col:'added',dir:'desc'} : {col:'pct',dir:'asc'};
 
+    // Effective Added for a block:
+    //   - In the ALL tab, if ⊕ Selected Total is active, sum only the selected categories
+    //     (so unchecking NPHH removes NPHH's contribution from Added)
+    //   - Otherwise, use the tab's own compF (full total for ALL, single category for AAY/PHH/NPHH)
+    // Returns null when there's no comparison data for that block.
+    const _s = ekyc.blkSelTotal;
+    const _selActive = cat.k==='all' && _s && _s.active;
+    const _selComp = (b)=>{
+      let x=0;
+      if(_s.aay) x += b.aay_comp||0;
+      if(_s.phh) x += b.phh_comp||0;
+      if(_s.nph) x += b.nph_comp||0;
+      return x;
+    };
+    function catAdded(b, ob){
+      if(ob===undefined || ob===null) return null;
+      if(_selActive) return _selComp(b) - _selComp(ob);
+      return cat.compF(b) - cat.compF(ob);
+    }
+
     const sortedB=blocks.slice().filter(b=>!ekyc.filter||!ekyc.filter.active||ekycBlockPassesFilter(cat.consF(b),cat.compF(b))).sort((a,b)=>{
       const sk=ekyc['ekyc_blk_sort_'+cat.k]||{col:hasComp?'added':'pct',dir:hasComp?'desc':'asc'};
       const oa=oldMap[a.block],ob2=oldMap[b.block];
-      if(sk.col==='added'&&hasComp){const aa=cat.compF(a)-(oa?cat.compF(oa):0),ab2=cat.compF(b)-(ob2?cat.compF(ob2):0);return sk.dir==='desc'?ab2-aa:aa-ab2;}
+      if(sk.col==='added'&&hasComp){const aa=(catAdded(a,oa)||0),ab2=(catAdded(b,ob2)||0);return sk.dir==='desc'?ab2-aa:aa-ab2;}
       if(sk.col==='pend'){const pa=cat.pendF(a),pb=cat.pendF(b);return sk.dir==='desc'?pb-pa:pa-pb;}
       if(sk.col==='pct_old'){const pa=oa&&cat.consF(oa)>0?cat.compF(oa)/cat.consF(oa):0,pb=ob2&&cat.consF(ob2)>0?cat.compF(ob2)/cat.consF(ob2):0;return sk.dir==='desc'?pb-pa:pa-pb;}
       const pa=cat.consF(a)>0?cat.compF(a)/cat.consF(a):0,pb=cat.consF(b)>0?cat.compF(b)/cat.consF(b):0;
@@ -7638,7 +7713,7 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
               const ob=oldMap[b.block];
               const oldComp=ob?cat.compF(ob):null;
               const oldPct=ob&&cat.consF(ob)>0?cat.compF(ob)/cat.consF(ob):null;
-              const added=ob!==undefined?comp-(oldComp||0):null;
+              const added=catAdded(b, ob);
               return `<tr>
                 <td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;color:#64748b;font-size:11px">${i+1}</td>
                 <td style="padding:6px 8px;border:1px solid #e2e8f0;font-weight:600">${b.block}</td>
@@ -7680,7 +7755,11 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
               <td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center" class="ekyc-col-${cat.k}-tot_pend">${fmtN(totPend)}</td>
               ${hasComp&&oldBlocks?(()=>{const op=oldBlocks.reduce((s,b)=>s+cat.compF(b),0)/Math.max(1,oldBlocks.reduce((s,b)=>s+cat.consF(b),0));return `<td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center;font-weight:700;background:${op>=0.9?'#d1fae5':op>=0.8?'#fef3c7':'#fee2e2'};font-size:13px" class="ekyc-col-${cat.k}-old_pct">${fmtPct(op)}</td>`;})():''}
               <td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center;font-weight:700;background:${totPct>=0.9?'#d1fae5':totPct>=0.8?'#fef3c7':'#fee2e2'};font-size:13px" class="ekyc-col-${cat.k}-tot_pct">${fmtPct(totPct)}</td>
-              ${hasComp&&oldBlocks?`<td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center;font-weight:700;color:#059669" class="ekyc-col-${cat.k}-added">+${fmtN(totComp-oldBlocks.reduce((s,b)=>s+cat.compF(b),0))}</td>`:''}
+              ${hasComp&&oldBlocks?(()=>{
+                let totAdded = 0;
+                sortedB.forEach(b=>{ const ob=oldMap[b.block]; if(ob){ const a=catAdded(b,ob); if(a!==null) totAdded+=a; } });
+                return `<td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center;font-weight:700;color:${totAdded>0?'#059669':totAdded<0?'#dc2626':'#64748b'}" class="ekyc-col-${cat.k}-added">${totAdded>=0?'+':''}${fmtN(totAdded)}</td>`;
+              })():''}
               ${cat.k==='all'?ekycBlkSelCell(null,sortedB):''}
             </tr>
           </tbody>
@@ -7926,11 +8005,24 @@ function ekycBST(field){
   return '';
 }
 
-// Toggle a single field and update table in-place (NO full re-render)
+// Toggle a single field and update table in-place (NO full re-render for sub-cols;
+// FULL re-render when a category toggles, so the Added column is recomputed too).
 function ekycBlkSelToggle(field, val){
   if(!ekyc.blkSelTotal) ekyc.blkSelTotal = ekycBlkSelDefaults();
   ekyc.blkSelTotal[field] = val;
-  ekycBlkSelApply();
+  // Toggling AAY/PHH/NPHH or ⊕ activation affects the Added column contents,
+  // which requires re-generating every row. A pure DOM in-place update
+  // can't touch those cells, so trigger a full re-render for those changes.
+  const isCategoryChange = ['aay','phh','nph','active'].includes(field);
+  if(isCategoryChange && ekyc.processedRows2 && ekyc.blocks){
+    const oldRows = ekyc.oldData ? parseEkycRows(ekyc.oldData) : null;
+    renderEkycResults(ekyc.processedRows2, ekyc.blocks, oldRows, ekyc.oldBlocks);
+    if(ekyc.filter && ekyc.filter.active) restoreEkycFilterUI();
+    switchEkycTab(ekyc._activeTab || 'all');
+    ekycBlkSelApply();
+  } else {
+    ekycBlkSelApply();
+  }
 }
 
 // Toggle all sub-cols at once
@@ -12837,80 +12929,105 @@ function printEkycBlockAbstract(catK, orientation){
   const englishLines = ['Deputy Registrar','Public Distribution System','Thiruvannamalai'];
   const allLines     = wmLang==='tamil' ? tamilLines : wmLang==='english' ? englishLines : [...tamilLines,...englishLines];
 
-  // MS Word-style watermark: very light gray, sits BEHIND page content (z-index:-1),
-  // repeats on every page via position:fixed + print-media rules.
+  // Chrome print bug workaround: position:fixed watermark only shows on ONE page
+  // (usually the last). To reliably appear on EVERY printed page, we generate
+  // ~20 absolutely-positioned copies spaced at page-height intervals. Excess
+  // copies past the last page simply don't render — no harm.
+  //
+  // A4 portrait ≈ 297mm tall, 15mm top/bottom margin → ~267mm printable height
+  // A4 landscape ≈ 210mm tall, 15mm margin → ~180mm printable height
+  const pageContentH = orient === 'portrait' ? 267 : 180;   // mm
+  const wmCount = 20;   // enough for 20 printed pages — reports rarely exceed this
+
   let wmHtml = '', wmExtraCSS = '';
   if(wmEnable){
     const linesHtml = allLines.map(l=>`<div>${l}</div>`).join('');
 
-    // Common wrapper — makes watermark behind everything, non-selectable, non-clickable
-    const commonWrap = `
-      position:fixed; top:0; left:0; right:0; bottom:0;
-      z-index:-1; pointer-events:none; user-select:none;
-      display:flex; align-items:center; justify-content:center;`;
-
     if(wmStyle==='corner'){
-      // Top-right corner — subtle small text (green-tinted gray)
+      // Top-right corner — one per page
       wmExtraCSS = `
-        .wm-container { ${commonWrap} }
-        .wm-inner {
-          position:absolute; top:8mm; right:8mm; text-align:right;
+        .wm-item {
+          position:absolute; right:8mm; text-align:right;
           font-family:'Tamil Marutham','Latha','Arial Unicode MS',Arial,sans-serif;
           font-size:8pt; font-weight:700;
-          color:rgba(130,150,140,.7);
-          line-height:1.3;
+          color:rgba(130,150,140,.75);
+          line-height:1.3; pointer-events:none;
         }`;
+      let items = '';
+      for(let i=0; i<wmCount; i++){
+        items += `<div class="wm-item" style="top:${8 + i*pageContentH}mm">${linesHtml}</div>`;
+      }
+      wmHtml = items;
     } else if(wmStyle==='stamp'){
-      // Centre stamp with a soft dashed border — very light gray
+      // Centre stamp — one per page (centred vertically within each page)
       wmExtraCSS = `
-        .wm-container { ${commonWrap} }
-        .wm-inner {
+        .wm-item {
+          position:absolute; left:50%; transform:translateX(-50%);
           text-align:center;
-          border:1.5px dashed rgba(160,160,160,.35);
+          border:1.5px dashed rgba(160,160,160,.4);
           border-radius:6px; padding:10px 22px;
           font-family:'Tamil Marutham','Latha','Arial Unicode MS',Arial,sans-serif;
           font-size:14pt; font-weight:700;
-          color:rgba(150,150,150,.35);
-          line-height:1.4;
+          color:rgba(150,150,150,.4);
+          line-height:1.4; pointer-events:none;
           background:rgba(255,255,255,.4);
         }`;
+      let items = '';
+      for(let i=0; i<wmCount; i++){
+        items += `<div class="wm-item" style="top:${(i*pageContentH)+(pageContentH/2)-25}mm">${linesHtml}</div>`;
+      }
+      wmHtml = items;
     } else if(wmStyle==='bold_diagonal'){
-      // Large diagonal, slightly darker but still light
+      // Bold diagonal — one per page
       wmExtraCSS = `
-        .wm-container { ${commonWrap} }
-        .wm-inner {
-          transform:rotate(-35deg);
+        .wm-item {
+          position:absolute; left:50%; transform:translateX(-50%) rotate(-35deg);
+          transform-origin:center center;
           text-align:center; letter-spacing:2px;
           font-family:'Tamil Marutham','Latha','Arial Unicode MS',Arial,sans-serif;
           font-size:36pt; font-weight:900;
           color:rgba(100,100,110,.32);
-          line-height:1.15;
+          line-height:1.15; pointer-events:none;
+          width:200mm;
         }`;
+      let items = '';
+      for(let i=0; i<wmCount; i++){
+        items += `<div class="wm-item" style="top:${(i*pageContentH)+(pageContentH/2)-40}mm">${linesHtml}</div>`;
+      }
+      wmHtml = items;
     } else { /* diagonal (default — MS Word style) */
       wmExtraCSS = `
-        .wm-container { ${commonWrap} }
-        .wm-inner {
-          transform:rotate(-35deg);
+        .wm-item {
+          position:absolute; left:50%; transform:translateX(-50%) rotate(-35deg);
+          transform-origin:center center;
           text-align:center;
           font-family:'Tamil Marutham','Latha','Arial Unicode MS',Arial,sans-serif;
           font-size:30pt; font-weight:700;
-          color:rgba(120,120,130,.35);
-          line-height:1.2;
+          color:rgba(120,120,130,.38);
+          line-height:1.2; pointer-events:none;
+          width:200mm;
         }`;
+      let items = '';
+      for(let i=0; i<wmCount; i++){
+        items += `<div class="wm-item" style="top:${(i*pageContentH)+(pageContentH/2)-40}mm">${linesHtml}</div>`;
+      }
+      wmHtml = items;
     }
 
-    // Ensure watermark keeps printing on every page (Chrome & Edge respect this)
-    // print-color-adjust forces the browser to preserve the light watermark color
-    // (otherwise Chromium's print engine strips near-white colors as an "ink saving" optimisation)
-    wmExtraCSS += `
-      @media print {
-        .wm-container { position:fixed !important; z-index:-1 !important; }
-        .wm-inner { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
-        .page-content { position:relative; z-index:1; background:transparent; }
+    // Wrap all watermarks in a container that sits BEHIND all content
+    wmHtml = `<div class="wm-layer">${wmHtml}</div>`;
+    wmExtraCSS = `
+      .wm-layer {
+        position:absolute; top:0; left:0; right:0;
+        z-index:0;
+        pointer-events:none;
       }
-      .wm-container, .wm-inner { -webkit-print-color-adjust:exact; print-color-adjust:exact; }`;
-
-    wmHtml = `<div class="wm-container"><div class="wm-inner">${linesHtml}</div></div>`;
+      ${wmExtraCSS}
+      @media print {
+        .wm-item { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+      }
+      .wm-item { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    `;
   }
 
   const printWin = window.open('','_blank','width=800,height=600');
@@ -12920,13 +13037,13 @@ function printEkycBlockAbstract(catK, orientation){
     @page { size: A4 ${orient}; margin: 15mm; }
     html, body { background:#ffffff; }
     body { font-family: 'Tamil Marutham','Latha','Arial Unicode MS',Arial,sans-serif; font-size:12px; color:#1e293b; margin:0; position:relative; }
-    .page-content { position:relative; z-index:1; }
+    .page-content { position:relative; z-index:2; }
     .header { margin-bottom:10px; border-bottom:2px solid #1e3a8a; padding-bottom:6px; }
-    table { width:100%; border-collapse:collapse; background:#ffffff; }
+    table { width:100%; border-collapse:collapse; background:transparent; position:relative; z-index:2; }
     th { background:#1e3a8a; color:white; padding:6px 5px; border:1px solid #1e40af; font-size:11px; text-align:center; }
-    td { padding:5px 6px; border:1px solid #e2e8f0; font-size:11px; background:#ffffff; }
-    tr:nth-child(even) td { background:#f8fafc; }
-    tfoot td { background:#f1f5f9; font-weight:700; }
+    td { padding:5px 6px; border:1px solid #e2e8f0; font-size:11px; background:rgba(255,255,255,.65); }
+    tr:nth-child(even) td { background:rgba(248,250,252,.65); }
+    tfoot td { background:rgba(241,245,249,.75); font-weight:700; }
     ${wmExtraCSS}
     .filter-note { font-size:10px; color:#7c3aed; margin-top:4px; }
   </style></head><body>
