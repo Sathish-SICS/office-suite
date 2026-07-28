@@ -8831,7 +8831,25 @@ function renderEkycShopTable(rows){
       const cShop=pctGradient(r.total_pct);
       const oldR=oldShopMap[r.shopcode];
       const oldPct=oldR&&oldR.total_cons>0?oldR.total_comp/oldR.total_cons:null;
-      const added=oldR?r.total_comp-oldR.total_comp:null;
+
+      // "Added" respects the ⊕ Selected Total category config.
+      // When ⊕ is active: show delta only for the selected categories (AAY/PHH/NPHH).
+      // When ⊕ is NOT active: fall back to full total_comp delta (all three categories).
+      // This makes the Added column consistent with the ⊕ column values.
+      const selCfg = getEkycSelTotalConfig();
+      let shopAdded = null;
+      if(oldR){
+        if(selCfg.active){
+          let cur=0, old=0;
+          if(selCfg.aay){ cur+=(r.aay_comp||0);   old+=(oldR.aay_comp||0); }
+          if(selCfg.phh){ cur+=(r.phh_comp||0);   old+=(oldR.phh_comp||0); }
+          if(selCfg.nph){ cur+=(r.nph_comp||0);   old+=(oldR.nph_comp||0); }
+          shopAdded = cur - old;
+        } else {
+          shopAdded = r.total_comp - oldR.total_comp;
+        }
+      }
+      const added = shopAdded;
       html+=`<tr>
         <td style="padding:4px;border:1px solid #e2e8f0;text-align:center;color:#94a3b8;font-size:10px">${si++}</td>
         <td style="padding:4px 6px;border:1px solid #e2e8f0"></td>
@@ -9149,7 +9167,19 @@ function printEkycShopwise(orientation){
     const pct=cons>0?comp/cons:0;
     const or=oldShopMap[r.shopcode];
     const oldPct=or&&or.total_cons>0?or.total_comp/or.total_cons:null;
-    const added=or?comp-(or.total_comp||0):null;
+    // Added: respect ⊕ selected category config (same as the table display)
+    let added=null;
+    if(or){
+      if(cfg.active){
+        let cur=0,old=0;
+        if(cfg.aay){cur+=r.aay_comp||0;old+=or.aay_comp||0;}
+        if(cfg.phh){cur+=r.phh_comp||0;old+=or.phh_comp||0;}
+        if(cfg.nph){cur+=r.nph_comp||0;old+=or.nph_comp||0;}
+        added=cur-old;
+      } else {
+        added=comp-(or.total_comp||0);
+      }
+    }
     let sc=0,sd=0;
     if(cfg.aay){sc+=r.aay_cons||0;sd+=r.aay_comp||0;}
     if(cfg.phh){sc+=r.phh_cons||0;sd+=r.phh_comp||0;}
@@ -13060,7 +13090,19 @@ function downloadEkycShopExcel(){
     const pct=cons>0?+(comp/cons*100).toFixed(1)+'%':'0%';
     const or=oldMap[r.shopcode];
     const oPct=hasComp&&or&&or.total_cons>0?+(or.total_comp/or.total_cons*100).toFixed(1)+'%':'—';
-    const added=hasComp&&or!==undefined?comp-(or.total_comp||0):null;
+    // Added: respect ⊕ selected category config
+    let added=null;
+    if(hasComp&&or!==undefined){
+      if(cfg.active){
+        let cur=0,old=0;
+        if(cfg.aay){cur+=r.aay_comp||0;old+=or.aay_comp||0;}
+        if(cfg.phh){cur+=r.phh_comp||0;old+=or.phh_comp||0;}
+        if(cfg.nph){cur+=r.nph_comp||0;old+=or.nph_comp||0;}
+        added=cur-old;
+      } else {
+        added=comp-(or.total_comp||0);
+      }
+    }
     let sc=0,sd=0;
     if(cfg.aay){sc+=r.aay_cons||0;sd+=r.aay_comp||0;}
     if(cfg.phh){sc+=r.phh_cons||0;sd+=r.phh_comp||0;}
