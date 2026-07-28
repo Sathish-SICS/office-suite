@@ -1037,6 +1037,54 @@ document.addEventListener('keydown', e=>{
 <!-- ================================================================ -->
 <div class="tab-content" id="tab-reminder">
 
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- BLOCK NAMES → @MENTIONS CONVERTER                                -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="panel" id="mention-converter-panel">
+  <h2><span class="dot"></span> 🏷️ Block Names → @Mentions Converter</h2>
+  <p style="font-size:13px;color:var(--muted);margin-bottom:12px">
+    Paste block names on the left (one per line, English or Tamil, hyphens/spaces optional).
+    The right box shows the same block names with the corresponding phone number as an @mention —
+    copy the whole right box and paste into your WhatsApp group.
+  </p>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <!-- Input box -->
+    <div>
+      <label style="font-size:12px;color:var(--muted);font-weight:600;display:block;margin-bottom:5px">
+        📥 Input: Block names (one per line)
+      </label>
+      <textarea id="mention-input" rows="12" spellcheck="false"
+        style="width:100%;background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:10px;border-radius:6px;font-family:'Tamil Marutham','Latha','Segoe UI',sans-serif;font-size:13px;resize:vertical"
+        placeholder="Tiruvannamalai-1&#10;Kilpennathur&#10;Thandarampattu&#10;..."></textarea>
+      <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+        <button class="btn-tiny" onclick="mentionLoadAll()" style="font-size:11px;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.4);color:#a5b4fc">📋 Load all 21 blocks</button>
+        <button class="btn-tiny" onclick="document.getElementById('mention-input').value='';mentionUpdate();" style="font-size:11px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#fca5a5">✕ Clear</button>
+        <span id="mention-input-count" style="font-size:11px;color:var(--muted);margin-left:auto;align-self:center"></span>
+      </div>
+    </div>
+
+    <!-- Output box -->
+    <div>
+      <label style="font-size:12px;color:var(--muted);font-weight:600;display:flex;justify-content:space-between;margin-bottom:5px">
+        <span>📤 Output: Block + @phone (copy & paste into WhatsApp)</span>
+        <span id="mention-output-count" style="font-size:11px;color:var(--muted)"></span>
+      </label>
+      <textarea id="mention-output" rows="12" spellcheck="false" readonly
+        style="width:100%;background:rgba(6,78,59,.15);border:1px solid rgba(52,211,153,.35);color:var(--ink);padding:10px;border-radius:6px;font-family:'Tamil Marutham','Latha','Segoe UI',sans-serif;font-size:13px;resize:vertical"></textarea>
+      <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+        <button class="btn-tiny" onclick="mentionCopyOutput()" style="font-size:11px;background:rgba(52,211,153,.15);border:1px solid rgba(52,211,153,.4);color:#6ee7b7">📋 Copy output</button>
+        <label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px;cursor:pointer">
+          <input type="checkbox" id="mention-country-code" checked> Prefix +91
+        </label>
+        <label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px;cursor:pointer">
+          <input type="checkbox" id="mention-show-unmatched" checked> Mark unmatched
+        </label>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Connection Panel -->
 <div class="panel" id="settings-sheet-panel">
   <h2><span class="dot"></span> ⚙️ Settings Google Sheet Connection</h2>
@@ -8101,14 +8149,26 @@ function ekycBlkSelApply(){
     }
   }
 
-  // Rewrite tbody data TDs
+  // Rewrite tbody data TDs.
+  // Match blocks to DOM rows BY BLOCK NAME (via a lookup map), not positional index.
+  // Positional matching fails when renderEkycResults and ekycBlkSelApply use different
+  // sort orders — e.g. renderEkycResults sorts by catAdded (which honours ⊕ selected
+  // categories) while this function used to sort by total_comp. That would append
+  // the wrong block's ⊕ values to each row.
+  const blockLookup = {};
+  ekyc.blocks.forEach(b=>{ blockLookup[b.block] = b; });
   const tbody = tbl.querySelector('tbody');
   if(tbody){
     const trs = tbody.querySelectorAll('tr');
     trs.forEach((tr,i)=>{
       tr.querySelectorAll('td.ekyc-blk-sel-td').forEach(el=>el.remove());
       if(!s.active || !subcols.length) return;
-      const b = sortedB[i];
+      // TOTAL row has colspan=2 first cell — skip it (rendered separately below)
+      if(tr.classList.contains('ekyc-blk-total-row')) return;
+      // Get the block name from the row's Block cell (second <td>)
+      const blockCell = tr.cells[1];
+      const blockName = blockCell ? blockCell.textContent.trim() : '';
+      const b = blockLookup[blockName];
       if(!b) return;
       let sc=0,sd=0;
       if(s.aay){sc+=b.aay_cons||0;sd+=b.aay_comp||0;}
@@ -12748,6 +12808,157 @@ function ekycBlockPassesFilter(cons, comp){
   }
   return true;
 }
+
+// ============================================================
+// BLOCK NAMES → @MENTIONS CONVERTER (WhatsApp Reminder tab)
+// ============================================================
+// Master list of blocks with all known aliases (English, Tamil, hyphenated,
+// unhyphenated, alt spellings) and the phone number to @mention.
+const MENTION_BLOCKS = [
+  {phone:'8760158515', canonical:'Tiruvannamalai HQ',
+    aliases:['tiruvannamalai hq','tvm hq','திருவண்ணாமலை hq','திருவண்ணாமலை மாவட்டம்','tvm']},
+  {phone:'7708129326', canonical:'Tiruvannamalai 1',
+    aliases:['tiruvannamalai 1','tiruvannamalai-1','tvm 1','tvm-1','திருவண்ணாமலை-1','திருவண்ணாமலை 1','திருவண்ணாமலை1']},
+  {phone:'7824008182', canonical:'Tiruvannamalai 2',
+    aliases:['tiruvannamalai 2','tiruvannamalai-2','tvm 2','tvm-2','திருவண்ணாமலை-2','திருவண்ணாமலை 2','திருவண்ணாமலை2']},
+  {phone:'8760158515', canonical:'Thurinjapuram',
+    aliases:['thurinjapuram','thuriyapuram','turinjapuram','துரிஞ்சாபுரம்','துரிஞ்ஜாபுரம்']},
+  {phone:'6380702382', canonical:'Kilpennathur',
+    aliases:['kilpennathur','keezhpennathur','கீழ்பென்னாத்தூர்','கீழ்பென்னாத்தூர','கிழ்பென்னாத்தூர்']},
+  {phone:'9715656224', canonical:'Chengam',
+    aliases:['chengam','செங்கம்']},
+  {phone:'7540029610', canonical:'Pudhupalayam',
+    aliases:['pudhupalayam','puthupalayam','pudupalayam','புதுப்பாளையம்','புதுபாளையம்']},
+  {phone:'9364411517', canonical:'Thandarampattu',
+    aliases:['thandarampattu','thandrampattu','thandarampet','thandrampet','தண்டராம்பட்டு','தண்டராமபட்டு']},
+  {phone:'8072871098', canonical:'Kalasapakkam',
+    aliases:['kalasapakkam','kalasappakkam','கலசபாக்கம்','கலசப்பாக்கம்']},
+  {phone:'9677153010', canonical:'Polur',
+    aliases:['polur','poloor','போளூர்','போளுர்']},
+  {phone:'9688678989', canonical:'Jamunamarthur',
+    aliases:['jamunamarthur','jamunamarathur','ஜமுனாமரத்தூர்','ஜமுனாமரத்துர்']},
+  {phone:'8838586363', canonical:'Chetpet',
+    aliases:['chetpet','chethupet','சேத்துப்பட்டு','சேத்துபட்டு']},
+  {phone:'9942568735', canonical:'Arani East',
+    aliases:['arani east','aranieast','arani (east)','arani-east','ஆரணி கிழக்கு','ஆரணி(கிழக்கு)','ஆரணி-கிழக்கு']},
+  {phone:'9942568735', canonical:'Arani West',
+    aliases:['arani west','araniwest','arani (west)','arani-west','ஆரணி மேற்கு','ஆரணி(மேற்கு)','ஆரணி-மேற்கு']},
+  {phone:'6383237048', canonical:'Cheyyar',
+    aliases:['cheyyar','seyyar','செய்யார்']},
+  {phone:'9865261123', canonical:'Anakkavur',
+    aliases:['anakkavur','anakavoor','anakkavoor','anakavur','anakavour','அனக்காவூர்','அனக்கவூர்']},
+  {phone:'9025522423', canonical:'Vembakkam-1',
+    aliases:['vembakkam-1','vembakkam 1','வெம்பாக்கம்-1','வெம்பாக்கம் 1','வெம்பாக்கம்1']},
+  {phone:'6384935100', canonical:'Vembakkam-2',
+    aliases:['vembakkam-2','vembakkam 2','வெம்பாக்கம்-2','வெம்பாக்கம் 2','வெம்பாக்கம்2']},
+  {phone:'9789139986', canonical:'Vandavasi',
+    aliases:['vandavasi','vandhavasi','வந்தவாசி']},
+  {phone:'9791614500', canonical:'Peranamallur',
+    aliases:['peranamallur','pernamallur','பெரணமல்லூர்','பெரணமல்லுர்']},
+  {phone:'9789139986', canonical:'Thellar',
+    aliases:['thellar','தெள்ளார்']},
+];
+
+// Normalize an input string so aliases match reliably.
+// Lowercases English, strips whitespace / hyphens / parens / dots.
+// For Tamil, we just strip whitespace/hyphens/parens (case doesn't apply).
+function mentionNormalize(s){
+  return (s||'')
+    .toString()
+    .toLowerCase()
+    .replace(/[\s\-_\.()（）]/g,'')
+    .trim();
+}
+
+// Build fast lookup once
+let _mentionIndex = null;
+function mentionBuildIndex(){
+  if(_mentionIndex) return _mentionIndex;
+  _mentionIndex = {};
+  MENTION_BLOCKS.forEach(b=>{
+    // Canonical name itself is also a valid alias
+    const allNames = [b.canonical, ...b.aliases];
+    allNames.forEach(name=>{
+      const key = mentionNormalize(name);
+      if(key && !_mentionIndex[key]) _mentionIndex[key] = b;
+    });
+  });
+  return _mentionIndex;
+}
+
+// Try to match an input line to a block (canonical or alias).
+// Also tries partial-contains fallback if exact normalize doesn't hit.
+function mentionMatch(inputLine){
+  const idx = mentionBuildIndex();
+  const key = mentionNormalize(inputLine);
+  if(!key) return null;
+  if(idx[key]) return idx[key];
+  // Partial: check if any alias key is contained in input OR input contains alias
+  const keys = Object.keys(idx);
+  // Prefer longest-alias match to avoid "Arani" matching both East and West
+  const containsHits = keys.filter(k=>key.includes(k)||k.includes(key)).sort((a,b)=>b.length-a.length);
+  return containsHits.length ? idx[containsHits[0]] : null;
+}
+
+function mentionUpdate(){
+  const input = document.getElementById('mention-input').value || '';
+  const output = document.getElementById('mention-output');
+  const prefix91 = document.getElementById('mention-country-code')?.checked !== false;
+  const markUnmatched = document.getElementById('mention-show-unmatched')?.checked !== false;
+
+  const lines = input.split(/\n/);
+  const outLines = [];
+  let matched = 0, unmatched = 0;
+  lines.forEach(line=>{
+    const trimmed = line.trim();
+    if(!trimmed){ outLines.push(''); return; }
+    const b = mentionMatch(trimmed);
+    if(b){
+      matched++;
+      const phone = prefix91 ? '+91'+b.phone : b.phone;
+      // Format: "Block Name @+919876543210"
+      outLines.push(`${b.canonical} @${phone}`);
+    } else {
+      unmatched++;
+      outLines.push(markUnmatched ? `${trimmed}  ❓ (unmatched)` : trimmed);
+    }
+  });
+  output.value = outLines.join('\n');
+  document.getElementById('mention-input-count').textContent = `${matched+unmatched} lines`;
+  document.getElementById('mention-output-count').textContent =
+    `${matched} matched · ${unmatched} unmatched`;
+}
+
+function mentionLoadAll(){
+  const names = MENTION_BLOCKS.map(b=>b.canonical);
+  document.getElementById('mention-input').value = names.join('\n');
+  mentionUpdate();
+}
+
+async function mentionCopyOutput(){
+  const out = document.getElementById('mention-output').value;
+  if(!out.trim()){ toast('Nothing to copy',true); return; }
+  try{
+    await navigator.clipboard.writeText(out);
+    toast('✓ Copied — paste into WhatsApp group');
+  }catch(e){
+    // Fallback: select and copy via execCommand
+    const el = document.getElementById('mention-output');
+    el.select();
+    document.execCommand('copy');
+    toast('✓ Copied');
+  }
+}
+
+// Wire up input listeners once DOM is ready
+document.addEventListener('DOMContentLoaded', ()=>{
+  const inp = document.getElementById('mention-input');
+  const c91 = document.getElementById('mention-country-code');
+  const um  = document.getElementById('mention-show-unmatched');
+  if(inp) inp.addEventListener('input', mentionUpdate);
+  if(c91) c91.addEventListener('change', mentionUpdate);
+  if(um)  um.addEventListener('change', mentionUpdate);
+});
 
 // ============================================================
 // e-KYC Shop-wise Excel Download
