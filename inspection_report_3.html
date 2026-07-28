@@ -7445,6 +7445,15 @@ async function handleEkycFile(file, which){
     const rows = XLSX.utils.sheet_to_json(ws,{defval:''});
     const tvm = rows.filter(r=>String(r['District']||'').toLowerCase().includes('thiruvannamalai'));
     if(tvm.length===0) throw new Error('No Thiruvannamalai rows found');
+
+    // Diagnostic: log detected column names for Considered/Completed to console
+    if(tvm.length > 0){
+      const sampleKeys = Object.keys(tvm[0]);
+      const consColNames = sampleKeys.filter(k=>k.includes('Considered'));
+      const compColNames = sampleKeys.filter(k=>k.includes('Completed'));
+      console.log(`[eKYC ${which}] Considered cols:`, consColNames);
+      console.log(`[eKYC ${which}] Completed cols:`, compColNames);
+    }
     // Try multiple date patterns from filename: DD_MM_YYYY, DD-MM-YYYY, DD.MM.YYYY
     const dm = file.name.match(/(\d{2})[_\-\.](\d{2})[_\-\.](\d{4})/)
            || file.name.match(/(\d{4})[_\-\.](\d{2})[_\-\.](\d{2})/);  // YYYY_MM_DD fallback
@@ -7493,17 +7502,56 @@ function parseEkycRows(rawRows){
     const shopcode=String(row['Shopcode']||row['Shop_Code']||'').trim();
     const block=ekycGetBlock(shopcode);
     const keys=Object.keys(row);
+
+    // ── Considered counts: match explicitly by category keyword ──────────
+    // Positional matching (consKeys[0/1/2]) is fragile — if the old file has
+    // a different column order, all block-level Added values become wrong.
+    // Try multiple known TNPDS portal column name patterns.
+    const aay_cons_explicit = +(
+      row['AAY Considered']||row['AAY EKYC Considered']||row['AAY Beneficiaries Considered']||
+      row['AAY_Considered']||0
+    );
+    const phh_cons_explicit = +(
+      row['PHH Considered']||row['PHH EKYC Considered']||row['PHH Beneficiaries Considered']||
+      row['PHH_Considered']||0
+    );
+    const nph_cons_explicit = +(
+      row['NPHH Considered']||row['NPHH EKYC Considered']||row['NPHH Beneficiaries Considered']||
+      row['NPH Considered']||row['NPHH_Considered']||0
+    );
+
+    // Fallback to positional if explicit matching yields all zeros (unknown column names)
     const consKeys=keys.filter(k=>k.includes('Considered'));
-    const aay_cons=+(row[consKeys[0]]||0);
-    const aay_comp=+(row['AAY EKYC Completed']||0);
-    const aay_pend=Math.max(0,aay_cons-aay_comp);
-    const phh_cons=+(row[consKeys[1]]||0);
-    const phh_comp=+(row['PHH EKYC Completed']||0);
-    const phh_pend=Math.max(0,phh_cons-phh_comp);
-    const nph_cons=+(row[consKeys[2]]||0);
-    const nph_comp=+(row['NPHH EKYC Completed']||0);
-    const nph_pend=Math.max(0,nph_cons-nph_comp);
-    const total_cons=aay_cons+phh_cons+nph_cons,total_comp=aay_comp+phh_comp+nph_comp,total_pend=Math.max(0,total_cons-total_comp);
+    const useExplicit = (aay_cons_explicit||phh_cons_explicit||nph_cons_explicit) > 0;
+
+    // If still zero, try regex matching on column names
+    const regexFallback = !useExplicit && consKeys.length >= 3;
+    const findConsRegex = (pat) => {
+      const k = keys.find(k=>pat.test(k));
+      return k ? +(row[k]||0) : 0;
+    };
+
+    const aay_cons = useExplicit ? aay_cons_explicit
+                   : regexFallback ? findConsRegex(/aay.*considered|considered.*aay/i) || +(row[consKeys[0]]||0)
+                   : +(row[consKeys[0]]||0);
+    const aay_comp = +(row['AAY EKYC Completed']||row['AAY Completed']||row['AAY_Completed']||0);
+    const aay_pend = Math.max(0,aay_cons-aay_comp);
+
+    const phh_cons = useExplicit ? phh_cons_explicit
+                   : regexFallback ? findConsRegex(/phh.*considered|considered.*phh/i) || +(row[consKeys[1]]||0)
+                   : +(row[consKeys[1]]||0);
+    const phh_comp = +(row['PHH EKYC Completed']||row['PHH Completed']||row['PHH_Completed']||0);
+    const phh_pend = Math.max(0,phh_cons-phh_comp);
+
+    const nph_cons = useExplicit ? nph_cons_explicit
+                   : regexFallback ? findConsRegex(/nph.*considered|considered.*nph/i) || +(row[consKeys[2]]||0)
+                   : +(row[consKeys[2]]||0);
+    const nph_comp = +(row['NPHH EKYC Completed']||row['NPHH Completed']||row['NPH Completed']||row['NPHH_Completed']||0);
+    const nph_pend = Math.max(0,nph_cons-nph_comp);
+
+    const total_cons=aay_cons+phh_cons+nph_cons;
+    const total_comp=aay_comp+phh_comp+nph_comp;
+    const total_pend=Math.max(0,total_cons-total_comp);
     return {shopcode,block,shop_name:row['Shop_Name']||'',aay_cons,aay_comp,aay_pend,phh_cons,phh_comp,phh_pend,nph_cons,nph_comp,nph_pend,total_cons,total_comp,total_pend,total_pct:total_cons>0?total_comp/total_cons:0};
   });
 }
