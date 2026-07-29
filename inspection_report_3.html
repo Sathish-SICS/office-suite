@@ -7676,24 +7676,52 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
     const catSortKey = 'ekyc_blk_sort_'+cat.k;
     if(!ekyc[catSortKey]) ekyc[catSortKey] = hasComp ? {col:'added',dir:'desc'} : {col:'pct',dir:'asc'};
 
-    // Effective Added for a block:
-    //   - In the ALL tab, if ⊕ Selected Total is active, sum only the selected categories
-    //     (so unchecking NPHH removes NPHH's contribution from Added)
-    //   - Otherwise, use the tab's own compF (full total for ALL, single category for AAY/PHH/NPHH)
-    // Returns null when there's no comparison data for that block.
+    // Progress (Reduction in Pending count) for a block:
+    //   - In the ALL tab, if ⊕ Selected Total is active, use only selected categories.
+    //   - Otherwise, use the tab's own cons/comp (full total for ALL, single for AAY/PHH/NPHH).
+    //   Formula: old_pend - new_pend  (positive = pending reduced = eKYC done;
+    //                                  negative = pending grew = new cards added)
+    // This is more informative than the old "Added" (comp delta) because it captures
+    // BOTH eKYC completions AND new cards being added to the roll.
     const _s = ekyc.blkSelTotal;
     const _selActive = cat.k==='all' && _s && _s.active;
-    const _selComp = (b)=>{
+    const _selPend = (b)=>{
       let x=0;
-      if(_s.aay) x += b.aay_comp||0;
-      if(_s.phh) x += b.phh_comp||0;
-      if(_s.nph) x += b.nph_comp||0;
+      if(_s.aay) x += Math.max(0,(b.aay_cons||0)-(b.aay_comp||0));
+      if(_s.phh) x += Math.max(0,(b.phh_cons||0)-(b.phh_comp||0));
+      if(_s.nph) x += Math.max(0,(b.nph_cons||0)-(b.nph_comp||0));
       return x;
     };
     function catAdded(b, ob){
       if(ob===undefined || ob===null) return null;
-      if(_selActive) return _selComp(b) - _selComp(ob);
-      return cat.compF(b) - cat.compF(ob);
+      if(_selActive) return _selPend(ob) - _selPend(b);   // old_pend - new_pend
+      return cat.pendF(ob) - cat.pendF(b);                 // old_pend - new_pend
+    }
+
+    // Precompute per-block +/- breakdown for the Progress column (shop-level pend delta).
+    // Positive shops = eKYC done. Negative shops = new cards added.
+    const blockBreakdown = {};
+    if(hasComp && oldRows && oldRows.length){
+      const oldShopMap = {};
+      oldRows.forEach(r=>{ oldShopMap[r.shopcode] = r; });
+      rows.forEach(r=>{
+        const or = oldShopMap[r.shopcode];
+        if(!or) return;
+        let d;
+        if(_selActive){
+          let curP=0, oldP=0;
+          if(_s.aay){curP+=Math.max(0,(r.aay_cons||0)-(r.aay_comp||0)); oldP+=Math.max(0,(or.aay_cons||0)-(or.aay_comp||0));}
+          if(_s.phh){curP+=Math.max(0,(r.phh_cons||0)-(r.phh_comp||0)); oldP+=Math.max(0,(or.phh_cons||0)-(or.phh_comp||0));}
+          if(_s.nph){curP+=Math.max(0,(r.nph_cons||0)-(r.nph_comp||0)); oldP+=Math.max(0,(or.nph_cons||0)-(or.nph_comp||0));}
+          d = oldP - curP;
+        } else {
+          d = (or.total_pend||0) - (r.total_pend||0);
+        }
+        const blk = r.block;
+        if(!blockBreakdown[blk]) blockBreakdown[blk] = {pos:0, neg:0};
+        if(d>0) blockBreakdown[blk].pos += d;
+        else if(d<0) blockBreakdown[blk].neg += d;
+      });
     }
 
     const sortedB=blocks.slice().filter(b=>!ekyc.filter||!ekyc.filter.active||ekycBlockPassesFilter(cat.consF(b),cat.compF(b))).sort((a,b)=>{
@@ -7717,7 +7745,7 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
           <span style="font-size:11px;color:var(--muted)">Sort:</span>
           <button class="btn-tiny" id="blk-sort-pend-${cat.k}" onclick="ekycBlockSetSort('${cat.k}','pend')" style="${ekyc[catSortKey].col==='pend'?'background:#1e3a8a;color:white':''}">Pending ${ekyc[catSortKey].col==='pend'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</button>
           <button class="btn-tiny" id="blk-sort-pct-${cat.k}" onclick="ekycBlockSetSort('${cat.k}','pct')" style="${ekyc[catSortKey].col==='pct'?'background:#1e3a8a;color:white':''}">% ${ekyc[catSortKey].col==='pct'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</button>
-          ${hasComp?`<button class="btn-tiny" id="blk-sort-added-${cat.k}" onclick="ekycBlockSetSort('${cat.k}','added')" style="${ekyc[catSortKey].col==='added'?'background:#059669;color:white':''}">Added ${ekyc[catSortKey].col==='added'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</button>`:''}
+          ${hasComp?`<button class="btn-tiny" id="blk-sort-added-${cat.k}" onclick="ekycBlockSetSort('${cat.k}','added')" style="${ekyc[catSortKey].col==='added'?'background:#059669;color:white':''}" title="Sort by Progress (Reduction in Pending)">Progress ${ekyc[catSortKey].col==='added'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</button>`:''}
           <button class="btn-tiny" onclick="showEkycColToggle('${cat.k}')" title="Choose visible columns" style="background:rgba(124,58,237,.2);border-color:rgba(124,58,237,.5);color:#c4b5fd">☰ Columns</button>
           <button class="btn-tiny" onclick="copyEkycTableImg('ekyc-block-tbl-${cat.k}-wrap')">📸 Copy</button>
           <button class="btn-tiny" onclick="downloadEkycExcel()">📥 Excel</button>
@@ -7746,7 +7774,7 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
             <div style="font-size:10px;color:var(--muted);margin-bottom:4px;font-weight:700">Overall</div>
             ${['cons','done','pend','pct'].map(c2=>`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-bottom:2px"><input type="checkbox" id="ekyc-col-${cat.k}-tot_${c2}-cb" ${ekycColChecked(cat.k,'tot_'+c2)} onchange="ekycToggleCol('${cat.k}','tot_${c2}',this.checked)"> ${c2==='cons'?'Considered':c2==='done'?'Completed':c2==='pend'?'Pending':'%'}</label>`).join('')}
             ${hasComp?`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-bottom:2px"><input type="checkbox" id="ekyc-col-${cat.k}-old_pct-cb" ${ekycColChecked(cat.k,'old_pct')} onchange="ekycToggleCol('${cat.k}','old_pct',this.checked)"> Old %</label>`:''}
-            ${hasComp?`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-bottom:2px"><input type="checkbox" id="ekyc-col-${cat.k}-added-cb" ${ekycColChecked(cat.k,'added')} onchange="ekycToggleCol('${cat.k}','added',this.checked)"> Added</label>`:''}
+            ${hasComp?`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-bottom:2px"><input type="checkbox" id="ekyc-col-${cat.k}-added-cb" ${ekycColChecked(cat.k,'added')} onchange="ekycToggleCol('${cat.k}','added',this.checked)"> Progress</label>`:''}
           </div>
           ${cat.k==='all'?`
           <div style="border-left:1px solid var(--border);padding-left:12px;min-width:180px">
@@ -7784,7 +7812,7 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
               <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center" class="ekyc-col-${cat.k}-tot_done">Completed</th>
               <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','pend')" class="ekyc-col-${cat.k}-tot_pend">Pending ${ekyc[catSortKey].col==='pend'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th>
               ${hasComp?`<th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#7c3aed;min-width:80px;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','pct_old')" class="ekyc-col-${cat.k}-old_pct">${od} % ${ekyc[catSortKey].col==='pct_old'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th>`:''}              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;min-width:80px;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','pct')" class="ekyc-col-${cat.k}-tot_pct">${d} % ${ekyc[catSortKey].col==='pct'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th>
-              ${hasComp?`<th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#065f46;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','added')" class="ekyc-col-${cat.k}-added">Added ${ekyc[catSortKey].col==='added'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th>`:''}
+              ${hasComp?`<th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#065f46;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','added')" class="ekyc-col-${cat.k}-added" title="Reduction in Pending count. + = eKYC done, − = new cards added">Progress ${ekyc[catSortKey].col==='added'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th>`:''}
               ${cat.k==='all'?ekycBlkSelMainHeader():''}            </tr>
             ${cat.k==='all'?`<tr style="background:#3b82f6;color:white">
               <th colspan="2" style="padding:4px;border:1px solid #1e40af"></th>
@@ -7832,7 +7860,16 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
                 <td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;color:#dc2626;font-weight:600" class="ekyc-col-${cat.k}-tot_pend">${fmtN(pend)}</td>
                 ${hasComp?pctCell(oldPct,'','ekyc-col-'+cat.k+'-old_pct'):''}
                 ${pctCell(pct,'','ekyc-col-'+cat.k+'-tot_pct')}
-                ${hasComp?`<td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;font-weight:700;color:${added>0?'#059669':added<0?'#dc2626':'#64748b'}" class="ekyc-col-${cat.k}-added">${added!==null?(added>0?'+':'')+fmtN(added):'—'}</td>`:''}
+                ${hasComp?(()=>{
+                  const bk = blockBreakdown[b.block];
+                  const netStr = added!==null ? (added>0?'+':'')+fmtN(added) : '—';
+                  const color = added>0?'#059669':added<0?'#dc2626':'#64748b';
+                  const bdown = (bk && (bk.pos>0 || bk.neg<0))
+                    ? `<div style="font-size:9px;font-weight:400;color:#64748b;margin-top:1px">+${fmtN(bk.pos)} / ${fmtN(bk.neg)}</div>`
+                    : '';
+                  const tip = 'Reduction in Pending count. + = eKYC done, − = new cards added';
+                  return `<td title="${tip}" style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;font-weight:700;color:${color}" class="ekyc-col-${cat.k}-added">${netStr}${bdown}</td>`;
+                })():''}
                 ${cat.k==='all'?ekycBlkSelCell(b):''}              </tr>`;
             }).join('')}
             <tr class="ekyc-blk-total-row" style="background:#f1f5f9;font-weight:700">
@@ -7852,9 +7889,24 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
               ${hasComp&&oldBlocks?(()=>{const op=oldBlocks.reduce((s,b)=>s+cat.compF(b),0)/Math.max(1,oldBlocks.reduce((s,b)=>s+cat.consF(b),0));return `<td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center;font-weight:700;background:${op>=0.9?'#d1fae5':op>=0.8?'#fef3c7':'#fee2e2'};font-size:13px" class="ekyc-col-${cat.k}-old_pct">${fmtPct(op)}</td>`;})():''}
               <td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center;font-weight:700;background:${totPct>=0.9?'#d1fae5':totPct>=0.8?'#fef3c7':'#fee2e2'};font-size:13px" class="ekyc-col-${cat.k}-tot_pct">${fmtPct(totPct)}</td>
               ${hasComp&&oldBlocks?(()=>{
-                let totAdded = 0;
-                sortedB.forEach(b=>{ const ob=oldMap[b.block]; if(ob){ const a=catAdded(b,ob); if(a!==null) totAdded+=a; } });
-                return `<td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center;font-weight:700;color:${totAdded>0?'#059669':totAdded<0?'#dc2626':'#64748b'}" class="ekyc-col-${cat.k}-added">${totAdded>=0?'+':''}${fmtN(totAdded)}</td>`;
+                let totAdded = 0, totPos = 0, totNeg = 0;
+                sortedB.forEach(b=>{
+                  const ob=oldMap[b.block];
+                  if(ob){
+                    const a=catAdded(b,ob);
+                    if(a!==null){
+                      totAdded+=a;
+                      if(a>0) totPos+=a; else if(a<0) totNeg+=a;
+                    }
+                  }
+                });
+                const color = totAdded>0?'#059669':totAdded<0?'#dc2626':'#64748b';
+                const netStr = (totAdded>=0?'+':'')+fmtN(totAdded);
+                const breakdown = (totPos>0 || totNeg<0)
+                  ? `<div style="font-size:9px;font-weight:400;color:#64748b;margin-top:2px">+${fmtN(totPos)} / ${fmtN(totNeg)}</div>`
+                  : '';
+                const tip = 'Reduction in Pending count. + = eKYC done, − = new cards added';
+                return `<td title="${tip}" style="padding:7px 4px;border:1px solid #94a3b8;text-align:center;font-weight:700;color:${color}" class="ekyc-col-${cat.k}-added">${netStr}${breakdown}</td>`;
               })():''}
               ${cat.k==='all'?ekycBlkSelCell(null,sortedB):''}
             </tr>
@@ -7891,7 +7943,7 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
         <span style="font-size:11px;color:var(--muted)">Sort:</span>
         <button class="btn-tiny" id="sort-btn-pend" onclick="ekycShopSetSort('pend')" style="${!hasComp&&ekyc.shopSort.col==='pend'?'background:#1e3a8a;color:white;':''}">Pending ${ekyc.shopSort.col==='pend'?(ekyc.shopSort.dir==='desc'?'▼':'▲'):'⇅'}</button>
         <button class="btn-tiny" id="sort-btn-pct" onclick="ekycShopSetSort('pct')" style="${ekyc.shopSort.col==='pct'?'background:#1e3a8a;color:white;':''}">% ${ekyc.shopSort.col==='pct'?(ekyc.shopSort.dir==='desc'?'▼':'▲'):'⇅'}</button>
-        ${hasComp?`<button class="btn-tiny" id="sort-btn-added" onclick="ekycShopSetSort('added')" style="${ekyc.shopSort.col==='added'?'background:#059669;color:white;':''}">Added ${ekyc.shopSort.col==='added'?(ekyc.shopSort.dir==='desc'?'▼':'▲'):'⇅'}</button>`:''}
+        ${hasComp?`<button class="btn-tiny" id="sort-btn-added" onclick="ekycShopSetSort('added')" style="${ekyc.shopSort.col==='added'?'background:#059669;color:white;':''}" title="Sort by Progress (Reduction in Pending)">Progress ${ekyc.shopSort.col==='added'?(ekyc.shopSort.dir==='desc'?'▼':'▲'):'⇅'}</button>`:''}
         <button class="btn-tiny" onclick="showEkycShopColToggle()" style="background:rgba(124,58,237,.2);border-color:rgba(124,58,237,.5);color:#c4b5fd" title="Choose columns">☰ Columns</button>
         <button class="btn-tiny" onclick="copyEkycTableImg('ekyc-shop-wrap')">📸 Copy</button>
         <button class="btn-tiny" onclick="downloadEkycShopExcel()">📥 Excel</button>
@@ -7956,7 +8008,7 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
           <div style="font-size:10px;color:var(--muted);margin-bottom:4px;font-weight:700">Overall</div>
           ${['cons','done','pend','pct'].map(c2=>`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-bottom:2px"><input type="checkbox" id="shp-col-tot_${c2}" checked onchange="ekycShopToggleCol('tot_${c2}',this.checked)"> ${c2==='cons'?'Considered':c2==='done'?'Completed':c2==='pend'?'Pending':'%'}</label>`).join('')}
           ${hasComp?`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-bottom:2px"><input type="checkbox" id="shp-col-old_pct" checked onchange="ekycShopToggleCol('old_pct',this.checked)"> Old %</label>`:''}
-          ${hasComp?`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-bottom:2px"><input type="checkbox" id="shp-col-added" checked onchange="ekycShopToggleCol('added',this.checked)"> Added</label>`:''}
+          ${hasComp?`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-bottom:2px"><input type="checkbox" id="shp-col-added" checked onchange="ekycShopToggleCol('added',this.checked)"> Progress</label>`:''}
         </div>
         <div style="border-left:1px solid var(--border);padding-left:12px;margin-left:4px">
           <div style="font-size:10px;color:#fcd34d;margin-bottom:4px;font-weight:700">⊕ Selected Total</div>
@@ -7995,7 +8047,7 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
             ${hasComp?sortTh('pct_old',od+' %','background:#7c3aed;min-width:65px; class="shp-col-old_pct"'):''}
             ${sortTh('pct',hasComp?d+' %':'%','min-width:65px; class="shp-col-tot_pct"')}
             <!-- Selected Total headers injected BEFORE the Added TH below -->
-            ${hasComp?`<th id="shp-added-th-r1" style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#065f46;color:white;cursor:pointer;user-select:none" onclick="ekycShopSetSort('added')" class="shp-col-added">Added ${ekyc.shopSort&&ekyc.shopSort.col==='added'?(ekyc.shopSort.dir==='desc'?'▼':'▲'):'⇅'}</th>`:''}
+            ${hasComp?`<th id="shp-added-th-r1" style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#065f46;color:white;cursor:pointer;user-select:none" onclick="ekycShopSetSort('added')" class="shp-col-added" title="Reduction in Pending count. + = eKYC done, − = new cards added">Progress ${ekyc.shopSort&&ekyc.shopSort.col==='added'?(ekyc.shopSort.dir==='desc'?'▼':'▲'):'⇅'}</th>`:''}
           </tr>
           <tr style="background:#3b82f6;color:white">
             <th colspan="4" style="padding:3px;border:1px solid #1e40af"></th>
@@ -8675,7 +8727,7 @@ function ekycBuildAddedHeaderAtEnd(){
   const th = document.createElement('th');
   th.className = 'shp-col-added-dyn shp-col-added';
   th.style.cssText = `padding:7px 5px;border:1px solid #1e40af;text-align:center;background:${bg};color:white;cursor:pointer;font-weight:700`;
-  th.innerHTML = 'Added' + arrow;
+  th.innerHTML = 'Progress' + arrow; th.title = 'Reduction in Pending count. + = eKYC done, − = new cards added';
   th.onclick = ()=>ekycShopSetSort('added');
   thead1.appendChild(th);
 
@@ -8832,21 +8884,20 @@ function renderEkycShopTable(rows){
       const oldR=oldShopMap[r.shopcode];
       const oldPct=oldR&&oldR.total_cons>0?oldR.total_comp/oldR.total_cons:null;
 
-      // "Added" respects the ⊕ Selected Total category config.
-      // When ⊕ is active: show delta only for the selected categories (AAY/PHH/NPHH).
-      // When ⊕ is NOT active: fall back to full total_comp delta (all three categories).
-      // This makes the Added column consistent with the ⊕ column values.
+      // Progress = Reduction in Pending count.
+      // Respect ⊕ Selected Total config when active. Formula: old_pend - new_pend.
+      // Positive = eKYC done (pending reduced). Negative = new cards added (pending grew).
       const selCfg = getEkycSelTotalConfig();
       let shopAdded = null;
       if(oldR){
         if(selCfg.active){
-          let cur=0, old=0;
-          if(selCfg.aay){ cur+=(r.aay_comp||0);   old+=(oldR.aay_comp||0); }
-          if(selCfg.phh){ cur+=(r.phh_comp||0);   old+=(oldR.phh_comp||0); }
-          if(selCfg.nph){ cur+=(r.nph_comp||0);   old+=(oldR.nph_comp||0); }
-          shopAdded = cur - old;
+          let curPend=0, oldPend=0;
+          if(selCfg.aay){ curPend+=Math.max(0,(r.aay_cons||0)-(r.aay_comp||0)); oldPend+=Math.max(0,(oldR.aay_cons||0)-(oldR.aay_comp||0)); }
+          if(selCfg.phh){ curPend+=Math.max(0,(r.phh_cons||0)-(r.phh_comp||0)); oldPend+=Math.max(0,(oldR.phh_cons||0)-(oldR.phh_comp||0)); }
+          if(selCfg.nph){ curPend+=Math.max(0,(r.nph_cons||0)-(r.nph_comp||0)); oldPend+=Math.max(0,(oldR.nph_cons||0)-(oldR.nph_comp||0)); }
+          shopAdded = oldPend - curPend;
         } else {
-          shopAdded = r.total_comp - oldR.total_comp;
+          shopAdded = (oldR.total_pend||0) - (r.total_pend||0);
         }
       }
       const added = shopAdded;
@@ -8864,7 +8915,7 @@ function renderEkycShopTable(rows){
         ${hasComp?`<td style="padding:4px;border:1px solid #e2e8f0;text-align:center" class="shp-col-old_pct">${oldPct!==null?fmtPct(oldPct):'—'}</td>`:''}
         <td style="padding:4px;border:1px solid #e2e8f0;text-align:center;font-weight:700;background:${cShop.bg};color:${cShop.fg}" class="shp-col-tot_pct">${fmtPct(r.total_pct)}</td>
         ${ekycGetSelTotalCells(r, false)}
-        ${hasComp?`<td style="padding:4px;border:1px solid #e2e8f0;text-align:center;font-size:11px;font-weight:700;color:${added>0?'#059669':added<0?'#dc2626':'#64748b'}" class="shp-col-added">${added!==null?(added>0?'+':'')+fmtN(added):'—'}</td>`:''}
+        ${hasComp?`<td title="${added>0?'eKYC done: '+fmtN(added):added<0?'New cards added: '+fmtN(Math.abs(added)):'No change'}" style="padding:4px;border:1px solid #e2e8f0;text-align:center;font-size:11px;font-weight:700;color:${added>0?'#059669':added<0?'#dc2626':'#64748b'}" class="shp-col-added">${added!==null?(added>0?'+':'')+fmtN(added):'—'}</td>`:''}
       </tr>`;
     });
   });
@@ -8896,14 +8947,14 @@ function filterEkycShops(){
     const isAdded=col==='added';
     btn.style.background=active?(isAdded?'#059669':'#1e3a8a'):'';
     btn.style.color=active?'white':'';
-    btn.textContent=(col==='pend'?'Pending':col==='pct'?'%':'Added')+' '+(active?(ekyc.shopSort.dir==='desc'?'▼':'▲'):'⇅');
+    btn.textContent=(col==='pend'?'Pending':col==='pct'?'%':'Progress')+' '+(active?(ekyc.shopSort.dir==='desc'?'▼':'▲'):'⇅');
   });
   // Also update the static Added TH in thead (always rightmost)
   const addedStaticTh = document.getElementById('shp-added-th-r1');
   if(addedStaticTh){
     const active = ekyc.shopSort && ekyc.shopSort.col === 'added';
     addedStaticTh.style.background = active ? '#10b981' : '#065f46';
-    addedStaticTh.textContent = 'Added ' + (active ? (ekyc.shopSort.dir==='desc'?'▼':'▲') : '⇅');
+    addedStaticTh.textContent = 'Progress ' + (active ? (ekyc.shopSort.dir==='desc'?'▼':'▲') : '⇅');
   }
 }
 
@@ -9159,7 +9210,7 @@ function printEkycShopwise(orientation){
   if(visCols.includes('sel_done')) pdfCols.push(selLabel+' Done');
   if(visCols.includes('sel_pend')) pdfCols.push(selLabel+' Pend');
   if(visCols.includes('sel_pct'))  pdfCols.push(selLabel+' %');
-  if(hasComp&&visCols.includes('added')) pdfCols.push('Added');
+  if(hasComp&&visCols.includes('added')) pdfCols.push('Progress');
 
   // Helper: build a row from a shop/block record
   function buildRow(r, siStr, isBlock, blockLabel){
@@ -9167,17 +9218,17 @@ function printEkycShopwise(orientation){
     const pct=cons>0?comp/cons:0;
     const or=oldShopMap[r.shopcode];
     const oldPct=or&&or.total_cons>0?or.total_comp/or.total_cons:null;
-    // Added: respect ⊕ selected category config (same as the table display)
+    // Progress = Reduction in Pending. Respect ⊕ config.
     let added=null;
     if(or){
       if(cfg.active){
-        let cur=0,old=0;
-        if(cfg.aay){cur+=r.aay_comp||0;old+=or.aay_comp||0;}
-        if(cfg.phh){cur+=r.phh_comp||0;old+=or.phh_comp||0;}
-        if(cfg.nph){cur+=r.nph_comp||0;old+=or.nph_comp||0;}
-        added=cur-old;
+        let curP=0,oldP=0;
+        if(cfg.aay){curP+=Math.max(0,(r.aay_cons||0)-(r.aay_comp||0));oldP+=Math.max(0,(or.aay_cons||0)-(or.aay_comp||0));}
+        if(cfg.phh){curP+=Math.max(0,(r.phh_cons||0)-(r.phh_comp||0));oldP+=Math.max(0,(or.phh_cons||0)-(or.phh_comp||0));}
+        if(cfg.nph){curP+=Math.max(0,(r.nph_cons||0)-(r.nph_comp||0));oldP+=Math.max(0,(or.nph_cons||0)-(or.nph_comp||0));}
+        added=oldP-curP;
       } else {
-        added=comp-(or.total_comp||0);
+        added=(or.total_pend||0)-(r.total_pend||0);
       }
     }
     let sc=0,sd=0;
@@ -9236,7 +9287,7 @@ function printEkycShopwise(orientation){
   // (Pages 2+ get watermark via autoTable's willDrawPage hook — see below.)
   drawEkycWatermarkOnPage(doc);
 
-  const sortLabel = {'pend':'Pending','pct':'%','added':'Added','pct_old':'Old %'}[sortCol]||sortCol;
+  const sortLabel = {'pend':'Pending','pct':'%','added':'Progress','pct_old':'Old %'}[sortCol]||sortCol;
   const sortDesc = `Sorted by: ${sortLabel} ${sortDir==='desc'?'High → Low':'Low → High'}`;
   const filterParts=[];
   if(ekyc.filter?.active){if(ekyc.filter.pctVal!==null)filterParts.push(`%${ekyc.filter.pctOp==='lt'?'<':'≥'}${ekyc.filter.pctVal}%`);if(ekyc.filter.pendVal!==null)filterParts.push(`Pend${ekyc.filter.pendOp==='gt'?'>':'≤'}${ekyc.filter.pendVal}`);}
@@ -9341,7 +9392,7 @@ function downloadEkycExcel(){
       const pa=cat.consF(a)>0?cat.compF(a)/cat.consF(a):0,pb=cat.consF(b)>0?cat.compF(b)/cat.consF(b):0;return pa-pb;
     });
     let hdr=isAll?['#','Block','AAY Considered','AAY Completed','AAY Pending','PHH Considered','PHH Completed','PHH Pending','NPHH Considered','NPHH Completed','NPHH Pending','Total Considered','Total Completed','Total Pending','% Completed']:['#','Block','Considered','Completed','Pending','% Completed'];
-    if(hasComp)hdr=[...hdr,ekyc.oldDate+' %','Added'];
+    if(hasComp)hdr=[...hdr,ekyc.oldDate+' %','Progress'];
     const data=[['e-KYC Progress Status — '+cat.label+' — As on '+d],[],hdr];
     sortedB.forEach((b,i)=>{
       const cons=cat.consF(b),comp=cat.compF(b),pend=cat.pendF(b),pct=cons>0?comp/cons:0;
@@ -9426,7 +9477,7 @@ function downloadEkycExcel(){
   // Shop-wise
   const oldSM={};if(ekyc.oldData)parseEkycRows(ekyc.oldData).forEach(r=>{oldSM[r.shopcode]=r;});
   let swHdr=['#','Block','Shop Code','Shop Name','Considered','Completed','Pending','% Completed'];
-  if(hasComp)swHdr=[...swHdr,ekyc.oldDate+' %','Added'];
+  if(hasComp)swHdr=[...swHdr,ekyc.oldDate+' %','Progress'];
   const sw=[['e-KYC Shop-wise — As on '+d],[],swHdr];
   ekyc.processedRows2.slice().sort((a,b)=>a.block.localeCompare(b.block)||a.total_pct-b.total_pct).forEach((r,i)=>{
     const pend=Math.max(0,r.total_cons-r.total_comp);
@@ -13082,7 +13133,7 @@ function downloadEkycShopExcel(){
   if(visCols.includes('sel_done')) headers.push(selLabel+' Done');
   if(visCols.includes('sel_pend')) headers.push(selLabel+' Pend');
   if(visCols.includes('sel_pct'))  headers.push(selLabel+' %');
-  if(hasComp&&visCols.includes('added')) headers.push('Added');
+  if(hasComp&&visCols.includes('added')) headers.push('Progress');
 
   // Helper: build data row
   function buildRow(r, siNum, isBlock, blockLabel){
@@ -13090,17 +13141,17 @@ function downloadEkycShopExcel(){
     const pct=cons>0?+(comp/cons*100).toFixed(1)+'%':'0%';
     const or=oldMap[r.shopcode];
     const oPct=hasComp&&or&&or.total_cons>0?+(or.total_comp/or.total_cons*100).toFixed(1)+'%':'—';
-    // Added: respect ⊕ selected category config
+    // Progress = Reduction in Pending. Respect ⊕ config.
     let added=null;
     if(hasComp&&or!==undefined){
       if(cfg.active){
-        let cur=0,old=0;
-        if(cfg.aay){cur+=r.aay_comp||0;old+=or.aay_comp||0;}
-        if(cfg.phh){cur+=r.phh_comp||0;old+=or.phh_comp||0;}
-        if(cfg.nph){cur+=r.nph_comp||0;old+=or.nph_comp||0;}
-        added=cur-old;
+        let curP=0,oldP=0;
+        if(cfg.aay){curP+=Math.max(0,(r.aay_cons||0)-(r.aay_comp||0));oldP+=Math.max(0,(or.aay_cons||0)-(or.aay_comp||0));}
+        if(cfg.phh){curP+=Math.max(0,(r.phh_cons||0)-(r.phh_comp||0));oldP+=Math.max(0,(or.phh_cons||0)-(or.phh_comp||0));}
+        if(cfg.nph){curP+=Math.max(0,(r.nph_cons||0)-(r.nph_comp||0));oldP+=Math.max(0,(or.nph_cons||0)-(or.nph_comp||0));}
+        added=oldP-curP;
       } else {
-        added=comp-(or.total_comp||0);
+        added=(or.total_pend||0)-(r.total_pend||0);
       }
     }
     let sc=0,sd=0;
@@ -13365,7 +13416,7 @@ function printEkycBlockAbstract(catK, orientation){
         <th>Pending</th>
         ${hasComp?`<th style="background:#7c3aed">${ekyc.oldDate} %</th>`:''}
         <th>${ekyc.date} %</th>
-        ${hasComp?'<th style="background:#065f46;color:white">Added</th>':''}
+        ${hasComp?'<th style="background:#065f46;color:white">Progress</th>':''}
       </tr>
     </thead>
     <tbody>${rows}</tbody>
