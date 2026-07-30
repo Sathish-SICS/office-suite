@@ -3659,8 +3659,8 @@ function applyImgWatermark(canvas){
   const w = canvas.width, h = canvas.height;
   ctx.save();
 
-  // The text — 3 lines, English (works for both Latin and system Tamil fallback in canvas)
-  const lines = ['Deputy Registrar','Public Distribution System','Thiruvannamalai'];
+  // Tamil designation lines. Canvas 2D API renders Tamil correctly via system fonts.
+  const lines = ['துணைப்பதிவாளர்','பொதுவிநியோகத்திட்டம்','திருவண்ணாமலை'];
 
   // Font size scales with canvas — bigger images get bigger watermarks
   const fontSize = Math.max(28, Math.min(72, Math.floor(Math.min(w, h) * 0.05)));
@@ -9115,81 +9115,107 @@ function ekycLaunchPrint(){
   printEkycShopwise(orient);
 }
 
+// Pre-render Tamil watermark to a canvas. Runs once per PDF export.
+// jsPDF can't render Tamil directly, but it can embed an image, so we draw
+// Tamil text on an off-screen canvas (which uses system fonts including Tamil)
+// and use the resulting image data as the watermark on every page.
+function makeTamilWatermarkCanvas(style){
+  const canvas = document.createElement('canvas');
+  // Bigger canvas → sharper text when scaled onto A4 mm coords
+  canvas.width  = 1400;
+  canvas.height = 900;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  const lines = ['துணைப்பதிவாளர்','பொதுவிநியோகத்திட்டம்','திருவண்ணாமலை'];
+  const isBold = style === 'bold_diagonal';
+  const isCorner = style === 'corner';
+  const isStamp = style === 'stamp';
+
+  if(isCorner){
+    ctx.save();
+    ctx.font = `bold 32px "Tamil Marutham","Latha","Arial Unicode MS",Arial,sans-serif`;
+    ctx.fillStyle = 'rgba(110,120,115,0.85)';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
+    lines.forEach((line,i)=>{
+      ctx.fillText(line, canvas.width - 40, 40 + i*40);
+    });
+    ctx.restore();
+  } else if(isStamp){
+    ctx.save();
+    ctx.translate(canvas.width/2, canvas.height/2);
+    ctx.font = `bold 44px "Tamil Marutham","Latha","Arial Unicode MS",Arial,sans-serif`;
+    ctx.fillStyle = 'rgba(150,150,155,0.40)';
+    ctx.strokeStyle = 'rgba(150,150,155,0.40)';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([8,8]);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const spacing = 60;
+    const totalH = spacing * (lines.length - 1);
+    lines.forEach((line,i)=>{ ctx.fillText(line, 0, -totalH/2 + i*spacing); });
+    // Dashed border
+    const boxW = 600, boxH = 240;
+    ctx.strokeRect(-boxW/2, -boxH/2, boxW, boxH);
+    ctx.restore();
+  } else {
+    // Diagonal (default) or bold_diagonal
+    ctx.save();
+    ctx.translate(canvas.width/2, canvas.height/2);
+    ctx.rotate(-35 * Math.PI / 180);
+    const size = isBold ? 100 : 84;
+    ctx.font = `bold ${size}px "Tamil Marutham","Latha","Arial Unicode MS",Arial,sans-serif`;
+    ctx.fillStyle = isBold ? 'rgba(100,100,110,0.35)' : 'rgba(140,140,145,0.40)';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const spacing = size * 1.25;
+    const totalH = spacing * (lines.length - 1);
+    lines.forEach((line,i)=>{ ctx.fillText(line, 0, -totalH/2 + i*spacing); });
+    ctx.restore();
+  }
+  return canvas.toDataURL('image/png');
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // WATERMARK ENGINE — jsPDF (shop-wise PDF)
-// MS Word-style: light gray, drawn BEFORE content so table sits on top.
-// Called from autoTable's willDrawPage hook — runs at the start of every page.
+// Uses a pre-rendered Tamil canvas image so Tamil script renders correctly
+// (jsPDF's built-in fonts can't render Tamil).
 // ══════════════════════════════════════════════════════════════════════════
 function drawEkycWatermarkOnPage(doc){
   if(!ekyc._wmEnable) return;
   const style = ekyc._wmStyle || 'diagonal';
-  // jsPDF cannot render Tamil Unicode — always use English lines here.
-  const lines = ['Deputy Registrar','Public Distribution System','Thiruvannamalai'];
 
   const pw = doc.internal.pageSize.getWidth();
   const ph = doc.internal.pageSize.getHeight();
-  const cx = pw/2, cy = ph/2;
 
-  // MS Word-style light gray — visible enough to read but doesn't obscure data
-  const grayLight = [175, 175, 178];   // regular diagonal / stamp — mid-light gray (~68%)
-  const grayMed   = [150, 150, 160];   // bold diagonal — slightly darker
-  const grayCorner= [110, 120, 115];   // corner — darker so top-right text is readable
-
-  if(style === 'diagonal' || style === 'bold_diagonal'){
-    const isBold   = style === 'bold_diagonal';
-    // Use a SHORTER single string for reliable placement — MS Word style.
-    // jsPDF's per-line rotation drifts, so combining into 1 line avoids that entirely.
-    const compact = lines.join(' · ');
-    const fontSize = isBold ? 34 : 28;
-    const color    = isBold ? grayMed : grayLight;
-
-    doc.setFont('helvetica','bold');
-    doc.setFontSize(fontSize);
-    doc.setTextColor(color[0], color[1], color[2]);
-
-    // Single call, rotated as one block around page centre.
-    // baseline:'middle' centres text vertically at cy; align:'center' centres horizontally at cx.
-    doc.text(compact, cx, cy, {
-      align:'center',
-      angle:-35,          // jsPDF angle: negative = clockwise (going lower-left → upper-right visually)
-      baseline:'middle'
-    });
-
-  } else if(style === 'stamp'){
-    const fontSize = 12;
-    const spacing  = 7;
-    doc.setFont('helvetica','bold');
-    doc.setFontSize(fontSize);
-    doc.setTextColor(...grayLight);
-    const totalH = spacing * (lines.length - 1);
-    const boxPad = 8;
-    const maxW = Math.max(...lines.map(l=>l.length)) * fontSize * 0.48;
-    const boxW = maxW + boxPad*2;
-    const boxH = totalH + boxPad*2 + 4;
-    doc.setDrawColor(...grayLight);
-    doc.setLineWidth(0.6);
-    doc.setLineDash([2,2]);
-    doc.roundedRect(cx-boxW/2, cy-boxH/2, boxW, boxH, 3, 3);
-    doc.setLineDash([]);
-    lines.forEach((line,i)=>{
-      doc.text(line, cx, cy - totalH/2 + i*spacing + 2, {align:'center'});
-    });
-
-  } else if(style === 'corner'){
-    // Top-right corner — increase visibility, fit all 3 lines within top margin
-    doc.setFont('helvetica','bold');
-    doc.setFontSize(9);                    // was 7 — too small
-    doc.setTextColor(...grayCorner);
-    const startY = 8;                      // start well below page top edge
-    const lineH  = 5;
-    lines.forEach((line,i)=>{
-      doc.text(line, pw-10, startY + i*lineH, {align:'right'});
-    });
+  // Cache the rendered watermark image on the doc object so we don't regenerate
+  // per page (potentially 100+ pages for shopwise).
+  if(!doc._wmDataUrl || doc._wmDataUrlStyle !== style){
+    try {
+      doc._wmDataUrl = makeTamilWatermarkCanvas(style);
+      doc._wmDataUrlStyle = style;
+    } catch(e){
+      console.error('Watermark canvas render failed:', e);
+      doc._wmDataUrl = null;
+    }
   }
+  if(!doc._wmDataUrl) return;
 
-  // Reset for subsequent drawing
-  doc.setTextColor(0);
-  doc.setDrawColor(0);
+  if(style === 'corner'){
+    // Small image in top-right corner
+    const imgW = 60, imgH = 20;
+    doc.addImage(doc._wmDataUrl, 'PNG', pw - imgW - 5, 5, imgW, imgH);
+  } else if(style === 'stamp'){
+    // Centred stamp
+    const imgW = 100, imgH = 40;
+    doc.addImage(doc._wmDataUrl, 'PNG', (pw - imgW)/2, (ph - imgH)/2, imgW, imgH);
+  } else {
+    // Diagonal — fills a large portion of the page
+    const imgW = Math.min(pw - 20, 200);
+    const imgH = imgW * (900/1400);   // preserve canvas aspect
+    doc.addImage(doc._wmDataUrl, 'PNG', (pw - imgW)/2, (ph - imgH)/2, imgW, imgH);
+  }
 }
 
 // Kept for backward compatibility — now just delegates to per-page draw.
@@ -13312,19 +13338,21 @@ function printEkycBlockAbstract(catK, orientation){
   const englishLines = ['Deputy Registrar','Public Distribution System','Thiruvannamalai'];
   const allLines     = wmLang==='tamil' ? tamilLines : wmLang==='english' ? englishLines : [...tamilLines,...englishLines];
 
-  // Chrome print bug workaround: position:fixed watermark only shows on ONE page
-  // (usually the last). To reliably appear on EVERY printed page, we generate
-  // ~20 absolutely-positioned copies spaced at page-height intervals. Excess
-  // copies past the last page simply don't render — no harm.
+  // Chrome print bug workaround: position:fixed watermark only shows on ONE page.
+  // Instead, we use position:absolute watermarks at page-height intervals — but the
+  // count is computed by JavaScript AFTER the window loads so it matches the ACTUAL
+  // number of printed pages. Otherwise a fixed count like 20 forces the document
+  // to be that many pages tall, creating blank trailing pages.
   //
   // A4 portrait ≈ 297mm tall, 15mm top/bottom margin → ~267mm printable height
   // A4 landscape ≈ 210mm tall, 15mm margin → ~180mm printable height
   const pageContentH = orient === 'portrait' ? 267 : 180;   // mm
-  const wmCount = 20;   // enough for 20 printed pages — reports rarely exceed this
 
   let wmHtml = '', wmExtraCSS = '';
   if(wmEnable){
     const linesHtml = allLines.map(l=>`<div>${l}</div>`).join('');
+    // Escape for JS string embedding
+    const linesForJS = JSON.stringify(linesHtml);
 
     if(wmStyle==='corner'){
       // Top-right corner — one per page
@@ -13336,13 +13364,9 @@ function printEkycBlockAbstract(catK, orientation){
           color:rgba(130,150,140,.75);
           line-height:1.3; pointer-events:none;
         }`;
-      let items = '';
-      for(let i=0; i<wmCount; i++){
-        items += `<div class="wm-item" style="top:${8 + i*pageContentH}mm">${linesHtml}</div>`;
-      }
-      wmHtml = items;
+      // Initial single watermark; JS will replicate
+      wmHtml = `<div class="wm-item" style="top:8mm" data-wm-tmpl="corner">${linesHtml}</div>`;
     } else if(wmStyle==='stamp'){
-      // Centre stamp — one per page (centred vertically within each page)
       wmExtraCSS = `
         .wm-item {
           position:absolute; left:50%; transform:translateX(-50%);
@@ -13355,13 +13379,8 @@ function printEkycBlockAbstract(catK, orientation){
           line-height:1.4; pointer-events:none;
           background:rgba(255,255,255,.4);
         }`;
-      let items = '';
-      for(let i=0; i<wmCount; i++){
-        items += `<div class="wm-item" style="top:${(i*pageContentH)+(pageContentH/2)-25}mm">${linesHtml}</div>`;
-      }
-      wmHtml = items;
+      wmHtml = `<div class="wm-item" style="top:${(pageContentH/2)-25}mm" data-wm-tmpl="stamp">${linesHtml}</div>`;
     } else if(wmStyle==='bold_diagonal'){
-      // Bold diagonal — one per page
       wmExtraCSS = `
         .wm-item {
           position:absolute; left:50%; transform:translateX(-50%) rotate(-35deg);
@@ -13373,11 +13392,7 @@ function printEkycBlockAbstract(catK, orientation){
           line-height:1.15; pointer-events:none;
           width:200mm;
         }`;
-      let items = '';
-      for(let i=0; i<wmCount; i++){
-        items += `<div class="wm-item" style="top:${(i*pageContentH)+(pageContentH/2)-40}mm">${linesHtml}</div>`;
-      }
-      wmHtml = items;
+      wmHtml = `<div class="wm-item" style="top:${(pageContentH/2)-40}mm" data-wm-tmpl="bold_diagonal">${linesHtml}</div>`;
     } else { /* diagonal (default — MS Word style) */
       wmExtraCSS = `
         .wm-item {
@@ -13390,11 +13405,7 @@ function printEkycBlockAbstract(catK, orientation){
           line-height:1.2; pointer-events:none;
           width:200mm;
         }`;
-      let items = '';
-      for(let i=0; i<wmCount; i++){
-        items += `<div class="wm-item" style="top:${(i*pageContentH)+(pageContentH/2)-40}mm">${linesHtml}</div>`;
-      }
-      wmHtml = items;
+      wmHtml = `<div class="wm-item" style="top:${(pageContentH/2)-40}mm" data-wm-tmpl="diagonal">${linesHtml}</div>`;
     }
 
     // Wrap all watermarks in a container that sits BEHIND all content
@@ -13464,7 +13475,36 @@ function printEkycBlockAbstract(catK, orientation){
     </tfoot>
   </table>
   </div><!-- /.page-content -->
-  <script>window.onload=()=>{window.print();}<\/script>
+  <script>
+    // Dynamically replicate watermark to match actual content page count.
+    // Prevents blank trailing pages (previously we generated 20 watermarks even for 1-page content).
+    window.onload = function(){
+      try {
+        const wmLayer = document.querySelector('.wm-layer');
+        const contentEl = document.querySelector('.page-content');
+        if(wmLayer && contentEl){
+          const tmpl = wmLayer.querySelector('.wm-item');
+          if(tmpl){
+            // Measure actual content height in mm (approx). Screen DPI is typically 96 → 1mm ≈ 3.7795px.
+            const pxPerMm = 3.7795;
+            const contentHmm = contentEl.offsetHeight / pxPerMm;
+            const pageContentMm = ${pageContentH};   // matches @page content area
+            const pagesNeeded = Math.max(1, Math.ceil(contentHmm / pageContentMm));
+            // Clone template for each additional page beyond page 1
+            const style = tmpl.getAttribute('data-wm-tmpl');
+            const baseTopStr = tmpl.style.top;   // e.g. "108.5mm" or "8mm"
+            const baseTopMm = parseFloat(baseTopStr) || 0;
+            for(let i = 1; i < pagesNeeded; i++){
+              const clone = tmpl.cloneNode(true);
+              clone.style.top = (baseTopMm + i * pageContentMm) + 'mm';
+              wmLayer.appendChild(clone);
+            }
+          }
+        }
+      } catch(e) { console.error('Watermark replication error:', e); }
+      setTimeout(function(){ window.print(); }, 100);
+    };
+  <\/script>
   </body></html>`);
   printWin.document.close();
 }
