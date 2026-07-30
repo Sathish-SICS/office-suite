@@ -7812,7 +7812,7 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
               <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center" class="ekyc-col-${cat.k}-tot_done">Completed</th>
               <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','pend')" class="ekyc-col-${cat.k}-tot_pend">Pending ${ekyc[catSortKey].col==='pend'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th>
               ${hasComp?`<th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#7c3aed;min-width:80px;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','pct_old')" class="ekyc-col-${cat.k}-old_pct">${od} % ${ekyc[catSortKey].col==='pct_old'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th>`:''}              <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;min-width:80px;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','pct')" class="ekyc-col-${cat.k}-tot_pct">${d} % ${ekyc[catSortKey].col==='pct'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th>
-              ${hasComp?`<th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#065f46;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','added')" class="ekyc-col-${cat.k}-added" title="Reduction in Pending count. + = eKYC done, − = new cards added">Progress ${ekyc[catSortKey].col==='added'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th>`:''}
+              ${hasComp?`<th colspan="3" style="padding:7px 5px;border:1px solid #1e40af;text-align:center;background:#065f46;color:white;font-weight:700" class="ekyc-grp-${cat.k}-red" data-grp="red" data-cat="${cat.k}" title="Reduction In Pending Count">Reduction In Pending Count</th>`:''}
               ${cat.k==='all'?ekycBlkSelMainHeader():''}            </tr>
             ${cat.k==='all'?`<tr style="background:#3b82f6;color:white">
               <th colspan="2" style="padding:4px;border:1px solid #1e40af"></th>
@@ -7828,7 +7828,12 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
               <th style="padding:4px;border:1px solid #1e40af;font-size:10px;text-align:center" class="ekyc-col-${cat.k}-nph_done">Done</th>
               <th style="padding:4px;border:1px solid #1e40af;font-size:10px;text-align:center" class="ekyc-col-${cat.k}-nph_pend">Pend</th>
               <th style="padding:4px;border:1px solid #1e40af;font-size:10px;text-align:center;background:#7c3aed" class="ekyc-col-${cat.k}-nph_pct">%</th>
-              <th id="ekyc-ovr-spacer-${cat.k}" colspan="${4+(hasComp?2:0)}" style="padding:4px;border:1px solid #1e40af"></th>
+              <th id="ekyc-ovr-spacer-${cat.k}" colspan="${4+(hasComp?1:0)}" style="padding:4px;border:1px solid #1e40af"></th>
+              ${hasComp?`
+                <th style="padding:4px;border:1px solid #1e40af;font-size:10px;text-align:center;background:#059669;color:white" class="ekyc-col-${cat.k}-added ekyc-col-${cat.k}-ekyc_done" title="Sum of positive shop-level progress (eKYC completions)">eKYC done</th>
+                <th style="padding:4px;border:1px solid #1e40af;font-size:10px;text-align:center;background:#dc2626;color:white" class="ekyc-col-${cat.k}-added ekyc-col-${cat.k}-new_cards" title="Sum of negative shop-level progress (new pending / cards added)">New cards added</th>
+                <th style="padding:4px;border:1px solid #1e40af;font-size:10px;text-align:center;background:#065f46;color:white;cursor:pointer" onclick="ekycBlockSetSort('${cat.k}','added')" class="ekyc-col-${cat.k}-added ekyc-col-${cat.k}-progress" title="Net = eKYC done − New cards added. Click to sort.">Progress ${ekyc[catSortKey].col==='added'?(ekyc[catSortKey].dir==='desc'?'▼':'▲'):'⇅'}</th>
+              `:''}
               ${cat.k==='all'?ekycBlkSelSubHeaders():''}
             </tr>`:''}          </thead>
           <tbody>
@@ -7862,13 +7867,15 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
                 ${pctCell(pct,'','ekyc-col-'+cat.k+'-tot_pct')}
                 ${hasComp?(()=>{
                   const bk = blockBreakdown[b.block];
+                  const pos = bk ? bk.pos : 0;
+                  const neg = bk ? Math.abs(bk.neg) : 0;   // display as positive number
+                  const netColor = added>0?'#059669':added<0?'#dc2626':'#64748b';
                   const netStr = added!==null ? (added>0?'+':'')+fmtN(added) : '—';
-                  const color = added>0?'#059669':added<0?'#dc2626':'#64748b';
-                  const bdown = (bk && (bk.pos>0 || bk.neg<0))
-                    ? `<div style="font-size:9px;font-weight:400;color:#64748b;margin-top:1px">+${fmtN(bk.pos)} / ${fmtN(bk.neg)}</div>`
-                    : '';
-                  const tip = 'Reduction in Pending count. + = eKYC done, − = new cards added';
-                  return `<td title="${tip}" style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;font-weight:700;color:${color}" class="ekyc-col-${cat.k}-added">${netStr}${bdown}</td>`;
+                  return `
+                    <td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;color:#059669;font-weight:600" class="ekyc-col-${cat.k}-added ekyc-col-${cat.k}-ekyc_done" title="eKYC done in this block">${pos>0?'+'+fmtN(pos):'—'}</td>
+                    <td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;color:#dc2626;font-weight:600" class="ekyc-col-${cat.k}-added ekyc-col-${cat.k}-new_cards" title="New cards added (pending increased) in this block">${neg>0?'−'+fmtN(neg):'—'}</td>
+                    <td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;font-weight:700;color:${netColor}" class="ekyc-col-${cat.k}-added ekyc-col-${cat.k}-progress" title="Net progress = eKYC done − new cards added">${netStr}</td>
+                  `;
                 })():''}
                 ${cat.k==='all'?ekycBlkSelCell(b):''}              </tr>`;
             }).join('')}
@@ -7896,17 +7903,21 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
                     const a=catAdded(b,ob);
                     if(a!==null){
                       totAdded+=a;
-                      if(a>0) totPos+=a; else if(a<0) totNeg+=a;
+                      // Aggregate from per-shop level breakdown for accurate +/-
+                      const bk = blockBreakdown[b.block];
+                      if(bk){ totPos+=bk.pos; totNeg+=bk.neg; }
                     }
                   }
                 });
-                const color = totAdded>0?'#059669':totAdded<0?'#dc2626':'#64748b';
+                const netColor = totAdded>0?'#059669':totAdded<0?'#dc2626':'#64748b';
                 const netStr = (totAdded>=0?'+':'')+fmtN(totAdded);
-                const breakdown = (totPos>0 || totNeg<0)
-                  ? `<div style="font-size:9px;font-weight:400;color:#64748b;margin-top:2px">+${fmtN(totPos)} / ${fmtN(totNeg)}</div>`
-                  : '';
-                const tip = 'Reduction in Pending count. + = eKYC done, − = new cards added';
-                return `<td title="${tip}" style="padding:7px 4px;border:1px solid #94a3b8;text-align:center;font-weight:700;color:${color}" class="ekyc-col-${cat.k}-added">${netStr}${breakdown}</td>`;
+                const posStr = totPos>0 ? '+'+fmtN(totPos) : '—';
+                const negStr = totNeg<0 ? '−'+fmtN(Math.abs(totNeg)) : '—';
+                return `
+                  <td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center;color:#059669;font-weight:700" class="ekyc-col-${cat.k}-added ekyc-col-${cat.k}-ekyc_done">${posStr}</td>
+                  <td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center;color:#dc2626;font-weight:700" class="ekyc-col-${cat.k}-added ekyc-col-${cat.k}-new_cards">${negStr}</td>
+                  <td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center;font-weight:700;color:${netColor}" class="ekyc-col-${cat.k}-added ekyc-col-${cat.k}-progress">${netStr}</td>
+                `;
               })():''}
               ${cat.k==='all'?ekycBlkSelCell(null,sortedB):''}
             </tr>
@@ -8469,13 +8480,15 @@ function ekycSyncGroupHeaders(catK){
     }
   });
 
-  // Row 1 has individual "Overall" THs (tot_cons … added), each hideable.
+  // Row 1 has individual "Overall" THs (tot_cons … tot_pct), each hideable.
   // Row 2 covers them with a single spacer TH whose colspan must match how many
-  // of them are actually visible — otherwise every column to the right shifts.
+  // are actually visible — otherwise every column to the right shifts.
+  // Note: 'added' is now a 3-column group with its own sub-headers in row 2,
+  //       so it is NOT part of the spacer count anymore.
   const spacer = document.getElementById('ekyc-ovr-spacer-'+catK);
   if(spacer){
     let ovrVis = 0;
-    ['tot_cons','tot_done','tot_pend','old_pct','tot_pct','added'].forEach(colId=>{
+    ['tot_cons','tot_done','tot_pend','old_pct','tot_pct'].forEach(colId=>{
       const th = thead.querySelector('.ekyc-col-'+catK+'-'+colId);
       if(th && th.style.display !== 'none') ovrVis++;
     });
@@ -8484,6 +8497,24 @@ function ekycSyncGroupHeaders(catK){
     } else {
       spacer.style.display = '';
       spacer.colSpan = ovrVis;
+    }
+  }
+
+  // Also sync the "Reduction In Pending Count" group header colspan
+  const redGrp = thead.querySelector('.ekyc-grp-'+catK+'-red');
+  if(redGrp){
+    let redVis = 0;
+    ['ekyc_done','new_cards','progress'].forEach(sub=>{
+      // Take the sub-header TH specifically (not a data td)
+      const ths = thead.querySelectorAll('.ekyc-col-'+catK+'-'+sub);
+      const subTh = Array.from(ths).find(el=>el.tagName==='TH');
+      if(subTh && subTh.style.display !== 'none') redVis++;
+    });
+    if(redVis === 0){
+      redGrp.style.display = 'none';
+    } else {
+      redGrp.style.display = '';
+      redGrp.colSpan = redVis;
     }
   }
 }
