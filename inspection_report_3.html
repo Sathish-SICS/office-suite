@@ -598,6 +598,7 @@ document.addEventListener('keydown', e=>{
   <div class="tab" data-tab="reminder">📲 WhatsApp Reminder</div>
   <div class="tab" data-tab="ekyc">🔑 e-KYC Report</div>
   <div class="tab" data-tab="pdlsheet">📋 PDL Sheet</div>
+  <div class="tab" data-tab="billreceipt">🧾 Bill Receipt</div>
   <div class="tab" data-tab="notes">📄 Basic Notes</div>
 </div>
 
@@ -1598,6 +1599,53 @@ document.addEventListener('keydown', e=>{
 <!-- ══════════════════════════════════════════════════════════ -->
 <!-- BASIC NOTES TAB                                           -->
 <!-- ══════════════════════════════════════════════════════════ -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- BILL RECEIPT TAB                                                  -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="tab-content" id="tab-billreceipt">
+
+<div class="panel">
+  <h2><span class="dot"></span> 🧾 Bill Receipt — Bill Print Status</h2>
+  <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
+    Upload the <b>MIS Bill Print</b> Excel file (Sheet: <code>Shop Wise</code>). Thiruvannamalai shops are filtered automatically,
+    mapped to blocks, and ranked block-wise and shop-wise by New Print %.
+  </p>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+    <!-- File upload -->
+    <div>
+      <label style="font-size:12px;color:var(--muted);font-weight:600;display:block;margin-bottom:6px">📁 Upload Bill Receipt File</label>
+      <div class="upload-box" id="br-upload-box" onclick="document.getElementById('br-file-input').click()" style="min-height:80px">
+        <div class="title">🧾 Bill Print Excel</div>
+        <div class="filename" id="br-file-name">Click to upload (Shop Wise sheet)</div>
+        <div class="hint">.xlsx from MIS portal</div>
+      </div>
+      <input type="file" id="br-file-input" accept=".xlsx,.xls" style="display:none" onchange="brLoadFile(this)">
+    </div>
+    <!-- Date & options -->
+    <div>
+      <label style="font-size:12px;color:var(--muted);font-weight:600;display:block;margin-bottom:6px">📅 Report Date</label>
+      <input type="text" id="br-report-date" placeholder="e.g. 28.07.2026"
+        style="width:100%;background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:8px 12px;border-radius:6px;font-size:13px;margin-bottom:10px">
+      <label style="font-size:12px;color:var(--muted);font-weight:600;display:block;margin-bottom:6px">📅 Report Period</label>
+      <input type="text" id="br-report-period" placeholder="e.g. 01 July to 28 July 2026"
+        style="width:100%;background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:8px 12px;border-radius:6px;font-size:13px">
+    </div>
+  </div>
+
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+    <button class="btn success" onclick="brGenerate()" id="br-generate-btn" disabled>📊 Generate Report</button>
+    <button class="btn" onclick="brDownloadExcel()" id="br-excel-btn" disabled>📥 Download Excel</button>
+    <button class="btn secondary" onclick="brReset()">🔄 Reset</button>
+    <span id="br-status" style="font-size:12px;color:var(--muted)"></span>
+  </div>
+</div>
+
+<!-- Results area -->
+<div id="br-results"></div>
+
+</div><!-- end tab-billreceipt -->
+
 <div class="tab-content" id="tab-notes">
 <style>
 .bn-hero {
@@ -13145,6 +13193,317 @@ document.addEventListener('DOMContentLoaded', ()=>{
   if(c91) c91.addEventListener('change', mentionUpdate);
   if(um)  um.addEventListener('change', mentionUpdate);
 });
+
+// ============================================================
+// BILL RECEIPT — Bill Print Status Module
+// ============================================================
+
+const brState = {
+  rawRows: null,     // All TVM shop rows from the uploaded file
+  blocks: null,      // Block-level aggregates
+  date: '',
+  period: ''
+};
+
+// Color coding by % band
+function brPctColor(pct){
+  if(pct < 0.60) return {bg:'#fca5a5',fg:'#7f1d1d'};   // red
+  if(pct < 0.70) return {bg:'#fde68a',fg:'#713f12'};   // amber
+  if(pct < 0.80) return {bg:'#fef9c3',fg:'#713f12'};   // yellow
+  return {bg:'#bbf7d0',fg:'#14532d'};                    // green
+}
+
+function brPctStr(pct){ return (pct*100).toFixed(0)+'%'; }
+function brFmt(n){ return (n||0).toLocaleString('en-IN'); }
+
+function brLoadFile(input){
+  const file = input.files[0];
+  if(!file) return;
+  document.getElementById('br-file-name').textContent = '⏳ Loading...';
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      const wb = XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+      // Try Shop Wise sheet
+      const sheetName = wb.SheetNames.find(s=>s.toLowerCase().includes('shop'))||wb.SheetNames[0];
+      const ws = wb.Sheets[sheetName];
+      const raw = XLSX.utils.sheet_to_json(ws,{defval:''});
+      // Filter TVM
+      const tvm = raw.filter(r=>
+        String(r['District']||r['district']||'').toLowerCase().includes('thiruvannamalai')
+      );
+      if(tvm.length===0){ toast('No Thiruvannamalai shops found in file',true); return; }
+      brState.rawRows = tvm;
+      document.getElementById('br-file-name').textContent = `✓ ${file.name} (${tvm.length} TVM shops)`;
+      document.getElementById('br-upload-box').classList.add('has-file');
+      document.getElementById('br-generate-btn').disabled = false;
+      document.getElementById('br-status').textContent = `${tvm.length} Thiruvannamalai shops loaded from "${sheetName}"`;
+      toast(`Loaded ${tvm.length} TVM shops`);
+      // Auto-detect date from file name e.g. 01July_to_28July
+      const m = file.name.match(/(\d{1,2}[A-Za-z]+_to_\d{1,2}[A-Za-z]+)/i);
+      if(m && !document.getElementById('br-report-period').value)
+        document.getElementById('br-report-period').value = m[1].replace(/_/g,' ');
+    } catch(err){ toast('File read error: '+err.message,true); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function brGetField(row, ...names){
+  for(const n of names){
+    if(row[n]!==undefined && row[n]!=='') return row[n];
+  }
+  return '';
+}
+
+function brAggregate(){
+  const rows = brState.rawRows;
+  if(!rows) return null;
+
+  // Per shop data
+  const shops = rows.map(r=>{
+    const code  = String(brGetField(r,'Shopcode','Shop_Code','shopcode')||'').trim().toUpperCase();
+    const name  = String(brGetField(r,'Shop_Name','ShopName','shop_name')||'').trim();
+    const taluk = String(brGetField(r,'Taluk','taluk')||'').trim();
+    const rural = String(brGetField(r,'Rural/\nUrban','Rural/Urban','RuralUrban','Rural_Urban')||'').trim();
+    const agency= String(brGetField(r,'Agency_Group','AgencyGroup')||'').trim();
+    const total = +brGetField(r,'Total_Transaction','Total Transaction')||0;
+    const newPr = +brGetField(r,'New Print','NewPrint')||0;
+    const reprint=+brGetField(r,'Reprint','Re Print')||0;
+    const totalPr=+brGetField(r,'Total\nPrint','Total Print','TotalPrint')||0;
+    const pct   = total>0 ? newPr/total : 0;
+    const block = ekycGetBlock(code) || taluk || 'Unknown';
+    return {code,name,taluk,rural,agency,total,newPr,reprint,totalPr,pct,block};
+  }).filter(s=>s.code && s.total>0);
+
+  // Block aggregates
+  const blockMap = {};
+  shops.forEach(s=>{
+    if(!blockMap[s.block]) blockMap[s.block]={block:s.block,total:0,newPr:0,reprint:0,totalPr:0,shops:[]};
+    const b=blockMap[s.block];
+    b.total  += s.total;
+    b.newPr  += s.newPr;
+    b.reprint+= s.reprint;
+    b.totalPr+= s.totalPr;
+    b.shops.push(s);
+  });
+
+  const blocks = Object.values(blockMap).map(b=>({
+    ...b, pct: b.total>0?b.newPr/b.total:0
+  })).sort((a,b)=>a.pct-b.pct);  // ascending: lowest % first (worst performer on top)
+
+  // Block rank
+  blocks.forEach((b,i)=>{ b.rank=i+1; });
+
+  // Shop rank within block + district-wide rank
+  const allShops = shops.slice().sort((a,b)=>a.pct-b.pct);
+  allShops.forEach((s,i)=>{ s.distRank=i+1; });
+  blocks.forEach(b=>{
+    b.shops.sort((a,c)=>a.pct-c.pct);
+    b.shops.forEach((s,i)=>{ s.blockRank=i+1; });
+  });
+
+  // District totals
+  const distTotal  = shops.reduce((s,r)=>s+r.total,0);
+  const distNewPr  = shops.reduce((s,r)=>s+r.newPr,0);
+  const distReprint= shops.reduce((s,r)=>s+r.reprint,0);
+  const distTotalPr= shops.reduce((s,r)=>s+r.totalPr,0);
+  const distPct    = distTotal>0?distNewPr/distTotal:0;
+
+  return {blocks, shops:allShops, dist:{total:distTotal,newPr:distNewPr,reprint:distReprint,totalPr:distTotalPr,pct:distPct}};
+}
+
+function brGenerate(){
+  brState.date   = document.getElementById('br-report-date').value.trim();
+  brState.period = document.getElementById('br-report-period').value.trim();
+  const data = brAggregate();
+  if(!data){ toast('No data — upload file first',true); return; }
+  brState.blocks = data;
+  const {blocks, shops, dist} = data;
+  document.getElementById('br-excel-btn').disabled = false;
+
+  // ── Summary bar ─────────────────────────────────────────────────────────
+  const c = brPctColor(dist.pct);
+  let html = `<div class="panel">
+    <h2><span class="dot"></span> 🧾 Bill Print Status — Thiruvannamalai District</h2>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px">
+      ${brState.period ? 'Period: <b>'+brState.period+'</b>' : ''}
+      ${brState.date ? '&nbsp;·&nbsp; As on <b>'+brState.date+'</b>' : ''}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px">
+      <div style="background:rgba(15,23,42,.4);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Total Transactions</div>
+        <div style="font-size:22px;font-weight:700;color:var(--ink)">${brFmt(dist.total)}</div>
+      </div>
+      <div style="background:rgba(15,23,42,.4);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">New Print</div>
+        <div style="font-size:22px;font-weight:700;color:#34d399">${brFmt(dist.newPr)}</div>
+      </div>
+      <div style="background:rgba(15,23,42,.4);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Reprint</div>
+        <div style="font-size:22px;font-weight:700;color:#fbbf24">${brFmt(dist.reprint)}</div>
+      </div>
+      <div style="background:${c.bg};border:1px solid rgba(0,0,0,.1);border-radius:8px;padding:12px;text-align:center">
+        <div style="font-size:11px;color:${c.fg};text-transform:uppercase;letter-spacing:.5px;font-weight:700">District Average</div>
+        <div style="font-size:28px;font-weight:700;color:${c.fg}">${brPctStr(dist.pct)}</div>
+      </div>
+    </div>`;
+
+  // ── Block-wise ranking table ─────────────────────────────────────────────
+  html += `<h3 style="margin-bottom:8px">📊 Block-wise Ranking (Sorted by New Print %)</h3>
+    <div style="overflow-x:auto;margin-bottom:24px">
+    <table style="width:100%;border-collapse:collapse;font-size:13px" id="br-block-tbl">
+      <thead>
+        <tr style="background:#1e3a8a;color:white">
+          <th style="padding:8px 6px;border:1px solid #1e40af;text-align:center">Rank</th>
+          <th style="padding:8px 10px;border:1px solid #1e40af;text-align:left">Block</th>
+          <th style="padding:8px 6px;border:1px solid #1e40af;text-align:right">Total Transactions</th>
+          <th style="padding:8px 6px;border:1px solid #1e40af;text-align:right">New Print</th>
+          <th style="padding:8px 6px;border:1px solid #1e40af;text-align:right">Reprint</th>
+          <th style="padding:8px 6px;border:1px solid #1e40af;text-align:right">Total Print</th>
+          <th style="padding:8px 6px;border:1px solid #1e40af;text-align:center;min-width:70px">%</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${blocks.map(b=>{
+          const cl = brPctColor(b.pct);
+          return `<tr>
+            <td style="padding:7px 6px;border:1px solid #e2e8f0;text-align:center;font-weight:700;color:var(--muted)">${b.rank}</td>
+            <td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600">${b.block}</td>
+            <td style="padding:7px 6px;border:1px solid #e2e8f0;text-align:right">${brFmt(b.total)}</td>
+            <td style="padding:7px 6px;border:1px solid #e2e8f0;text-align:right;color:#059669;font-weight:600">${brFmt(b.newPr)}</td>
+            <td style="padding:7px 6px;border:1px solid #e2e8f0;text-align:right;color:#d97706">${brFmt(b.reprint)}</td>
+            <td style="padding:7px 6px;border:1px solid #e2e8f0;text-align:right">${brFmt(b.totalPr)}</td>
+            <td style="padding:7px 6px;border:1px solid #e2e8f0;text-align:center;font-weight:700;background:${cl.bg};color:${cl.fg}">${brPctStr(b.pct)}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+      <tfoot>
+        <tr style="background:#1e3a8a;color:white;font-weight:700">
+          <td colspan="2" style="padding:8px 10px;border:1px solid #1e40af;text-align:center">Grand Total</td>
+          <td style="padding:8px 6px;border:1px solid #1e40af;text-align:right">${brFmt(dist.total)}</td>
+          <td style="padding:8px 6px;border:1px solid #1e40af;text-align:right">${brFmt(dist.newPr)}</td>
+          <td style="padding:8px 6px;border:1px solid #1e40af;text-align:right">${brFmt(dist.reprint)}</td>
+          <td style="padding:8px 6px;border:1px solid #1e40af;text-align:right">${brFmt(dist.totalPr)}</td>
+          <td style="padding:8px 6px;border:1px solid #1e40af;text-align:center;background:${brPctColor(dist.pct).bg};color:${brPctColor(dist.pct).fg}">${brPctStr(dist.pct)}</td>
+        </tr>
+      </tfoot>
+    </table></div>`;
+
+  // ── Shop-wise ranking (grouped by block) ────────────────────────────────
+  html += `<h3 style="margin-bottom:8px">🏪 Shop-wise Ranking — Thiruvannamalai District</h3>
+    <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:12px" id="br-shop-tbl">
+      <thead>
+        <tr style="background:#1e3a8a;color:white">
+          <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">Dist. Rank</th>
+          <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">Block Rank</th>
+          <th style="padding:7px 8px;border:1px solid #1e40af;text-align:left">Block</th>
+          <th style="padding:7px 6px;border:1px solid #1e40af;text-align:left">Shop Code</th>
+          <th style="padding:7px 8px;border:1px solid #1e40af;text-align:left">Shop Name</th>
+          <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center">Rural/Urban</th>
+          <th style="padding:7px 5px;border:1px solid #1e40af;text-align:right">Total Trans.</th>
+          <th style="padding:7px 5px;border:1px solid #1e40af;text-align:right">New Print</th>
+          <th style="padding:7px 5px;border:1px solid #1e40af;text-align:right">Reprint</th>
+          <th style="padding:7px 5px;border:1px solid #1e40af;text-align:center;min-width:60px">%</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${blocks.map(b=>{
+          const bh = `<tr style="background:#1e3a8a;color:white">
+            <td colspan="10" style="padding:7px 12px;border:1px solid #1e40af;font-weight:700">
+              Block #${b.rank}: ${b.block} — ${brFmt(b.shops.length)} shops &nbsp;·&nbsp; ${brFmt(b.newPr)} / ${brFmt(b.total)} &nbsp;·&nbsp; <span style="font-size:14px">${brPctStr(b.pct)}</span>
+            </td></tr>`;
+          const rows = b.shops.map(s=>{
+            const cl = brPctColor(s.pct);
+            return `<tr>
+              <td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center;color:var(--muted);font-size:11px">${s.distRank}</td>
+              <td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center;font-weight:600;color:var(--muted)">${s.blockRank}</td>
+              <td style="padding:5px 8px;border:1px solid #e2e8f0;font-size:11px;color:var(--muted)">${s.block}</td>
+              <td style="padding:5px 6px;border:1px solid #e2e8f0;font-family:monospace;font-size:11px">${s.code}</td>
+              <td style="padding:5px 8px;border:1px solid #e2e8f0;font-weight:500">${s.name}</td>
+              <td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center;font-size:11px;color:var(--muted)">${s.rural}</td>
+              <td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:right">${brFmt(s.total)}</td>
+              <td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:right;color:#059669;font-weight:600">${brFmt(s.newPr)}</td>
+              <td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:right;color:#d97706">${brFmt(s.reprint)}</td>
+              <td style="padding:5px 4px;border:1px solid #e2e8f0;text-align:center;font-weight:700;background:${cl.bg};color:${cl.fg}">${brPctStr(s.pct)}</td>
+            </tr>`;
+          }).join('');
+          return bh + rows;
+        }).join('')}
+      </tbody>
+    </table></div>
+  </div>`;
+
+  document.getElementById('br-results').innerHTML = html;
+  toast(`✓ Bill Receipt generated — ${blocks.length} blocks, ${shops.length} shops`);
+}
+
+function brDownloadExcel(){
+  const data = brState.blocks;
+  if(!data){ toast('Generate first',true); return; }
+  const {blocks, shops, dist} = data;
+  const wb = XLSX.utils.book_new();
+  const period = brState.period || '';
+  const date   = brState.date || '';
+
+  // Sheet 1: Block-wise
+  const blkData = [
+    ['BILL PRINT STATUS'],
+    ['Period:', period, '', 'As on:', date],
+    [],
+    ['Sl.No.','Block','Total Transactions','New Print','Reprint','Total Print','%'],
+    ...blocks.map(b=>[b.rank, b.block, b.total, b.newPr, b.reprint, b.totalPr, +brPctStr(b.pct).replace('%','')]),
+    ['','Grand Total', dist.total, dist.newPr, dist.reprint, dist.totalPr, +brPctStr(dist.pct).replace('%','')]
+  ];
+  const wsBlk = XLSX.utils.aoa_to_sheet(blkData);
+  wsBlk['!cols'] = [{wch:6},{wch:22},{wch:18},{wch:14},{wch:12},{wch:14},{wch:10}];
+  XLSX.utils.book_append_sheet(wb, wsBlk, 'Block Ranking');
+
+  // Sheet 2: Shop-wise (all shops, district rank)
+  const shopHdr = ['Dist.Rank','Block Rank','Block','Shop Code','Shop Name','Rural/Urban','Total Transactions','New Print','Reprint','Total Print','%'];
+  const shopRows = [];
+  blocks.forEach(b=>{
+    shopRows.push([`Block #${b.rank}: ${b.block}`, '', '', '', '', '', b.total, b.newPr, b.reprint, b.totalPr, +brPctStr(b.pct).replace('%','')]);
+    b.shops.forEach(s=>{
+      shopRows.push([s.distRank, s.blockRank, s.block, s.code, s.name, s.rural, s.total, s.newPr, s.reprint, s.totalPr, +brPctStr(s.pct).replace('%','')]);
+    });
+  });
+  const wsShop = XLSX.utils.aoa_to_sheet([shopHdr, ...shopRows]);
+  wsShop['!cols'] = [{wch:10},{wch:10},{wch:22},{wch:12},{wch:35},{wch:10},{wch:18},{wch:12},{wch:10},{wch:12},{wch:8}];
+  XLSX.utils.book_append_sheet(wb, wsShop, 'Shop Ranking');
+
+  // Sheet 3: One sheet per block
+  blocks.forEach(b=>{
+    const bData = [
+      [`Block: ${b.block}`, '', '', '', 'Period:', period],
+      ['Rank','Shop Code','Shop Name','Rural/Urban','Total Transactions','New Print','Reprint','Total Print','%'],
+      ...b.shops.map(s=>[s.blockRank, s.code, s.name, s.rural, s.total, s.newPr, s.reprint, s.totalPr, +brPctStr(s.pct).replace('%','')]),
+      ['TOTAL','','','',b.total,b.newPr,b.reprint,b.totalPr, +brPctStr(b.pct).replace('%','')]
+    ];
+    const wsB = XLSX.utils.aoa_to_sheet(bData);
+    wsB['!cols'] = [{wch:6},{wch:12},{wch:35},{wch:10},{wch:18},{wch:12},{wch:10},{wch:12},{wch:8}];
+    const shName = b.block.replace(/[^A-Za-z0-9 ]/g,'').substring(0,28)||'Block';
+    XLSX.utils.book_append_sheet(wb, wsB, shName);
+  });
+
+  const fname = `BillReceipt_${period.replace(/\s+/g,'_')||date}.xlsx`;
+  XLSX.writeFile(wb, fname);
+  toast('✓ Excel downloaded');
+}
+
+function brReset(){
+  brState.rawRows = null; brState.blocks = null;
+  document.getElementById('br-file-name').textContent = 'Click to upload (Shop Wise sheet)';
+  document.getElementById('br-upload-box').classList.remove('has-file');
+  document.getElementById('br-file-input').value = '';
+  document.getElementById('br-report-date').value = '';
+  document.getElementById('br-report-period').value = '';
+  document.getElementById('br-results').innerHTML = '';
+  document.getElementById('br-generate-btn').disabled = true;
+  document.getElementById('br-excel-btn').disabled = true;
+  document.getElementById('br-status').textContent = '';
+  toast('Reset');
+}
 
 // ============================================================
 // e-KYC Shop-wise Excel Download
