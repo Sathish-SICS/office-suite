@@ -7974,12 +7974,17 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
                 ${hasComp?(()=>{
                   const bk = blockBreakdown[b.block];
                   const pos = bk ? bk.pos : 0;
-                  const neg = bk ? Math.abs(bk.neg) : 0;   // display as positive number
-                  const netColor = added>0?'#059669':added<0?'#dc2626':'#64748b';
-                  const netStr = added!==null ? (added>0?'+':'')+fmtN(added) : '—';
+                  const neg = bk ? bk.neg : 0;                    // negative number
+                  const negAbs = Math.abs(neg);                    // display as positive
+                  // Use shop-level breakdown for net (bk.pos + bk.neg) as PRIMARY source —
+                  // it's always consistent with the eKYC done / New cards columns.
+                  // Fall back to catAdded only if bk is missing (no shop-level matches at all).
+                  const net = bk ? (pos + neg) : (added !== null ? added : null);
+                  const netColor = net>0?'#059669':net<0?'#dc2626':'#64748b';
+                  const netStr = net!==null ? (net>0?'+':'')+fmtN(net) : '—';
                   return `
                     <td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;color:#059669;font-weight:600" class="ekyc-col-${cat.k}-added ekyc-col-${cat.k}-ekyc_done" title="eKYC done in this block">${pos>0?'+'+fmtN(pos):'—'}</td>
-                    <td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;color:#dc2626;font-weight:600" class="ekyc-col-${cat.k}-added ekyc-col-${cat.k}-new_cards" title="New cards added (pending increased) in this block">${neg>0?'−'+fmtN(neg):'—'}</td>
+                    <td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;color:#dc2626;font-weight:600" class="ekyc-col-${cat.k}-added ekyc-col-${cat.k}-new_cards" title="New cards added (pending increased) in this block">${negAbs>0?'−'+fmtN(negAbs):'—'}</td>
                     <td style="padding:6px 4px;border:1px solid #e2e8f0;text-align:center;font-weight:700;color:${netColor}" class="ekyc-col-${cat.k}-added ekyc-col-${cat.k}-progress" title="Net progress = eKYC done − new cards added">${netStr}</td>
                   `;
                 })():''}
@@ -8001,20 +8006,21 @@ function renderEkycResults(rows,blocks,oldRows,oldBlocks){
               <td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center" class="ekyc-col-${cat.k}-tot_pend">${fmtN(totPend)}</td>
               ${hasComp&&oldBlocks?(()=>{const op=oldBlocks.reduce((s,b)=>s+cat.compF(b),0)/Math.max(1,oldBlocks.reduce((s,b)=>s+cat.consF(b),0));return `<td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center;font-weight:700;background:${op>=0.9?'#d1fae5':op>=0.8?'#fef3c7':'#fee2e2'};font-size:13px" class="ekyc-col-${cat.k}-old_pct">${fmtPct(op)}</td>`;})():''}
               <td style="padding:7px 4px;border:1px solid #94a3b8;text-align:center;font-weight:700;background:${totPct>=0.9?'#d1fae5':totPct>=0.8?'#fef3c7':'#fee2e2'};font-size:13px" class="ekyc-col-${cat.k}-tot_pct">${fmtPct(totPct)}</td>
-              ${hasComp&&oldBlocks?(()=>{
-                let totAdded = 0, totPos = 0, totNeg = 0;
+              ${hasComp?(()=>{
+                let totPos = 0, totNeg = 0;
+                // Primary source: sum shop-level breakdown (always consistent with row cells)
                 sortedB.forEach(b=>{
-                  const ob=oldMap[b.block];
-                  if(ob){
-                    const a=catAdded(b,ob);
-                    if(a!==null){
-                      totAdded+=a;
-                      // Aggregate from per-shop level breakdown for accurate +/-
-                      const bk = blockBreakdown[b.block];
-                      if(bk){ totPos+=bk.pos; totNeg+=bk.neg; }
-                    }
-                  }
+                  const bk = blockBreakdown[b.block];
+                  if(bk){ totPos+=bk.pos; totNeg+=bk.neg; }
                 });
+                // Fallback: catAdded if blockBreakdown had nothing (very unusual)
+                if(totPos===0 && totNeg===0 && oldBlocks){
+                  sortedB.forEach(b=>{
+                    const ob=oldMap[b.block];
+                    if(ob){ const a=catAdded(b,ob); if(a!==null){ if(a>0) totPos+=a; else if(a<0) totNeg+=a; } }
+                  });
+                }
+                const totAdded = totPos + totNeg;
                 const netColor = totAdded>0?'#059669':totAdded<0?'#dc2626':'#64748b';
                 const netStr = (totAdded>=0?'+':'')+fmtN(totAdded);
                 const posStr = totPos>0 ? '+'+fmtN(totPos) : '—';
@@ -8281,6 +8287,9 @@ function ekycBlkSelToggle(field, val){
   const isCategoryChange = ['aay','phh','nph','active'].includes(field);
   if(isCategoryChange && ekyc.processedRows2 && ekyc.blocks){
     const oldRows = ekyc.oldData ? parseEkycRows(ekyc.oldData) : null;
+    // Also refresh ekyc.oldBlocks so it stays in sync with the freshly-parsed oldRows.
+    // Otherwise oldMap[b.block] can miss when block names drift (e.g. shopMap changed).
+    ekyc.oldBlocks = oldRows ? aggregateByBlock(oldRows) : null;
     renderEkycResults(ekyc.processedRows2, ekyc.blocks, oldRows, ekyc.oldBlocks);
     if(ekyc.filter && ekyc.filter.active) restoreEkycFilterUI();
     switchEkycTab(ekyc._activeTab || 'all');
