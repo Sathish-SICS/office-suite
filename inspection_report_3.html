@@ -599,6 +599,7 @@ document.addEventListener('keydown', e=>{
   <div class="tab" data-tab="ekyc">🔑 e-KYC Report</div>
   <div class="tab" data-tab="pdlsheet">📋 PDL Sheet</div>
   <div class="tab" data-tab="billreceipt">🧾 Bill Receipt</div>
+  <div class="tab" data-tab="combine">🗂️ Combine Files</div>
   <div class="tab" data-tab="notes">📄 Basic Notes</div>
 </div>
 
@@ -1645,6 +1646,63 @@ document.addEventListener('keydown', e=>{
 <div id="br-results"></div>
 
 </div><!-- end tab-billreceipt -->
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- COMBINE FILES TAB — Merge multiple Excel/CSV into one            -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div class="tab-content" id="tab-combine">
+
+<div class="panel">
+  <h2><span class="dot"></span> 🗂️ Combine Files — Merge multiple Excel/CSV into one</h2>
+  <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
+    Upload multiple files (e.g. 12 taluk files, block-wise files, etc.). The tool auto-detects header rows,
+    keeps the column headings from the <b>first file</b>, appends data from all other files without repeating headers,
+    and skips title/metadata rows. Works for any Excel/CSV that has a table with column headers.
+  </p>
+
+  <!-- Upload area -->
+  <div style="background:rgba(15,23,42,.4);border:2px dashed var(--border);border-radius:10px;padding:24px;text-align:center;margin-bottom:16px;cursor:pointer" id="cmb-drop-zone" onclick="document.getElementById('cmb-file-input').click()">
+    <div style="font-size:32px;margin-bottom:6px">📁</div>
+    <div style="font-size:14px;font-weight:600;color:var(--ink)">Click or drag multiple files here</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:4px">.xlsx, .xls, .csv &nbsp;·&nbsp; Files will be combined in upload order</div>
+    <input type="file" id="cmb-file-input" accept=".xlsx,.xls,.csv" multiple style="display:none" onchange="cmbHandleFiles(this.files)">
+  </div>
+
+  <!-- Detection options -->
+  <div style="background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.25);border-radius:8px;padding:12px;margin-bottom:14px">
+    <div style="font-size:12px;color:var(--muted);font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">⚙️ Detection settings</div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;font-size:12px">
+      <label style="display:flex;align-items:center;gap:5px">
+        <input type="radio" name="cmb-hdr-mode" value="auto" checked> Auto-detect header row
+      </label>
+      <label style="display:flex;align-items:center;gap:5px">
+        <input type="radio" name="cmb-hdr-mode" value="fixed"> Header at row:
+        <input type="number" id="cmb-hdr-row" value="1" min="1" max="50" style="width:60px;background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:3px 6px;border-radius:4px">
+      </label>
+      <label style="display:flex;align-items:center;gap:5px;margin-left:auto">
+        <input type="checkbox" id="cmb-add-source" checked> Add "Source_File" column
+      </label>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px">
+      💡 Auto-detect scans first 30 rows for the row where all cells have distinct text values (most likely the header). Fixed = specify exact row number.
+    </div>
+  </div>
+
+  <!-- File list -->
+  <div id="cmb-file-list"></div>
+
+  <!-- Actions -->
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px">
+    <button class="btn success" onclick="cmbCombine()" id="cmb-combine-btn" disabled>🔀 Combine Files</button>
+    <button class="btn secondary" onclick="cmbReset()">🔄 Clear all</button>
+    <span id="cmb-status" style="font-size:12px;color:var(--muted);margin-left:auto"></span>
+  </div>
+</div>
+
+<!-- Preview panel -->
+<div id="cmb-preview"></div>
+
+</div><!-- end tab-combine -->
 
 <div class="tab-content" id="tab-notes">
 <style>
@@ -13503,6 +13561,317 @@ function brReset(){
   document.getElementById('br-excel-btn').disabled = true;
   document.getElementById('br-status').textContent = '';
   toast('Reset');
+}
+
+// ============================================================
+// COMBINE FILES — Generic multi-file merger
+// ============================================================
+
+const cmbState = {
+  files: [],   // {name, buffer, sheetName, rows, hdrIdx, dataStart}
+};
+
+// Auto-detect the header row. Strategy: scan the first N rows and pick the row
+// that (a) has the most non-empty cells, (b) has distinct string values,
+// (c) starts a block of similarly-shaped rows below it (uniform column count).
+function cmbDetectHeaderRow(rows, maxScan=30){
+  const scanN = Math.min(rows.length, maxScan);
+  let bestIdx = 0, bestScore = -1;
+  for(let i=0; i<scanN; i++){
+    const r = rows[i]||[];
+    // Count non-empty cells that are strings (headers are usually strings, not numbers)
+    let nonEmpty=0, strCells=0, distinctVals=new Set();
+    r.forEach(v=>{
+      if(v!==undefined && v!==null && String(v).trim()!==''){
+        nonEmpty++;
+        distinctVals.add(String(v).trim().toLowerCase());
+        if(typeof v==='string' || isNaN(+v)) strCells++;
+      }
+    });
+    if(nonEmpty < 3) continue;   // headers usually span multiple columns
+    // Row below should have similar shape
+    const rBelow = rows[i+1]||[];
+    let belowNonEmpty=0;
+    rBelow.forEach(v=>{
+      if(v!==undefined && v!==null && String(v).trim()!=='') belowNonEmpty++;
+    });
+    // Score: reward header-like row (many strings, distinct), with data below
+    const score = (nonEmpty*3) + (distinctVals.size*2) + (strCells*2)
+                 + (belowNonEmpty >= Math.max(3, nonEmpty-2) ? 15 : 0);
+    if(score > bestScore){ bestScore = score; bestIdx = i; }
+  }
+  return bestIdx;
+}
+
+function cmbSanitizeHeaders(hdrs){
+  // Trim, collapse whitespace, drop trailing "empty" entries
+  return hdrs.map(h=>{
+    if(h===undefined||h===null) return '';
+    return String(h).replace(/\s+/g,' ').trim();
+  });
+}
+
+async function cmbHandleFiles(fileList){
+  const dropZone = document.getElementById('cmb-drop-zone');
+  const status = document.getElementById('cmb-status');
+  status.textContent = `Reading ${fileList.length} file(s)...`;
+
+  for(const file of fileList){
+    try {
+      const buf = await file.arrayBuffer();
+      let rows = [];
+      let sheetName = '';
+      if(file.name.toLowerCase().endsWith('.csv')){
+        const txt = new TextDecoder('utf-8').decode(buf);
+        rows = parseCSV(txt);
+        sheetName = 'CSV';
+      } else {
+        const wb = XLSX.read(new Uint8Array(buf), {type:'array'});
+        sheetName = wb.SheetNames[0];
+        const ws = wb.Sheets[sheetName];
+        rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+      }
+      const hdrIdx = cmbDetectHeaderRow(rows);
+      cmbState.files.push({
+        name: file.name,
+        sheetName,
+        rows,
+        hdrIdx,
+        totalRows: rows.length,
+        dataRows: Math.max(0, rows.length - hdrIdx - 1),
+        headers: cmbSanitizeHeaders(rows[hdrIdx]||[])
+      });
+    } catch(e){
+      toast(`Failed to read ${file.name}: ${e.message}`, true);
+    }
+  }
+  cmbRenderFileList();
+  document.getElementById('cmb-combine-btn').disabled = cmbState.files.length < 1;
+  status.textContent = `${cmbState.files.length} file(s) queued`;
+}
+
+// Drag-and-drop support
+document.addEventListener('DOMContentLoaded', ()=>{
+  const dz = document.getElementById('cmb-drop-zone');
+  if(!dz) return;
+  ['dragenter','dragover'].forEach(evt=>{
+    dz.addEventListener(evt, e=>{ e.preventDefault(); dz.style.borderColor='#818cf8'; dz.style.background='rgba(129,140,248,.1)'; });
+  });
+  ['dragleave','drop'].forEach(evt=>{
+    dz.addEventListener(evt, e=>{ e.preventDefault(); dz.style.borderColor=''; dz.style.background=''; });
+  });
+  dz.addEventListener('drop', e=>{
+    if(e.dataTransfer && e.dataTransfer.files) cmbHandleFiles(e.dataTransfer.files);
+  });
+});
+
+function cmbRenderFileList(){
+  const el = document.getElementById('cmb-file-list');
+  if(cmbState.files.length === 0){ el.innerHTML = ''; return; }
+  const mode = document.querySelector('input[name="cmb-hdr-mode"]:checked')?.value || 'auto';
+  const fixedRow = +document.getElementById('cmb-hdr-row')?.value || 1;
+
+  let html = `<div style="background:rgba(15,23,42,.4);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px">
+    <div style="font-size:12px;color:var(--muted);margin-bottom:6px">📋 Files queued (in order — first file's headers will be used as master)</div>
+    <table style="width:100%;font-size:12px;border-collapse:collapse">
+      <thead>
+        <tr style="background:rgba(99,102,241,.15)">
+          <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;width:24px">#</th>
+          <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:left">File</th>
+          <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:center;width:70px">Sheet</th>
+          <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:center;width:80px">Total rows</th>
+          <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:center;width:80px">Header at</th>
+          <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:center;width:80px">Data rows</th>
+          <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:center;width:80px">Cols</th>
+          <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:center;width:30px"></th>
+        </tr>
+      </thead>
+      <tbody>`;
+  cmbState.files.forEach((f,i)=>{
+    const usedHdr = mode==='fixed' ? Math.max(0, fixedRow-1) : f.hdrIdx;
+    const dataRows = Math.max(0, f.totalRows - usedHdr - 1);
+    const headers = mode==='fixed' ? cmbSanitizeHeaders(f.rows[usedHdr]||[]) : f.headers;
+    const nonEmptyCols = headers.filter(h=>h).length;
+    const isFirst = i===0;
+    html += `<tr>
+      <td style="padding:5px 8px;color:var(--muted)">${i+1}</td>
+      <td style="padding:5px 8px;font-weight:${isFirst?600:400}">${f.name}${isFirst?' <span style="color:#818cf8;font-size:10px">(master)</span>':''}</td>
+      <td style="padding:5px 8px;text-align:center;color:var(--muted);font-size:11px">${f.sheetName}</td>
+      <td style="padding:5px 8px;text-align:center">${f.totalRows}</td>
+      <td style="padding:5px 8px;text-align:center;color:#6ee7b7">R${usedHdr+1}</td>
+      <td style="padding:5px 8px;text-align:center;font-weight:600">${dataRows.toLocaleString('en-IN')}</td>
+      <td style="padding:5px 8px;text-align:center">${nonEmptyCols}</td>
+      <td style="padding:5px 8px;text-align:center"><button onclick="cmbRemoveFile(${i})" style="background:transparent;border:none;color:#fca5a5;cursor:pointer;font-size:14px" title="Remove">✕</button></td>
+    </tr>`;
+  });
+  html += `</tbody></table></div>`;
+
+  // Show master headers preview
+  const masterHdrs = mode==='fixed'
+    ? cmbSanitizeHeaders(cmbState.files[0].rows[Math.max(0,fixedRow-1)]||[])
+    : cmbState.files[0].headers;
+  html += `<div style="background:rgba(6,78,59,.15);border:1px solid rgba(52,211,153,.35);border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:11px">
+    <div style="color:#6ee7b7;font-weight:700;margin-bottom:5px">📌 Master headers (from first file, ${masterHdrs.filter(h=>h).length} columns)</div>
+    <div style="color:var(--muted);word-break:break-word">${masterHdrs.filter(h=>h).join(' &nbsp;·&nbsp; ')}</div>
+  </div>`;
+
+  el.innerHTML = html;
+}
+
+function cmbRemoveFile(i){
+  cmbState.files.splice(i,1);
+  cmbRenderFileList();
+  document.getElementById('cmb-combine-btn').disabled = cmbState.files.length < 1;
+  document.getElementById('cmb-status').textContent = `${cmbState.files.length} file(s) queued`;
+}
+
+// Rebuild file list on setting changes
+document.addEventListener('change', e=>{
+  if(e.target.name==='cmb-hdr-mode' || e.target.id==='cmb-hdr-row' || e.target.id==='cmb-add-source'){
+    cmbRenderFileList();
+  }
+});
+
+function cmbCombine(){
+  if(cmbState.files.length===0) return;
+  const mode = document.querySelector('input[name="cmb-hdr-mode"]:checked')?.value || 'auto';
+  const fixedRow = +document.getElementById('cmb-hdr-row').value || 1;
+  const addSource = document.getElementById('cmb-add-source').checked;
+
+  // Master headers = first file's headers
+  const first = cmbState.files[0];
+  const masterHdrIdx = mode==='fixed' ? Math.max(0, fixedRow-1) : first.hdrIdx;
+  const masterHdrs = cmbSanitizeHeaders(first.rows[masterHdrIdx]||[]);
+  // Trim trailing empty header columns
+  let lastNonEmpty = -1;
+  masterHdrs.forEach((h,i)=>{ if(h) lastNonEmpty = i; });
+  const trimmedHdrs = masterHdrs.slice(0, lastNonEmpty+1);
+  const ncols = trimmedHdrs.length;
+
+  // Combined data
+  const outRows = [];
+  const finalHdrs = addSource ? [...trimmedHdrs, 'Source_File'] : trimmedHdrs;
+  outRows.push(finalHdrs);
+
+  const perFileStats = [];
+  cmbState.files.forEach((f,fi)=>{
+    const fHdrIdx = mode==='fixed' ? Math.max(0, fixedRow-1) : f.hdrIdx;
+    let appended = 0;
+    for(let i = fHdrIdx+1; i < f.rows.length; i++){
+      const r = f.rows[i]||[];
+      // Skip completely empty rows
+      if(!r.some(v=>v!==undefined && v!==null && String(v).trim()!=='')) continue;
+      // Truncate/pad to ncols
+      const rowVals = [];
+      for(let c=0; c<ncols; c++){
+        const v = r[c];
+        rowVals.push(v===undefined||v===null ? '' : v);
+      }
+      if(addSource) rowVals.push(f.name);
+      outRows.push(rowVals);
+      appended++;
+    }
+    perFileStats.push({name:f.name, rows:appended});
+  });
+
+  const totalDataRows = outRows.length - 1;
+
+  // Build output Excel
+  const ws = XLSX.utils.aoa_to_sheet(outRows);
+  // Auto-width heuristic
+  ws['!cols'] = finalHdrs.map((h,i)=>{
+    let maxLen = String(h||'').length;
+    // Sample first 100 rows for width
+    for(let r=1; r<Math.min(outRows.length, 100); r++){
+      const v = outRows[r][i];
+      if(v!==undefined && v!==null){
+        const l = String(v).length;
+        if(l > maxLen) maxLen = l;
+      }
+    }
+    return {wch: Math.min(60, Math.max(8, maxLen+2))};
+  });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Combined');
+
+  // Show preview panel
+  const preview = document.getElementById('cmb-preview');
+  let html = `<div class="panel">
+    <h2><span class="dot"></span> ✅ Combined — ${cmbState.files.length} files → ${totalDataRows.toLocaleString('en-IN')} data rows</h2>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px">
+      <div style="background:rgba(15,23,42,.4);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase">Files Combined</div>
+        <div style="font-size:22px;font-weight:700">${cmbState.files.length}</div>
+      </div>
+      <div style="background:rgba(15,23,42,.4);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase">Total Data Rows</div>
+        <div style="font-size:22px;font-weight:700;color:#34d399">${totalDataRows.toLocaleString('en-IN')}</div>
+      </div>
+      <div style="background:rgba(15,23,42,.4);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase">Columns</div>
+        <div style="font-size:22px;font-weight:700">${finalHdrs.length}</div>
+      </div>
+    </div>
+    <div style="background:rgba(15,23,42,.3);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:14px">
+      <div style="font-size:12px;color:var(--muted);font-weight:700;margin-bottom:6px">📊 Per-file breakdown</div>
+      <table style="width:100%;font-size:12px;border-collapse:collapse">
+        <thead><tr style="color:var(--muted);text-align:left">
+          <th style="padding:4px 8px">#</th><th style="padding:4px 8px">File</th><th style="padding:4px 8px;text-align:right">Rows appended</th>
+        </tr></thead>
+        <tbody>
+          ${perFileStats.map((s,i)=>`<tr><td style="padding:4px 8px;color:var(--muted)">${i+1}</td><td style="padding:4px 8px">${s.name}</td><td style="padding:4px 8px;text-align:right;font-weight:600">${s.rows.toLocaleString('en-IN')}</td></tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn success" onclick="cmbDownloadCombined()">📥 Download Combined Excel</button>
+      <button class="btn secondary" onclick="cmbPreviewFirst100()">👁️ Preview first 100 rows</button>
+    </div>
+    <div id="cmb-preview-table" style="margin-top:12px"></div>
+  </div>`;
+  preview.innerHTML = html;
+
+  // Stash for download
+  cmbState.combinedWb = wb;
+  cmbState.combinedRows = outRows;
+  cmbState.combinedHdrs = finalHdrs;
+  toast(`✓ Combined ${totalDataRows.toLocaleString('en-IN')} rows`);
+}
+
+function cmbDownloadCombined(){
+  if(!cmbState.combinedWb){ toast('Combine first',true); return; }
+  const ts = new Date().toISOString().slice(0,10).replace(/-/g,'');
+  XLSX.writeFile(cmbState.combinedWb, `Combined_${ts}.xlsx`);
+  toast('✓ Downloaded');
+}
+
+function cmbPreviewFirst100(){
+  if(!cmbState.combinedRows){ return; }
+  const rows = cmbState.combinedRows;
+  const el = document.getElementById('cmb-preview-table');
+  const preview = rows.slice(0, 101);
+  let html = `<div style="overflow-x:auto;background:white;color:#1e293b;border:1px solid #cbd5e1;border-radius:6px">
+    <table style="width:100%;font-size:11px;border-collapse:collapse">
+      <thead><tr style="background:#1e3a8a;color:white">${preview[0].map(h=>`<th style="padding:6px 8px;border:1px solid #1e40af;text-align:left;white-space:nowrap">${h}</th>`).join('')}</tr></thead>
+      <tbody>
+        ${preview.slice(1).map(r=>`<tr>${r.map(v=>`<td style="padding:4px 6px;border:1px solid #e2e8f0;white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis" title="${String(v||'').replace(/"/g,'&quot;')}">${v||''}</td>`).join('')}</tr>`).join('')}
+      </tbody>
+    </table>
+  </div>
+  <div style="font-size:11px;color:var(--muted);margin-top:6px">Showing first ${preview.length-1} of ${(rows.length-1).toLocaleString('en-IN')} rows</div>`;
+  el.innerHTML = html;
+}
+
+function cmbReset(){
+  cmbState.files = [];
+  cmbState.combinedWb = null;
+  cmbState.combinedRows = null;
+  document.getElementById('cmb-file-list').innerHTML = '';
+  document.getElementById('cmb-preview').innerHTML = '';
+  document.getElementById('cmb-file-input').value = '';
+  document.getElementById('cmb-combine-btn').disabled = true;
+  document.getElementById('cmb-status').textContent = '';
+  toast('Cleared');
 }
 
 // ============================================================
