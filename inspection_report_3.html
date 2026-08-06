@@ -1681,6 +1681,12 @@ document.addEventListener('keydown', e=>{
       </label>
       <label style="display:flex;align-items:center;gap:5px;margin-left:auto">
         <input type="checkbox" id="cmb-add-source" checked> Add "Source_File" column
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px">
+          <input type="checkbox" id="cmb-add-block" checked> Add "Block" column <span style="color:var(--muted);font-size:10px">(from Shop Code)</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px">
+          <input type="checkbox" id="cmb-skip-total" checked> Skip TOTAL/Grand Total rows
       </label>
     </div>
     <div style="font-size:11px;color:var(--muted);margin-top:6px">
@@ -13620,6 +13626,31 @@ function cmbSanitizeHeaders(hdrs){
   });
 }
 
+// Extract Taluk name embedded in metadata rows (first ~12 rows).
+// Pattern: "Taluk : Jamunamarathur" appears in MIS-generated files (row 7).
+function cmbExtractTalukFromRows(rows){
+  const maxScan = Math.min(rows.length, 12);
+  for(let i=0; i<maxScan; i++){
+    const fullText = (rows[i]||[]).map(v=>String(v||'')).join(' ');
+    const m = fullText.match(/Taluk\s*:\s*([A-Za-z\u0B80-\u0BFF][A-Za-z\u0B80-\u0BFF\s\(\)\.]+?)(?:\s{3,}|$|FPS\s|Year\s|Month\s)/i);
+    if(m){
+      const t = m[1].trim().replace(/\s+/g,' ');
+      if(t.length > 1) return t;
+    }
+  }
+  return null;
+}
+
+// Detect if a data row is a TOTAL/Summary row to be skipped.
+// Checks if the first non-empty cell is "Total", "Grand Total", "TOTAL", etc.
+function cmbIsTotalRow(r){
+  for(let i=0; i<Math.min(r.length, 4); i++){
+    const v = String(r[i]||'').trim().toLowerCase();
+    if(v==='total'||v==='grand total'||v==='totals') return true;
+  }
+  return false;
+}
+
 async function cmbHandleFiles(fileList){
   const dropZone = document.getElementById('cmb-drop-zone');
   const status = document.getElementById('cmb-status');
@@ -13641,6 +13672,7 @@ async function cmbHandleFiles(fileList){
         rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
       }
       const hdrIdx = cmbDetectHeaderRow(rows);
+      const detectedTaluk = cmbExtractTalukFromRows(rows);
       cmbState.files.push({
         name: file.name,
         sheetName,
@@ -13648,7 +13680,8 @@ async function cmbHandleFiles(fileList){
         hdrIdx,
         totalRows: rows.length,
         dataRows: Math.max(0, rows.length - hdrIdx - 1),
-        headers: cmbSanitizeHeaders(rows[hdrIdx]||[])
+        headers: cmbSanitizeHeaders(rows[hdrIdx]||[]),
+        detectedTaluk   // e.g. "Jamunamarathur" or null
       });
     } catch(e){
       toast(`Failed to read ${file.name}: ${e.message}`, true);
@@ -13680,18 +13713,50 @@ function cmbRenderFileList(){
   const mode = document.querySelector('input[name="cmb-hdr-mode"]:checked')?.value || 'auto';
   const fixedRow = +document.getElementById('cmb-hdr-row')?.value || 1;
 
+  // Detect duplicates (same Taluk more than once) and track which are present
+  const talukCounts = {};
+  const ALL_TVM_TALUKS = ['Arani (Tk)','Chengam (Tk)','Chetpet','Cheyyar (Tk)','Jamunamarathur',
+    'Kalasapakkam(Tk)','Kilpennathur','Polur (Tk)','Thandrampattu',
+    'Thiruvannamalai (Tk)','Vandavasi (Tk)','Vembakkam'];
+  cmbState.files.forEach(f=>{ if(f.detectedTaluk){ talukCounts[f.detectedTaluk]=(talukCounts[f.detectedTaluk]||0)+1; } });
+
+  // Find missing taluks (normalize for comparison)
+  const norm = s => s.toLowerCase().replace(/[\s\(\)\.]/g,'').replace('tk','');
+  const presentNormed = Object.keys(talukCounts).map(norm);
+  const missingTaluks = ALL_TVM_TALUKS.filter(t=>!presentNormed.includes(norm(t)));
+  const duplicateTaluks = Object.entries(talukCounts).filter(([,n])=>n>1).map(([t])=>t);
+
   let html = `<div style="background:rgba(15,23,42,.4);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px">
-    <div style="font-size:12px;color:var(--muted);margin-bottom:6px">📋 Files queued (in order — first file's headers will be used as master)</div>
-    <table style="width:100%;font-size:12px;border-collapse:collapse">
+    <div style="font-size:12px;color:var(--muted);margin-bottom:6px">📋 Files queued (first file = master headers)</div>`;
+
+  // Taluk status panel
+  if(cmbState.files.some(f=>f.detectedTaluk)){
+    html += `<div style="background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:11px">
+      <div style="font-weight:700;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px">📍 Taluk Detection</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px">
+        ${cmbState.files.map(f=>{
+          if(!f.detectedTaluk) return `<span style="background:rgba(107,114,128,.2);color:#9ca3af;padding:2px 7px;border-radius:4px;font-size:10px" title="${f.name}">❓ ${f.name.replace(/\.xlsx?$/i,'').substring(0,20)}</span>`;
+          const isDup = talukCounts[f.detectedTaluk]>1;
+          const bg = isDup ? 'rgba(239,68,68,.2)' : 'rgba(52,211,153,.15)';
+          const col = isDup ? '#fca5a5' : '#6ee7b7';
+          const icon = isDup ? '⚠️ DUP:' : '✓';
+          return `<span style="background:${bg};color:${col};padding:2px 7px;border-radius:4px;font-size:10px;border:1px solid ${isDup?'rgba(239,68,68,.4)':'rgba(52,211,153,.3)'}" title="${f.name}">${icon} ${f.detectedTaluk}</span>`;
+        }).join('')}
+      </div>
+      ${duplicateTaluks.length ? `<div style="color:#fca5a5;font-weight:600;margin-bottom:3px">⚠️ Duplicate: ${duplicateTaluks.join(', ')} — uploaded more than once</div>` : ''}
+      ${missingTaluks.length ? `<div style="color:#fbbf24;font-weight:600">⚠️ Missing taluks: ${missingTaluks.join(', ')}</div>` : `<div style="color:#6ee7b7">✓ All 12 taluks accounted for</div>`}
+    </div>`;
+  }
+
+  html += `<table style="width:100%;font-size:12px;border-collapse:collapse">
       <thead>
         <tr style="background:rgba(99,102,241,.15)">
           <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;width:24px">#</th>
           <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:left">File</th>
-          <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:center;width:70px">Sheet</th>
+          <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:left">Detected Taluk</th>
           <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:center;width:80px">Total rows</th>
           <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:center;width:80px">Header at</th>
           <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:center;width:80px">Data rows</th>
-          <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:center;width:80px">Cols</th>
           <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:center;width:30px"></th>
         </tr>
       </thead>
@@ -13699,29 +13764,35 @@ function cmbRenderFileList(){
   cmbState.files.forEach((f,i)=>{
     const usedHdr = mode==='fixed' ? Math.max(0, fixedRow-1) : f.hdrIdx;
     const dataRows = Math.max(0, f.totalRows - usedHdr - 1);
-    const headers = mode==='fixed' ? cmbSanitizeHeaders(f.rows[usedHdr]||[]) : f.headers;
-    const nonEmptyCols = headers.filter(h=>h).length;
     const isFirst = i===0;
-    html += `<tr>
+    const isDup = f.detectedTaluk && talukCounts[f.detectedTaluk]>1;
+    const talukBadge = f.detectedTaluk
+      ? `<span style="background:${isDup?'rgba(239,68,68,.2)':'rgba(52,211,153,.15)'};color:${isDup?'#fca5a5':'#6ee7b7'};padding:2px 8px;border-radius:4px;font-size:11px">${isDup?'⚠️ ':''} ${f.detectedTaluk}</span>`
+      : `<span style="color:var(--muted);font-size:11px;font-style:italic">—</span>`;
+    html += `<tr ${isDup?'style="background:rgba(239,68,68,.05)"':''}>
       <td style="padding:5px 8px;color:var(--muted)">${i+1}</td>
       <td style="padding:5px 8px;font-weight:${isFirst?600:400}">${f.name}${isFirst?' <span style="color:#818cf8;font-size:10px">(master)</span>':''}</td>
-      <td style="padding:5px 8px;text-align:center;color:var(--muted);font-size:11px">${f.sheetName}</td>
+      <td style="padding:5px 8px">${talukBadge}</td>
       <td style="padding:5px 8px;text-align:center">${f.totalRows}</td>
       <td style="padding:5px 8px;text-align:center;color:#6ee7b7">R${usedHdr+1}</td>
       <td style="padding:5px 8px;text-align:center;font-weight:600">${dataRows.toLocaleString('en-IN')}</td>
-      <td style="padding:5px 8px;text-align:center">${nonEmptyCols}</td>
       <td style="padding:5px 8px;text-align:center"><button onclick="cmbRemoveFile(${i})" style="background:transparent;border:none;color:#fca5a5;cursor:pointer;font-size:14px" title="Remove">✕</button></td>
     </tr>`;
   });
   html += `</tbody></table></div>`;
 
-  // Show master headers preview
+  // Master headers preview
   const masterHdrs = mode==='fixed'
     ? cmbSanitizeHeaders(cmbState.files[0].rows[Math.max(0,fixedRow-1)]||[])
     : cmbState.files[0].headers;
+  const addBlock = document.getElementById('cmb-add-block')?.checked !== false;
+  const addSource = document.getElementById('cmb-add-source')?.checked !== false;
+  const skipTotal = document.getElementById('cmb-skip-total')?.checked !== false;
+  const extras = [addBlock?'Block':'', addSource?'Source_File':''].filter(Boolean);
   html += `<div style="background:rgba(6,78,59,.15);border:1px solid rgba(52,211,153,.35);border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:11px">
-    <div style="color:#6ee7b7;font-weight:700;margin-bottom:5px">📌 Master headers (from first file, ${masterHdrs.filter(h=>h).length} columns)</div>
-    <div style="color:var(--muted);word-break:break-word">${masterHdrs.filter(h=>h).join(' &nbsp;·&nbsp; ')}</div>
+    <div style="color:#6ee7b7;font-weight:700;margin-bottom:5px">📌 Output columns (${masterHdrs.filter(h=>h).length + extras.length} total)</div>
+    <div style="color:var(--muted);word-break:break-word">${masterHdrs.filter(h=>h).join(' &nbsp;·&nbsp; ')}${extras.length?' &nbsp;·&nbsp; <span style="color:#818cf8">'+extras.join(' &nbsp;·&nbsp; ')+'</span>':''}</div>
+    ${skipTotal?'<div style="color:#fbbf24;font-size:10px;margin-top:4px">⚡ TOTAL/Grand Total rows will be skipped</div>':''}
   </div>`;
 
   el.innerHTML = html;
@@ -13746,6 +13817,8 @@ function cmbCombine(){
   const mode = document.querySelector('input[name="cmb-hdr-mode"]:checked')?.value || 'auto';
   const fixedRow = +document.getElementById('cmb-hdr-row').value || 1;
   const addSource = document.getElementById('cmb-add-source').checked;
+  const addBlock  = document.getElementById('cmb-add-block').checked;
+  const skipTotal = document.getElementById('cmb-skip-total').checked;
 
   // Master headers = first file's headers
   const first = cmbState.files[0];
@@ -13757,81 +13830,127 @@ function cmbCombine(){
   const trimmedHdrs = masterHdrs.slice(0, lastNonEmpty+1);
   const ncols = trimmedHdrs.length;
 
-  // Combined data
-  const outRows = [];
-  const finalHdrs = addSource ? [...trimmedHdrs, 'Source_File'] : trimmedHdrs;
-  outRows.push(finalHdrs);
+  // Detect which column index is the shop-code column (for Block lookup)
+  let shopCodeColIdx = -1;
+  if(addBlock){
+    const shopKeywords = ['fps code','shop code','shopcode','fps_code','shop_code','फ़ॉप्स','code'];
+    trimmedHdrs.forEach((h,i)=>{
+      const hl = h.toLowerCase().replace(/\s/g,'');
+      if(shopKeywords.some(k=>hl.includes(k.replace(/\s/g,'')))) shopCodeColIdx = i;
+    });
+    // Fallback: look for column where values look like FPS codes
+    if(shopCodeColIdx === -1 && first.rows.length > masterHdrIdx+1){
+      const sampleRow = first.rows[masterHdrIdx+1]||[];
+      sampleRow.forEach((v,i)=>{ if(i<ncols && /^0[0-9][A-Z]{2}\d{3}[A-Z0-9]+$/i.test(String(v||'').trim())) shopCodeColIdx = i; });
+    }
+  }
 
+  // Build final header
+  const extraCols = [];
+  if(addBlock)  extraCols.push('Block');
+  if(addSource) extraCols.push('Source_File');
+  const finalHdrs = [...trimmedHdrs, ...extraCols];
+
+  // Combined data rows
+  const outRows = [finalHdrs];
   const perFileStats = [];
+  let skippedTotal = 0;
+
   cmbState.files.forEach((f,fi)=>{
     const fHdrIdx = mode==='fixed' ? Math.max(0, fixedRow-1) : f.hdrIdx;
-    let appended = 0;
+    let appended = 0, skipped = 0;
     for(let i = fHdrIdx+1; i < f.rows.length; i++){
       const r = f.rows[i]||[];
       // Skip completely empty rows
       if(!r.some(v=>v!==undefined && v!==null && String(v).trim()!=='')) continue;
+      // Skip TOTAL rows
+      if(skipTotal && cmbIsTotalRow(r)){ skipped++; skippedTotal++; continue; }
       // Truncate/pad to ncols
       const rowVals = [];
       for(let c=0; c<ncols; c++){
         const v = r[c];
         rowVals.push(v===undefined||v===null ? '' : v);
       }
+      // Add Block lookup
+      if(addBlock){
+        let block = '';
+        if(shopCodeColIdx >= 0){
+          const code = String(r[shopCodeColIdx]||'').trim().toUpperCase();
+          if(code && typeof ekycGetBlock === 'function') block = ekycGetBlock(code)||'';
+        }
+        rowVals.push(block);
+      }
+      // Add Source_File
       if(addSource) rowVals.push(f.name);
       outRows.push(rowVals);
       appended++;
     }
-    perFileStats.push({name:f.name, rows:appended});
+    perFileStats.push({name:f.name, taluk:f.detectedTaluk||'—', rows:appended, skipped});
   });
 
   const totalDataRows = outRows.length - 1;
 
   // Build output Excel
   const ws = XLSX.utils.aoa_to_sheet(outRows);
-  // Auto-width heuristic
   ws['!cols'] = finalHdrs.map((h,i)=>{
     let maxLen = String(h||'').length;
-    // Sample first 100 rows for width
-    for(let r=1; r<Math.min(outRows.length, 100); r++){
+    for(let r=1; r<Math.min(outRows.length,100); r++){
       const v = outRows[r][i];
-      if(v!==undefined && v!==null){
-        const l = String(v).length;
-        if(l > maxLen) maxLen = l;
-      }
+      if(v!==undefined && v!==null){ const l=String(v).length; if(l>maxLen) maxLen=l; }
     }
-    return {wch: Math.min(60, Math.max(8, maxLen+2))};
+    return {wch: Math.min(50, Math.max(8, maxLen+2))};
   });
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Combined');
 
-  // Show preview panel
+  // Taluk summary for preview
+  const taluksSeen = perFileStats.map(s=>s.taluk).filter(t=>t!=='—');
+
+  // Preview panel
   const preview = document.getElementById('cmb-preview');
   let html = `<div class="panel">
     <h2><span class="dot"></span> ✅ Combined — ${cmbState.files.length} files → ${totalDataRows.toLocaleString('en-IN')} data rows</h2>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
       <div style="background:rgba(15,23,42,.4);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
-        <div style="font-size:11px;color:var(--muted);text-transform:uppercase">Files Combined</div>
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase">Files</div>
         <div style="font-size:22px;font-weight:700">${cmbState.files.length}</div>
       </div>
       <div style="background:rgba(15,23,42,.4);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
-        <div style="font-size:11px;color:var(--muted);text-transform:uppercase">Total Data Rows</div>
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase">Data Rows</div>
         <div style="font-size:22px;font-weight:700;color:#34d399">${totalDataRows.toLocaleString('en-IN')}</div>
       </div>
       <div style="background:rgba(15,23,42,.4);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
         <div style="font-size:11px;color:var(--muted);text-transform:uppercase">Columns</div>
         <div style="font-size:22px;font-weight:700">${finalHdrs.length}</div>
       </div>
+      <div style="background:rgba(15,23,42,.4);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase">TOTAL rows skipped</div>
+        <div style="font-size:22px;font-weight:700;color:#fbbf24">${skippedTotal}</div>
+      </div>
     </div>
+
     <div style="background:rgba(15,23,42,.3);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:14px">
       <div style="font-size:12px;color:var(--muted);font-weight:700;margin-bottom:6px">📊 Per-file breakdown</div>
       <table style="width:100%;font-size:12px;border-collapse:collapse">
         <thead><tr style="color:var(--muted);text-align:left">
-          <th style="padding:4px 8px">#</th><th style="padding:4px 8px">File</th><th style="padding:4px 8px;text-align:right">Rows appended</th>
+          <th style="padding:4px 8px">#</th>
+          <th style="padding:4px 8px">Detected Taluk</th>
+          <th style="padding:4px 8px">File</th>
+          <th style="padding:4px 8px;text-align:right">Rows</th>
+          <th style="padding:4px 8px;text-align:right">Skipped</th>
         </tr></thead>
         <tbody>
-          ${perFileStats.map((s,i)=>`<tr><td style="padding:4px 8px;color:var(--muted)">${i+1}</td><td style="padding:4px 8px">${s.name}</td><td style="padding:4px 8px;text-align:right;font-weight:600">${s.rows.toLocaleString('en-IN')}</td></tr>`).join('')}
+          ${perFileStats.map((s,i)=>`<tr>
+            <td style="padding:4px 8px;color:var(--muted)">${i+1}</td>
+            <td style="padding:4px 8px"><span style="background:rgba(52,211,153,.15);color:#6ee7b7;padding:2px 7px;border-radius:4px;font-size:11px">${s.taluk}</span></td>
+            <td style="padding:4px 8px;color:var(--muted);font-size:11px">${s.name}</td>
+            <td style="padding:4px 8px;text-align:right;font-weight:600">${s.rows.toLocaleString('en-IN')}</td>
+            <td style="padding:4px 8px;text-align:right;color:${s.skipped>0?'#fbbf24':'var(--muted)'}">${s.skipped||'—'}</td>
+          </tr>`).join('')}
         </tbody>
       </table>
     </div>
+
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       <button class="btn success" onclick="cmbDownloadCombined()">📥 Download Combined Excel</button>
       <button class="btn secondary" onclick="cmbPreviewFirst100()">👁️ Preview first 100 rows</button>
@@ -13840,11 +13959,10 @@ function cmbCombine(){
   </div>`;
   preview.innerHTML = html;
 
-  // Stash for download
   cmbState.combinedWb = wb;
   cmbState.combinedRows = outRows;
   cmbState.combinedHdrs = finalHdrs;
-  toast(`✓ Combined ${totalDataRows.toLocaleString('en-IN')} rows`);
+  toast(`✓ Combined ${totalDataRows.toLocaleString('en-IN')} rows from ${cmbState.files.length} files`);
 }
 
 function cmbDownloadCombined(){
