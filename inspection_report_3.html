@@ -1671,7 +1671,7 @@ document.addEventListener('keydown', e=>{
   <!-- Detection options -->
   <div style="background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.25);border-radius:8px;padding:12px;margin-bottom:14px">
     <div style="font-size:12px;color:var(--muted);font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">⚙️ Detection settings</div>
-    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;font-size:12px">
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;font-size:12px;margin-bottom:6px">
       <label style="display:flex;align-items:center;gap:5px">
         <input type="radio" name="cmb-hdr-mode" value="auto" checked> Auto-detect header row
       </label>
@@ -1679,18 +1679,48 @@ document.addEventListener('keydown', e=>{
         <input type="radio" name="cmb-hdr-mode" value="fixed"> Header at row:
         <input type="number" id="cmb-hdr-row" value="1" min="1" max="50" style="width:60px;background:rgba(15,23,42,.6);border:1px solid var(--border);color:var(--ink);padding:3px 6px;border-radius:4px">
       </label>
-      <label style="display:flex;align-items:center;gap:5px;margin-left:auto">
-        <input type="checkbox" id="cmb-add-source" checked> Add "Source_File" column
-        </label>
-        <label style="display:flex;align-items:center;gap:5px;font-size:12px">
-          <input type="checkbox" id="cmb-add-block" checked> Add "Block" column <span style="color:var(--muted);font-size:10px">(from Shop Code)</span>
-        </label>
-        <label style="display:flex;align-items:center;gap:5px;font-size:12px">
-          <input type="checkbox" id="cmb-skip-total" checked> Skip TOTAL/Grand Total rows
+      <label style="display:flex;align-items:center;gap:5px">
+        <input type="checkbox" id="cmb-skip-total" checked> Skip TOTAL / Grand Total rows
       </label>
     </div>
-    <div style="font-size:11px;color:var(--muted);margin-top:6px">
-      💡 Auto-detect scans first 30 rows for the row where all cells have distinct text values (most likely the header). Fixed = specify exact row number.
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px">
+      💡 Auto-detect scans first 30 rows to find the header. Fixed = specify exact row number.
+    </div>
+
+    <!-- Extra columns from master data -->
+    <div style="border-top:1px solid rgba(99,102,241,.25);padding-top:10px">
+      <div style="font-size:12px;color:var(--muted);font-weight:700;margin-bottom:8px">📌 Extra columns to append (from Master Data / built-in map)</div>
+
+      <!-- Always-on built-in -->
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px;font-size:12px">
+        <label style="display:flex;align-items:center;gap:5px">
+          <input type="checkbox" id="cmb-add-source" checked> <b>Source_File</b> <span style="color:var(--muted);font-size:10px">(file name)</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:5px">
+          <input type="checkbox" id="cmb-add-block" checked> <b>Block / ஒன்றியம்</b> <span style="color:var(--muted);font-size:10px">(built-in map)</span>
+        </label>
+      </div>
+
+      <!-- Master data column picker -->
+      <div style="background:rgba(15,23,42,.4);border:1px solid rgba(99,102,241,.3);border-radius:7px;padding:10px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
+          <span style="font-size:11px;color:var(--muted);font-weight:700">📋 Master Data columns</span>
+          <span id="cmb-master-status" style="font-size:11px;color:var(--muted)">Not loaded</span>
+          <button class="btn-tiny" onclick="cmbFetchMasterData()" id="cmb-fetch-master-btn"
+            style="font-size:11px;background:rgba(99,102,241,.2);border:1px solid rgba(99,102,241,.5);color:#a5b4fc">
+            🔄 Fetch from Google Sheet
+          </button>
+          <button class="btn-tiny" onclick="cmbClearMasterCache()"
+            style="font-size:9px;background:transparent;border:none;color:#94a3b8;text-decoration:underline;cursor:pointer">
+            Clear cache
+          </button>
+        </div>
+
+        <!-- Column picker checkboxes — rendered by JS after fetch -->
+        <div id="cmb-master-cols" style="font-size:12px;color:var(--muted);font-style:italic">
+          Fetch master data to see available columns
+        </div>
+      </div>
     </div>
   </div>
 
@@ -7365,7 +7395,6 @@ const BUILT_IN_SHOP_BLOCK = {
 "05KP088PN":"Tiruvannamalai-2",
 "05KP089PN":"Tiruvannamalai-2",
 "05KP090PN":"Tiruvannamalai-2",
-"05KP068PN":"Tiruvannamalai-2",
 "05KP144P1":"Kilpennathur",
 "05KP144PY":"Kilpennathur",
 "05KP145P1":"Kilpennathur",
@@ -7436,8 +7465,9 @@ const BUILT_IN_SHOP_BLOCK = {
 "05KP195PN":"Kilpennathur",
 "05KP196PN":"Tiruvannamalai-2",
 "05KP198P1":"Kilpennathur",
+"05KP198PY":"Kilpennathur",
 "05KP005PN":"Kilpennathur",
-"05KP198PY":"Kilpennathur"
+"05KP068PN":"Tiruvannamalai-2"
 };
 
 const ekyc = { data:null, oldData:null, date:'', oldDate:'', customShopMap:null, filter:{active:false} };
@@ -13588,6 +13618,204 @@ const cmbState = {
   files: [],   // {name, buffer, sheetName, rows, hdrIdx, dataStart}
 };
 
+// ── MASTER DATA (Basic Data Google Sheet) ────────────────────────────────
+// Column names from the Google Sheet (in Tamil, matching the actual headers)
+const CMB_MASTER_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTHjbOR2XAEEa8xHsFc1zXzgAMhFYZMDiXNeQUUOUTKYTRuISUMDzHyG6wL_eFiFPV0PmpxFbBJmuVk/pub?gid=1406190187&single=true&output=csv';
+const CMB_MASTER_LS_KEY = 'cmb_master_data_v1';
+const CMB_SHOP_CODE_COL = 'கடை குறியீடு எண்';  // shop-code column in master
+
+// All known columns (preserving Tamil names from the sheet)
+const CMB_MASTER_KNOWN_COLS = [
+  'வ. எண்', 'Timestamp', 'வட்டம்', 'ஒன்றியம்', 'சட்டமன்ற தொகுதி', 'பாராளுமன்ற தொகுதி',
+  'Agency Group', 'கூட்டுறவு நிறுவனம்', 'நகர்புறம் / கிராமபுறம்',
+  'கடை குறியீடு எண்', 'நியாய விலைக் கடையின் பெயர்', 'முழுநேரம் / பகுதிநேரம்',
+  'குடும்ப அட்டைகள் எண்ணிக்கை', 'திறந்து செயல்படும் நாட்கள்',
+  'PoS இயந்திரம் உள்ளதா?', 'தாய்க்கடை PoS குறியீட்டு எண்',
+  'கட்டிட வகை', 'கட்டடத்தின் பெயர்', 'விற்பனையாளர் பெயர்',
+  'விற்பனையாளர் கைபேசி எண்', 'குறிப்பு', 'கிடங்கு',
+  'விற்பனையாளர் பாலினம்', 'பாலின சரிபார்ப்பு',
+  'கட்டுநர் உள்ளதா?', 'கட்டுநர் பெயர்', 'கட்டுநர் கைபேசி', 'கட்டுநர் பாலினம்'
+];
+
+// English-friendly short labels for the checkboxes
+const CMB_MASTER_COL_LABELS = {
+  'வ. எண்':                       'வ. எண் (Sl.No)',
+  'Timestamp':                     'Timestamp',
+  'வட்டம்':                        'வட்டம் (District)',
+  'ஒன்றியம்':                      'ஒன்றியம் (Block)',
+  'சட்டமன்ற தொகுதி':              'Constituency (Vidhan Sabha)',
+  'பாராளுமன்ற தொகுதி':            'Constituency (Parliament)',
+  'Agency Group':                  'Agency Group',
+  'கூட்டுறவு நிறுவனம்':           'Cooperative Society',
+  'நகர்புறம் / கிராமபுறம்':       'Rural / Urban',
+  'கடை குறியீடு எண்':             'Shop Code (key)',
+  'நியாய விலைக் கடையின் பெயர்':  'FPS Name',
+  'முழுநேரம் / பகுதிநேரம்':       'Full-time / Part-time',
+  'குடும்ப அட்டைகள் எண்ணிக்கை': 'Card Count',
+  'திறந்து செயல்படும் நாட்கள்':  'Working Days',
+  'PoS இயந்திரம் உள்ளதா?':       'Has PoS machine?',
+  'தாய்க்கடை PoS குறியீட்டு எண்':'Parent PoS Code',
+  'கட்டிட வகை':                   'Building Type',
+  'கட்டடத்தின் பெயர்':            'Building Name',
+  'விற்பனையாளர் பெயர்':          'Salesperson Name',
+  'விற்பனையாளர் கைபேசி எண்':    'Salesperson Phone',
+  'குறிப்பு':                      'Remarks',
+  'கிடங்கு':                      'Godown',
+  'விற்பனையாளர் பாலினம்':        'Salesperson Gender',
+  'பாலின சரிபார்ப்பு':            'Gender Verification',
+  'கட்டுநர் உள்ளதா?':            'Has Contractor?',
+  'கட்டுநர் பெயர்':               'Contractor Name',
+  'கட்டுநர் கைபேசி':             'Contractor Phone',
+  'கட்டுநர் பாலினம்':            'Contractor Gender',
+};
+
+// Skip these in the picker (shop code = key; block = already in built-in; sl.no/timestamp = meta)
+const CMB_MASTER_PICKER_SKIP = new Set(['வ. எண்', 'Timestamp', 'கடை குறியீடு எண்', 'ஒன்றியம்']);
+
+// In-memory master map: { shopCode: { col: value, ... } }
+const cmbMaster = { map: null, headers: [], loaded: false };
+
+async function cmbFetchMasterData(){
+  const statusEl = document.getElementById('cmb-master-status');
+  const btn = document.getElementById('cmb-fetch-master-btn');
+  statusEl.textContent = '🔄 Fetching...'; statusEl.style.color = 'var(--muted)';
+  btn.disabled = true;
+  try{
+    const resp = await safeFetch(CMB_MASTER_URL);
+    if(!resp || !resp.ok) throw new Error('HTTP '+(resp?resp.status:'no response'));
+    let txt = await resp.text();
+    txt = txt.replace(/^\uFEFF/,'');   // strip BOM
+    const rows = parseCSV(txt);
+    if(!rows || rows.length < 2) throw new Error('Empty data from sheet');
+    cmbBuildMasterMap(rows);
+    localStorage.setItem(CMB_MASTER_LS_KEY, JSON.stringify({headers:rows[0], data:rows.slice(1)}));
+    statusEl.textContent = `✓ Loaded ${Object.keys(cmbMaster.map).length} shops`;
+    statusEl.style.color = '#6ee7b7';
+    cmbRenderMasterColPicker();
+    toast('Master data loaded');
+  } catch(e){
+    statusEl.textContent = '✗ '+e.message; statusEl.style.color = '#fca5a5';
+    toast('Master data fetch failed: '+e.message, true);
+  } finally { btn.disabled = false; }
+}
+
+function cmbBuildMasterMap(rows){
+  const hdrs = rows[0].map(h=>String(h||'').trim());
+  const shopIdx = hdrs.indexOf(CMB_SHOP_CODE_COL);
+  if(shopIdx === -1){ console.warn('Shop code column not found in master data'); }
+  cmbMaster.headers = hdrs;
+  cmbMaster.map = {};
+  for(let i=1; i<rows.length; i++){
+    const r = rows[i];
+    const code = String(r[shopIdx]||'').trim().toUpperCase();
+    if(!code) continue;
+    const record = {};
+    hdrs.forEach((h,ci)=>{ record[h] = String(r[ci]||'').trim(); });
+    cmbMaster.map[code] = record;
+  }
+  cmbMaster.loaded = true;
+}
+
+function cmbLoadCachedMaster(){
+  try{
+    const cached = localStorage.getItem(CMB_MASTER_LS_KEY);
+    if(!cached) return;
+    const {headers, data} = JSON.parse(cached);
+    if(!headers || !data) return;
+    cmbBuildMasterMap([headers, ...data]);
+    const statusEl = document.getElementById('cmb-master-status');
+    if(statusEl){ statusEl.textContent = `✓ Cached (${Object.keys(cmbMaster.map).length} shops)`; statusEl.style.color = '#6ee7b7'; }
+    cmbRenderMasterColPicker();
+  } catch(e){}
+}
+
+function cmbClearMasterCache(){
+  localStorage.removeItem(CMB_MASTER_LS_KEY);
+  cmbMaster.map = null; cmbMaster.loaded = false; cmbMaster.headers = [];
+  const statusEl = document.getElementById('cmb-master-status');
+  if(statusEl){ statusEl.textContent = 'Cache cleared'; statusEl.style.color = 'var(--muted)'; }
+  const colsEl = document.getElementById('cmb-master-cols');
+  if(colsEl) colsEl.innerHTML = '<span style="color:var(--muted);font-style:italic">Fetch master data to see available columns</span>';
+  toast('Master cache cleared');
+}
+
+function cmbRenderMasterColPicker(){
+  const el = document.getElementById('cmb-master-cols');
+  if(!el) return;
+  if(!cmbMaster.loaded || !cmbMaster.headers.length){
+    el.innerHTML = '<span style="color:var(--muted);font-style:italic">Fetch master data to see available columns</span>';
+    return;
+  }
+  // Render checkboxes for each column (skip key/meta columns)
+  const cols = cmbMaster.headers.filter(h=>h && !CMB_MASTER_PICKER_SKIP.has(h));
+  // Load saved selection from localStorage
+  let saved = {};
+  try{ saved = JSON.parse(localStorage.getItem('cmb_master_col_sel')||'{}'); } catch(e){}
+
+  const selCount = cols.filter(h=>saved[h] === true).length;
+  const html = `
+    <details id="cmb-master-dd" style="background:rgba(15,23,42,.5);border:1px solid rgba(99,102,241,.4);border-radius:6px">
+      <summary id="cmb-master-dd-summary" style="cursor:pointer;padding:7px 10px;font-size:12px;color:#a5b4fc;font-weight:600;list-style:none;user-select:none">
+        ▾ Select master-data columns to add (<span id="cmb-master-sel-count">${selCount}</span> of ${cols.length} selected)
+      </summary>
+      <div style="padding:8px 10px;border-top:1px solid rgba(99,102,241,.25)">
+        <div style="margin-bottom:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button class="btn-tiny" onclick="cmbSelectAllMasterCols(true)" style="font-size:10px;padding:2px 8px">Select all</button>
+          <button class="btn-tiny" onclick="cmbSelectAllMasterCols(false)" style="font-size:10px;padding:2px 8px">Clear</button>
+          <span style="font-size:10px;color:var(--muted)">Columns are appended after the original data, matched by Shop Code</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:4px 16px;max-height:260px;overflow-y:auto">
+          ${cols.map(h=>{
+            const label = CMB_MASTER_COL_LABELS[h] || h;
+            const checked = saved[h] === true;   // default: none ticked, user picks
+            return `<label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;padding:2px 0">
+              <input type="checkbox" class="cmb-master-col-cb" data-col="${h.replace(/"/g,'&quot;')}" ${checked?'checked':''} onchange="cmbSaveMasterColSel()">
+              <span title="${h.replace(/"/g,'&quot;')}">${label}</span>
+            </label>`;
+          }).join('')}
+        </div>
+      </div>
+    </details>`;
+  el.innerHTML = html;
+}
+
+function cmbSelectAllMasterCols(val){
+  document.querySelectorAll('.cmb-master-col-cb').forEach(cb=>{ cb.checked = val; });
+  cmbSaveMasterColSel();
+  cmbRenderFileList();
+}
+
+function cmbSaveMasterColSel(){
+  const sel = {};
+  document.querySelectorAll('.cmb-master-col-cb').forEach(cb=>{
+    sel[cb.dataset.col] = cb.checked;
+  });
+  try{ localStorage.setItem('cmb_master_col_sel', JSON.stringify(sel)); } catch(e){}
+  const n = Object.values(sel).filter(Boolean).length;
+  const cnt = document.getElementById('cmb-master-sel-count');
+  if(cnt) cnt.textContent = n;
+  cmbRenderFileList();
+}
+
+// Get the list of master columns currently selected in the picker
+function cmbGetSelectedMasterCols(){
+  const result = [];
+  document.querySelectorAll('.cmb-master-col-cb:checked').forEach(cb=>{
+    result.push(cb.dataset.col);
+  });
+  return result;
+}
+
+// Look up a shop code in the master map — try exact, then normalize
+function cmbMasterLookup(code){
+  if(!cmbMaster.map || !code) return null;
+  const upper = String(code).trim().toUpperCase();
+  return cmbMaster.map[upper] || null;
+}
+
+// Load cached master data on page load
+document.addEventListener('DOMContentLoaded', cmbLoadCachedMaster);
+
 // Auto-detect the header row. Strategy: scan the first N rows and pick the row
 // that (a) has the most non-empty cells, (b) has distinct string values,
 // (c) starts a block of similarly-shaped rows below it (uniform column count).
@@ -13790,7 +14018,8 @@ function cmbRenderFileList(){
   const addBlock = document.getElementById('cmb-add-block')?.checked !== false;
   const addSource = document.getElementById('cmb-add-source')?.checked !== false;
   const skipTotal = document.getElementById('cmb-skip-total')?.checked !== false;
-  const extras = [addBlock?'Block':'', addSource?'Source_File':''].filter(Boolean);
+  const _mCols = (cmbMaster.loaded ? cmbGetSelectedMasterCols() : []).map(h=>CMB_MASTER_COL_LABELS[h]||h);
+  const extras = [addBlock?'Block':'', ..._mCols, addSource?'Source_File':''].filter(Boolean);
   html += `<div style="background:rgba(6,78,59,.15);border:1px solid rgba(52,211,153,.35);border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:11px">
     <div style="color:#6ee7b7;font-weight:700;margin-bottom:5px">📌 Output columns (${masterHdrs.filter(h=>h).length + extras.length} total)</div>
     <div style="color:var(--muted);word-break:break-word">${masterHdrs.filter(h=>h).join(' &nbsp;·&nbsp; ')}${extras.length?' &nbsp;·&nbsp; <span style="color:#818cf8">'+extras.join(' &nbsp;·&nbsp; ')+'</span>':''}</div>
@@ -13847,11 +14076,33 @@ function cmbCombine(){
     }
   }
 
+  // Master-data columns chosen in the dropdown (need the shop-code column + loaded master)
+  const masterCols = cmbMaster.loaded ? cmbGetSelectedMasterCols() : [];
+  if(masterCols.length && shopCodeColIdx === -1){
+    // Shop-code column wasn't detected yet (only runs when addBlock was ticked) — detect now
+    const keywords = ['fpscode','shopcode','shop_code','fps_code','code'];
+    trimmedHdrs.forEach((h,i)=>{
+      const hl = h.toLowerCase().replace(/\s/g,'');
+      if(keywords.some(k=>hl.includes(k))) shopCodeColIdx = i;
+    });
+    if(shopCodeColIdx === -1 && first.rows.length > masterHdrIdx+1){
+      const sampleRow = first.rows[masterHdrIdx+1]||[];
+      sampleRow.forEach((v,i)=>{ if(i<ncols && /^0[0-9][A-Z]{2}\d{3}[A-Z0-9]+$/i.test(String(v||'').trim())) shopCodeColIdx = i; });
+    }
+  }
+  // Avoid duplicate header names (e.g. master col already exists in the file)
+  const masterHdrLabels = masterCols.map(h=>{
+    const label = CMB_MASTER_COL_LABELS[h] || h;
+    return trimmedHdrs.includes(label) ? label+' (Master)' : label;
+  });
+
   // Build final header
   const extraCols = [];
   if(addBlock)  extraCols.push('Block');
+  masterHdrLabels.forEach(l=>extraCols.push(l));
   if(addSource) extraCols.push('Source_File');
   const finalHdrs = [...trimmedHdrs, ...extraCols];
+  let masterMisses = 0;
 
   // Combined data rows
   const outRows = [finalHdrs];
@@ -13873,14 +14124,23 @@ function cmbCombine(){
         const v = r[c];
         rowVals.push(v===undefined||v===null ? '' : v);
       }
-      // Add Block lookup
+      // Shop code for this row (used by Block and master-data lookups)
+      const rowCode = shopCodeColIdx >= 0 ? String(r[shopCodeColIdx]||'').trim().toUpperCase() : '';
+      const masterRec = (masterCols.length && rowCode) ? cmbMasterLookup(rowCode) : null;
+      // Add Block lookup: built-in map first (incl. your manual shop codes), master ஒன்றியம் as fallback
       if(addBlock){
         let block = '';
-        if(shopCodeColIdx >= 0){
-          const code = String(r[shopCodeColIdx]||'').trim().toUpperCase();
-          if(code && typeof ekycGetBlock === 'function') block = ekycGetBlock(code)||'';
+        if(rowCode && typeof ekycGetBlock === 'function') block = ekycGetBlock(rowCode)||'';
+        if((!block || block==='Unknown') && rowCode){
+          const rec = cmbMasterLookup(rowCode);
+          if(rec && rec['ஒன்றியம்']) block = rec['ஒன்றியம்'];
         }
         rowVals.push(block);
+      }
+      // Add selected master-data columns
+      if(masterCols.length){
+        if(!masterRec && rowCode) masterMisses++;
+        masterCols.forEach(h=>rowVals.push(masterRec ? (masterRec[h]||'') : ''));
       }
       // Add Source_File
       if(addSource) rowVals.push(f.name);
@@ -13964,7 +14224,12 @@ function cmbCombine(){
   cmbState.combinedWb = wb;
   cmbState.combinedRows = outRows;
   cmbState.combinedHdrs = finalHdrs;
-  toast(`✓ Combined ${totalDataRows.toLocaleString('en-IN')} rows from ${cmbState.files.length} files`);
+  cmbState.masterMisses = masterMisses;
+  if(masterCols.length && masterMisses>0){
+    toast(`✓ Combined ${totalDataRows.toLocaleString('en-IN')} rows — ${masterMisses} row(s) had a shop code not found in Master Data`, true);
+  } else {
+    toast(`✓ Combined ${totalDataRows.toLocaleString('en-IN')} rows from ${cmbState.files.length} files`);
+  }
 }
 
 function cmbDownloadCombined(){
