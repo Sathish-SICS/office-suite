@@ -14213,47 +14213,151 @@ function cmbCombine(){
       </table>
     </div>
 
-    <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <button class="btn success" onclick="cmbDownloadCombined()">📥 Download Combined Excel</button>
-      <button class="btn secondary" onclick="cmbPreviewFirst100()">👁️ Preview first 100 rows</button>
+    <!-- Column editor -->
+    <div style="margin-bottom:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">
+        ✏️ Column editor — drag to reorder · click ✕ to delete · changes reflect instantly in preview and download
+      </div>
+      <div id="cmb-col-editor" style="display:flex;flex-wrap:wrap;gap:6px;padding:10px;background:rgba(15,23,42,.4);border:1px solid var(--border);border-radius:8px;min-height:44px"></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:5px">Deleted columns can be restored: <button onclick="cmbRestoreAllCols()" style="background:transparent;border:none;color:#818cf8;cursor:pointer;text-decoration:underline;font-size:11px;padding:0">Restore all</button></div>
     </div>
-    <div id="cmb-preview-table" style="margin-top:12px"></div>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+      <button class="btn success" onclick="cmbDownloadCombined()">📥 Download Excel</button>
+      <button class="btn secondary" onclick="cmbRefreshPreview()">👁️ Refresh preview</button>
+    </div>
+    <div id="cmb-preview-table" style="margin-top:4px"></div>
   </div>`;
   preview.innerHTML = html;
 
   cmbState.combinedWb = wb;
   cmbState.combinedRows = outRows;
   cmbState.combinedHdrs = finalHdrs;
+  // colOrder = [{col: idx, name: hdr}, ...] — user can reorder/delete
+  cmbState.colOrder = finalHdrs.map((h,i)=>({idx:i, name:h, deleted:false}));
   cmbState.masterMisses = masterMisses;
+
+  cmbRenderColEditor();
+  cmbRefreshPreview();
+
   if(masterCols.length && masterMisses>0){
-    toast(`✓ Combined ${totalDataRows.toLocaleString('en-IN')} rows — ${masterMisses} row(s) had a shop code not found in Master Data`, true);
+    toast(`✓ Combined ${totalDataRows.toLocaleString('en-IN')} rows — ${masterMisses} shop code(s) not found in Master Data`, true);
   } else {
     toast(`✓ Combined ${totalDataRows.toLocaleString('en-IN')} rows from ${cmbState.files.length} files`);
   }
 }
 
-function cmbDownloadCombined(){
-  if(!cmbState.combinedWb){ toast('Combine first',true); return; }
-  const ts = new Date().toISOString().slice(0,10).replace(/-/g,'');
-  XLSX.writeFile(cmbState.combinedWb, `Combined_${ts}.xlsx`);
-  toast('✓ Downloaded');
+// ── Column editor ────────────────────────────────────────────────────────
+function cmbActiveColOrder(){
+  return (cmbState.colOrder||[]).filter(c=>!c.deleted);
 }
 
-function cmbPreviewFirst100(){
-  if(!cmbState.combinedRows){ return; }
-  const rows = cmbState.combinedRows;
+function cmbRenderColEditor(){
+  const el = document.getElementById('cmb-col-editor');
+  if(!el) return;
+  const cols = cmbState.colOrder||[];
+  el.innerHTML = cols.map((c,i)=>{
+    if(c.deleted) return '';
+    const isSpecial = c.name==='Source_File'||c.name==='Block';
+    return `<div draggable="true"
+        data-ci="${i}"
+        onmousedown="cmbDragStart(event)"
+        ondragstart="cmbDragStart(event)"
+        ondragover="cmbDragOver(event)"
+        ondrop="cmbDrop(event)"
+        style="display:flex;align-items:center;gap:5px;background:${isSpecial?'rgba(99,102,241,.25)':'rgba(15,23,42,.6)'};
+               border:1px solid ${isSpecial?'rgba(99,102,241,.6)':'var(--border)'};
+               border-radius:5px;padding:4px 8px;cursor:grab;user-select:none;font-size:11px;color:var(--ink)">
+      <span style="color:var(--muted);cursor:grab">⠿</span>
+      <span>${c.name}</span>
+      <button onclick="cmbDeleteCol(${i})"
+        style="background:transparent;border:none;color:#fca5a5;cursor:pointer;font-size:13px;padding:0 0 0 2px;line-height:1" title="Remove column">✕</button>
+    </div>`;
+  }).join('');
+}
+
+let _dragSrcIdx = null;
+function cmbDragStart(e){
+  _dragSrcIdx = +e.currentTarget.dataset.ci;
+  e.currentTarget.style.opacity = '0.4';
+  if(e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+}
+function cmbDragOver(e){
+  e.preventDefault();
+  if(e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+}
+function cmbDrop(e){
+  e.preventDefault();
+  const targetIdx = +e.currentTarget.dataset.ci;
+  if(_dragSrcIdx === null || _dragSrcIdx === targetIdx) return;
+  const cols = cmbState.colOrder;
+  const moved = cols.splice(_dragSrcIdx, 1)[0];
+  // Find real target position after splice
+  const realTarget = targetIdx > _dragSrcIdx ? targetIdx - 1 : targetIdx;
+  cols.splice(realTarget, 0, moved);
+  _dragSrcIdx = null;
+  cmbRenderColEditor();
+  cmbRefreshPreview();
+}
+
+function cmbDeleteCol(i){
+  cmbState.colOrder[i].deleted = true;
+  cmbRenderColEditor();
+  cmbRefreshPreview();
+}
+
+function cmbRestoreAllCols(){
+  (cmbState.colOrder||[]).forEach(c=>{ c.deleted = false; });
+  cmbRenderColEditor();
+  cmbRefreshPreview();
+}
+
+// Build the final row array based on current col order (active only)
+function cmbBuildFinalRows(){
+  const activeCols = cmbActiveColOrder();
+  const sourceRows = cmbState.combinedRows;
+  if(!sourceRows || !activeCols.length) return [];
+  const hdrs = activeCols.map(c=>c.name);
+  const idxs = activeCols.map(c=>c.idx);
+  return [hdrs, ...sourceRows.slice(1).map(r=>idxs.map(i=>r[i]!==undefined?r[i]:''))];
+}
+
+function cmbRefreshPreview(){
   const el = document.getElementById('cmb-preview-table');
-  const preview = rows.slice(0, 101);
-  let html = `<div style="overflow-x:auto;background:white;color:#1e293b;border:1px solid #cbd5e1;border-radius:6px">
+  if(!el || !cmbState.combinedRows) return;
+  const finalRows = cmbBuildFinalRows();
+  if(!finalRows.length){ el.innerHTML=''; return; }
+  const preview = finalRows.slice(0, 101);
+  el.innerHTML = `<div style="overflow-x:auto;background:white;color:#1e293b;border:1px solid #cbd5e1;border-radius:6px">
     <table style="width:100%;font-size:11px;border-collapse:collapse">
-      <thead><tr style="background:#1e3a8a;color:white">${preview[0].map(h=>`<th style="padding:6px 8px;border:1px solid #1e40af;text-align:left;white-space:nowrap">${h}</th>`).join('')}</tr></thead>
-      <tbody>
-        ${preview.slice(1).map(r=>`<tr>${r.map(v=>`<td style="padding:4px 6px;border:1px solid #e2e8f0;white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis" title="${String(v||'').replace(/"/g,'&quot;')}">${v||''}</td>`).join('')}</tr>`).join('')}
-      </tbody>
+      <thead><tr style="background:#1e3a8a;color:white">${preview[0].map(h=>`<th style="padding:6px 8px;border:1px solid #1e40af;text-align:left;white-space:nowrap">${String(h||'')}</th>`).join('')}</tr></thead>
+      <tbody>${preview.slice(1).map((r,ri)=>`<tr style="${ri%2?'background:#f8fafc':''}">${r.map(v=>`<td style="padding:4px 6px;border:1px solid #e2e8f0;white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis" title="${String(v||'').replace(/"/g,'&quot;')}">${v||''}</td>`).join('')}</tr>`).join('')}</tbody>
     </table>
   </div>
-  <div style="font-size:11px;color:var(--muted);margin-top:6px">Showing first ${preview.length-1} of ${(rows.length-1).toLocaleString('en-IN')} rows</div>`;
-  el.innerHTML = html;
+  <div style="font-size:11px;color:var(--muted);margin-top:5px">
+    Showing first ${preview.length-1} of ${(finalRows.length-1).toLocaleString('en-IN')} rows ·
+    <b>${preview[0].length}</b> columns visible (${(cmbState.colOrder||[]).filter(c=>c.deleted).length} hidden)
+  </div>`;
+}
+
+function cmbDownloadCombined(){
+  if(!cmbState.combinedRows){ toast('Combine first',true); return; }
+  const finalRows = cmbBuildFinalRows();
+  if(!finalRows.length){ toast('No columns selected',true); return; }
+  const ws = XLSX.utils.aoa_to_sheet(finalRows);
+  ws['!cols'] = finalRows[0].map((h,i)=>{
+    let maxLen = String(h||'').length;
+    for(let r=1; r<Math.min(finalRows.length,100); r++){
+      const v = finalRows[r][i];
+      if(v!==undefined && v!==null){ const l=String(v).length; if(l>maxLen) maxLen=l; }
+    }
+    return {wch: Math.min(50, Math.max(8, maxLen+2))};
+  });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Combined');
+  const ts = new Date().toISOString().slice(0,10).replace(/-/g,'');
+  XLSX.writeFile(wb, `Combined_${ts}.xlsx`);
+  toast(`✓ Downloaded — ${finalRows[0].length} columns, ${(finalRows.length-1).toLocaleString('en-IN')} rows`);
 }
 
 function cmbReset(){
